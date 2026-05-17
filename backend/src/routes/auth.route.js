@@ -1,20 +1,15 @@
 import express from "express";
-import { 
-  signup, login, logout, getMe, deleteMe
-} from "../controllers/auth.controller.js";
+import { signup, login, logout, getMe, deleteMe } from "../controllers/auth.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
+import { validate } from "../middleware/validate.middleware.js";
+import { signupValidator, loginValidator } from "../validators/auth.validator.js";
 
 const router = express.Router();
 
-router.post("/signup", signup);
-router.post("/login", login);
+router.post("/signup", signupValidator, validate, signup);
+router.post("/login", loginValidator, validate, login);
 router.post("/logout", logout);
-
-// router.get("/get-me", protectRoute, getMe)
-router.delete("/delete-me", protectRoute, deleteMe)
-
-router.get("/me", protectRoute, (req, res) => {
-  res.status(200).json({ success: true, user: req.user });
-});
+router.delete("/delete-me", protectRoute, deleteMe);
+router.get("/me", protectRoute, getMe);
 
 export default router;

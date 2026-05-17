@@ -6,383 +6,180 @@ import Service from "../models/Service.js";
 import User from "../models/User.js";
 import Report from "../models/Report.js";
 import Appointment from "../models/Appointment.js";
+import asyncHandler from "../utils/asyncHandler.js";
+import { sendSuccess, sendError } from "../utils/response.js";
 
 // User Management
-export async function getPendingUsers(req, res) {
-  try {
-    const pendingUsers = await User.find({ status: "pending" }).select(
-      "_id firstName lastName profession birthDate licenseNumber facilityName adminCode role location"
-    );
+export const getPendingUsers = asyncHandler(async (req, res) => {
+  const pendingUsers = await User.find({ status: "pending" }).select(
+    "_id firstName lastName profession birthDate licenseNumber facilityName adminCode role location"
+  );
 
-    // Format users with role-specific information
-    const formattedUsers = pendingUsers.map(user => {
-      const userObj = { 
-        _id: user._id, 
-        role: user.role, // Include the requested role
-        firstName: user.firstName, 
-        lastName: user.lastName 
-      };
-
-      // Add role-specific fields
-      switch (user.role) {
-        case "doctor":
-          if (user.profession) userObj.profession = user.profession;
-          if (user.birthDate) userObj.birthDate = user.birthDate.toISOString().split("T")[0];
-          if (user.licenseNumber) userObj.licenseNumber = user.licenseNumber;
-          break;
-          
-        case "institute":
-          if (user.facilityName) userObj.facilityName = user.facilityName;
-          if (user.location) userObj.location = user.location;
-          break;
-          
-        case "admin":
-          if (user.adminCode) userObj.adminCode = user.adminCode;
-          if (user.birthDate) userObj.birthDate = user.birthDate.toISOString().split("T")[0];
-          break;
-      }
-
-      return userObj;
-    });
-
-    res.status(200).json({
-      success: true,
-      users: formattedUsers,
-    });
-
-  } catch (error) {
-    console.error("Error fetching pending users:", error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-}
-export async function getAdmins(req, res) {
-  try {
-    const admins = await User.find({
-      status: "onBoarded",
-      role: "admin",
-    }).select("firstName lastName birthDate");
-
-    const formatted = admins.map(user => ({
-      _id: user._id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      birthDate: user.birthDate ? user.birthDate.toISOString().split("T")[0] : null,
-    }));
-
-    res.status(200).json({ success: true, users: formatted });
-  } catch (error) {
-    console.error("Error fetching admins:", error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-}
-export async function approveRole(req, res) {
-  try {
-    const { userId } = req.body; // the ObjectId of the user to approve
-
-    if (!userId) {
-      return res.status(400).json({ message: "userId is required" });
+  const formattedUsers = pendingUsers.map((user) => {
+    const userObj = { _id: user._id, role: user.role, firstName: user.firstName, lastName: user.lastName };
+    switch (user.role) {
+      case "doctor":
+        if (user.profession) userObj.profession = user.profession;
+        if (user.birthDate) userObj.birthDate = user.birthDate.toISOString().split("T")[0];
+        if (user.licenseNumber) userObj.licenseNumber = user.licenseNumber;
+        break;
+      case "institute":
+        if (user.facilityName) userObj.facilityName = user.facilityName;
+        if (user.location) userObj.location = user.location;
+        break;
+      case "admin":
+        if (user.adminCode) userObj.adminCode = user.adminCode;
+        if (user.birthDate) userObj.birthDate = user.birthDate.toISOString().split("T")[0];
+        break;
     }
+    return userObj;
+  });
 
-    // Find the user first
-    const user = await User.findById(userId).select("-password");
+  return sendSuccess(res, 200, "Pending users fetched", { users: formattedUsers });
+});
 
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+export const getAdmins = asyncHandler(async (req, res) => {
+  const admins = await User.find({ status: "onBoarded", role: "admin" }).select("firstName lastName birthDate");
+  const formatted = admins.map((user) => ({
+    _id: user._id,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    birthDate: user.birthDate ? user.birthDate.toISOString().split("T")[0] : null,
+  }));
+  return sendSuccess(res, 200, "Admins fetched", { users: formatted });
+});
 
-    // Check if the user is pending
-    if (user.status !== "pending") {
-      return res.status(400).json({
-        message: `User is not pending approval (current status: ${user.status})`
-      });
-    }
+export const approveRole = asyncHandler(async (req, res) => {
+  const { userId } = req.body;
 
-    // Update the status to onBoarded
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      { status: "onBoarded", approvedBy: req.user._id },
-      { new: true }
-    ).select("-password");
+  const user = await User.findById(userId).select("-password");
+  if (!user) return sendError(res, 404, "User not found");
+  if (user.status !== "pending") return sendError(res, 400, `User is not pending approval (current status: ${user.status})`);
 
-    res.status(200).json({
-      success: true,
-      message: `${updatedUser.firstName} ${updatedUser.lastName} has been approved`,
-      user: updatedUser,
-    });
+  const updatedUser = await User.findByIdAndUpdate(
+    userId,
+    { status: "onBoarded", approvedBy: req.user._id },
+    { new: true }
+  ).select("-password");
 
-  } catch (error) {
-    console.error("Error approving user:", error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-}
+  return sendSuccess(res, 200, `${updatedUser.firstName} ${updatedUser.lastName} has been approved`, { user: updatedUser });
+});
 
 // Specialty and Service Management
-export async function getPendingSuggestions(req, res) {
-  try {
-    // Fetch pending specialties
-    const pendingSpecialties = await Specialty.find({ status: "pending" }).select("_id name suggestedBy");
-    const formattedSpecialties = pendingSpecialties.map(item => ({
-      _id: item._id,
-      name: item.name,
-      type: "specialty",
-      suggestedBy: item.suggestedBy
-    }));
+export const getPendingSuggestions = asyncHandler(async (req, res) => {
+  const [pendingSpecialties, pendingSubspecialties, pendingServices] = await Promise.all([
+    Specialty.find({ status: "pending" }).select("_id name suggestedBy"),
+    Subspecialty.find({ status: "pending" }).select("_id name rootSpecialty suggestedBy"),
+    Service.find({ status: "pending" }).select("_id name suggestedBy"),
+  ]);
 
-    // Fetch pending subspecialties
-    const pendingSubspecialties = await Subspecialty.find({ status: "pending" }).select("_id name rootSpecialty suggestedBy");
-    const formattedSubspecialties = pendingSubspecialties.map(item => ({
-      _id: item._id,
-      name: item.name,
-      rootSpecialty: item.rootSpecialty,
-      type: "subspecialty",
-      suggestedBy: item.suggestedBy
-    }));
+  const allPending = [
+    ...pendingSpecialties.map((item) => ({ _id: item._id, name: item.name, type: "specialty", suggestedBy: item.suggestedBy })),
+    ...pendingSubspecialties.map((item) => ({ _id: item._id, name: item.name, rootSpecialty: item.rootSpecialty, type: "subspecialty", suggestedBy: item.suggestedBy })),
+    ...pendingServices.map((item) => ({ _id: item._id, name: item.name, type: "service", suggestedBy: item.suggestedBy })),
+  ];
 
-    // Fetch pending services
-    const pendingServices = await Service.find({ status: "pending" }).select("_id name suggestedBy");
-    const formattedServices = pendingServices.map(item => ({
-      _id: item._id,
-      name: item.name,
-      type: "service",
-      suggestedBy: item.suggestedBy
-    }));
+  return sendSuccess(res, 200, "Pending suggestions fetched", { pendingSuggestions: allPending });
+});
 
-    // Combine all
-    const allPending = [
-      ...formattedSpecialties,
-      ...formattedSubspecialties,
-      ...formattedServices
-    ];
+export const approveSuggestion = asyncHandler(async (req, res) => {
+  const { id } = req.body;
 
-    res.status(200).json({ success: true, pendingSuggestions: allPending });
-  } catch (error) {
-    console.error("Error fetching pending suggestions:", error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-}
-export async function approveSuggestion(req, res) {
-  try {
-    const { id } = req.body;
+  let item = await Specialty.findById(id);
+  let type = "specialty";
+  if (!item) { item = await Subspecialty.findById(id); type = "subspecialty"; }
+  if (!item) { item = await Service.findById(id); type = "service"; }
+  if (!item) return sendError(res, 404, "Item not found in any category");
+  if (item.status === "verified") return sendError(res, 400, `${type} is already verified`);
 
-    if (!id) {
-      return res.status(400).json({
-        message: "ID is required"
-      });
-    }
+  item.status = "verified";
+  item.approvedBy = req.user._id;
+  await item.save();
 
-    // Try to find the item in each collection
-    let item = await Specialty.findById(id);
-    let type = "specialty";
+  return sendSuccess(res, 200, `${type.charAt(0).toUpperCase() + type.slice(1)} approved successfully`, { item, type });
+});
 
-    if (!item) {
-      item = await Subspecialty.findById(id);
-      type = "subspecialty";
-    }
+export const getLicenseNumber = asyncHandler(async (req, res) => {
+  const { userId } = req.params;
+  const user = await User.findById(userId).select("licenseNumber").lean();
+  if (!user) return sendError(res, 404, "User not found");
+  return sendSuccess(res, 200, "License number fetched", { licenseNumber: user.licenseNumber });
+});
 
-    if (!item) {
-      item = await Service.findById(id);
-      type = "service";
-    }
-
-    // If still not found, return error
-    if (!item) {
-      return res.status(404).json({ message: "Item not found in any category" });
-    }
-
-    // Check if already verified
-    if (item.status === "verified") {
-      return res.status(400).json({ message: `${type} is already verified` });
-    }
-
-    // Update with admin approval
-    item.status = "verified";
-    item.approvedBy = req.user._id; // Current admin's ID
-    await item.save();
-
-    return res.status(200).json({
-      message: `${type.charAt(0).toUpperCase() + type.slice(1)} approved successfully`,
-      item,
-      type
-    });
-  } catch (error) {
-    console.error("Error approving item:", error);
-    return res.status(500).json({ message: "Internal Server Error" });
-  }
-}
-
-export async function getLicenseNumber(req, res) {
-  try {
-    const { userId } = req.params;
-
-    const user = await User.findById(userId)
-      .select("licenseNumber") // Only include licenseNumber
-      .lean();
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    res.status(200).json({ licenseNumber: user.licenseNumber });
-  } catch (error) {
-    console.error("Error fetching user license number:", error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-}
-export async function getPendingClaims(req, res) {
-  try {
-    // Use claimType field to distinguish between specialty and subspecialty
-    const specialtyClaims = await Doctor_Specialty.find({
-      status: "pending",
-      claimType: "specialty" // 🆕 Use claimType instead of field existence
-    })
+export const getPendingClaims = asyncHandler(async (req, res) => {
+  const [specialtyClaims, subspecialtyClaims, serviceClaims] = await Promise.all([
+    Doctor_Specialty.find({ status: "pending", claimType: "specialty" })
       .populate("doctorId", "firstName lastName email")
-      .populate("specialtyId", "name");
-
-    const subspecialtyClaims = await Doctor_Specialty.find({
-      status: "pending",
-      claimType: "subspecialty" // 🆕 Use claimType instead of field existence
-    })
+      .populate("specialtyId", "name"),
+    Doctor_Specialty.find({ status: "pending", claimType: "subspecialty" })
       .populate("doctorId", "firstName lastName email")
-      .populate("subspecialtyId", "name");
-
-    // Service claims (institutes)
-    const serviceClaims = await Institute_Service.find({
-      status: "pending",
-      claimType: "service" // 🆕 Add claimType for consistency
-    })
+      .populate("subspecialtyId", "name"),
+    Institute_Service.find({ status: "pending", claimType: "service" })
       .populate("instituteId", "facilityName email")
-      .populate("serviceId", "name");
+      .populate("serviceId", "name"),
+  ]);
 
-    res.status(200).json({
-      success: true,
-      claims: {
-        specialties: specialtyClaims,
-        subspecialties: subspecialtyClaims,
-        services: serviceClaims,
-      },
-    });
-  } catch (error) {
-    console.error("Error fetching claims:", error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-}
-export async function approveClaim(req, res) {
-  try {
-    const { claimId } = req.body;
-    const adminId = req.user._id;
+  return sendSuccess(res, 200, "Pending claims fetched", {
+    claims: { specialties: specialtyClaims, subspecialties: subspecialtyClaims, services: serviceClaims },
+  });
+});
 
-    if (!claimId) {
-      return res.status(400).json({ message: "claimId is required" });
-    }
+export const approveClaim = asyncHandler(async (req, res) => {
+  const { claimId } = req.body;
 
-    // Try to find the claim in each model
-    let claim = await Doctor_Specialty.findById(claimId);
-    let collectionType = "doctor_specialty";
+  let claim = await Doctor_Specialty.findById(claimId);
+  if (!claim) claim = await Institute_Service.findById(claimId);
+  if (!claim) return sendError(res, 404, "Claim not found");
+  if (claim.status === "verified") return sendError(res, 400, "Claim is already approved");
 
-    if (!claim) {
-      claim = await Institute_Service.findById(claimId);
-      collectionType = "institute_service";
-    }
+  const type = claim.claimType;
+  claim.status = "verified";
+  claim.approvedBy = req.user._id;
+  await claim.save();
 
-    // If still not found, return error
-    if (!claim) {
-      return res.status(404).json({ message: "Claim not found" });
-    }
-
-    // 🆕 NOW WE CAN USE THE claimType FIELD!
-    const type = claim.claimType;
-
-    // Check if already approved
-    if (claim.status === "verified") {
-      return res.status(400).json({ message: "Claim is already approved" });
-    }
-
-    // Approve the claim
-    claim.status = "verified";
-    claim.approvedBy = adminId;
-    await claim.save();
-
-    res.status(200).json({
-      success: true,
-      message: `${type.charAt(0).toUpperCase() + type.slice(1)} claim approved successfully`,
-      claim,
-      type
-    });
-  } catch (error) {
-    console.error("Error approving claim:", error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-}
+  return sendSuccess(res, 200, `${type.charAt(0).toUpperCase() + type.slice(1)} claim approved successfully`, { claim, type });
+});
 
 // Reports
-export const viewAllComplaints = async (req, res) => {
-  try {
-    const complaints = await Report.find()
-      .sort({ createdAt: 1 })
-      .populate({
-        path: "appointmentId",
-        select: "doctorId patientId start end status"
-      })
-      .populate({
-        path: "filedBy",
-        select: "firstName lastName email" // Adjust based on your User model
-      })
-      .populate({
-        path: "filedAgainst",
-        select: "firstName lastName email" // Adjust based on your User model
-      });
+export const viewAllComplaints = asyncHandler(async (req, res) => {
+  const complaints = await Report.find()
+    .sort({ createdAt: 1 })
+    .populate({ path: "appointmentId", select: "doctorId patientId start end status" })
+    .populate({ path: "filedBy", select: "firstName lastName email" })
+    .populate({ path: "filedAgainst", select: "firstName lastName email" });
 
-    res.status(200).json({ success: true, complaints });
-  } catch (err) {
-    console.error("Error fetching all complaints:", err);
-    res.status(500).json({ message: "Internal server error" });
+  return sendSuccess(res, 200, "Complaints fetched", { complaints });
+});
+
+export const viewComplaintByComplaintId = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const complaint = await Report.findById(id)
+    .populate("appointmentId", "doctorId patientId start end status")
+    .populate("filedBy", "firstName lastName email")
+    .populate("filedAgainst", "firstName lastName email");
+
+  if (!complaint) return sendError(res, 404, "Complaint not found");
+  return sendSuccess(res, 200, "Complaint fetched", { complaint });
+});
+
+export const resolveComplaint = asyncHandler(async (req, res) => {
+  const { complaintId, outcome, adminNote } = req.body;
+  const adminId = req.user._id;
+
+  const complaint = await Report.findById(complaintId);
+  if (!complaint) return sendError(res, 404, "Complaint not found");
+
+  complaint.status = "resolved";
+  complaint.outcome = outcome;
+  complaint.adminNote = adminNote;
+  complaint.resolvedBy = adminId;
+  await complaint.save();
+
+  const appointment = await Appointment.findById(complaint.appointmentId);
+  if (appointment && appointment.status === "freeze") {
+    appointment.status = "booked";
+    await appointment.save();
   }
-};
-export const viewComplaintByComplaintId = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const complaint = await Report.findById(id)
-      .populate("appointmentId", "doctorId patientId start end status")
-      .populate("filedBy", "name email")
-      .populate("filedAgainst", "name email");
 
-    if (!complaint) return res.status(404).json({ message: "Complaint not found" });
-
-    res.status(200).json({ success: true, complaint });
-  } catch (err) {
-    console.error("Error fetching complaint:", err);
-    res.status(500).json({ message: "Internal server error" });
-  }
-};
-export const resolveComplaint = async (req, res) => {
-  try {
-    const { complaintId, outcome, adminNote } = req.body;
-    const adminId = req.user._id; // Assuming this is admin user
-
-    if (!outcome || !adminNote) {
-      return res.status(400).json({ message: "Outcome and admin note are required" });
-    }
-
-    const complaint = await Report.findById(complaintId);
-    if (!complaint) return res.status(404).json({ message: "Complaint not found" });
-
-    // Update the complaint
-    complaint.status = "resolved";
-    complaint.outcome = outcome;
-    complaint.adminNote = adminNote;
-    complaint.resolvedBy = adminId;
-    await complaint.save();
-
-    // Optional: Update appointment status if frozen
-    const appointment = await Appointment.findById(complaint.appointmentId);
-    if (appointment && appointment.status === "freeze") {
-      appointment.status = "booked"; // Or another logic depending on outcome
-      await appointment.save();
-    }
-
-    res.status(200).json({ success: true, message: "Complaint resolved", complaint });
-  } catch (err) {
-    console.error("Error resolving complaint:", err);
-    res.status(500).json({ message: "Internal server error" });
-  }
-};
+  return sendSuccess(res, 200, "Complaint resolved", { complaint });
+});

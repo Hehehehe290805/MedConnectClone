@@ -16,6 +16,7 @@ import searchRoutes from "./routes/search.route.js";
 import specialtyAndServiceRoutes from "./routes/specialtyAndService.route.js";
 import userRoutes from "./routes/user.route.js";
 
+import { errorMiddleware } from "./middleware/error.middleware.js";
 import { connectDB } from "./lib/db.js";
 
 const app = express();
@@ -31,7 +32,7 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
-// ✅ Mount all routes
+// Routes
 app.use("/api/admin", adminRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/booking", bookingRoutes);
@@ -44,14 +45,15 @@ app.use("/api/search", searchRoutes);
 app.use("/api/specialties-and-services", specialtyAndServiceRoutes);
 app.use("/api/users", userRoutes);
 
-// ✅ Serve frontend only in production
+// Serve frontend in production
 if (process.env.NODE_ENV === "production") {
     app.use(express.static(path.join(__dirname, "../frontend/dist")));
-
     app.get("*", (req, res) => {
         res.sendFile(path.join(__dirname, "../frontend", "dist", "index.html"));
     });
 }
 
-// ✅ Export app & DB connection for tests
+// Centralized error handler — must be last
+app.use(errorMiddleware);
+
 export { app, connectDB };

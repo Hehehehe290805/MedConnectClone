@@ -1,151 +1,75 @@
-import User from "../models/User.js";
 import jwt from "jsonwebtoken";
+import User from "../models/User.js";
+import asyncHandler from "../utils/asyncHandler.js";
+import { sendSuccess, sendError } from "../utils/response.js";
 
-// ✅ Signup
-export const signup = async (req, res) => {
-  try {
-    const { email, password, role } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ message: "Email and password are required." });
-    }
-
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: "Email already registered." });
-    }
-
-    // Create user with raw password (pre-save hook will hash it)
-    const user = new User({
-      email,
-      password,
-      role,
-      isOnboarded: "notOnBoarded",
-    });
-
-    await user.save();
-
-    // Generate JWT
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET_KEY, { expiresIn: "7d" });
-
-    res.cookie("jwt", token, {
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      httpOnly: true,
-      sameSite: "strict",
-      secure: process.env.NODE_ENV === "production",
-    });
-
-    return res.status(201).json({
-      message: "Account created successfully",
-      userId: user._id
-    });
-
-  } catch (error) {
-    console.error("Signup Error:", error);
-    return res.status(500).json({ message: "Internal server error" });
-  }
+const cookieOptions = {
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  httpOnly: true,
+  sameSite: "strict",
+  secure: process.env.NODE_ENV === "production",
 };
 
-// ✅ Login
-export const login = async (req, res) => {
-  try {
-    const { email, password } = req.body;
+const generateToken = (userId) =>
+  jwt.sign({ userId }, process.env.JWT_SECRET_KEY, { expiresIn: "7d" });
 
-    if (!email || !password) {
-      return res.status(400).json({ message: "Email and password are required." });
-    }
+export const signup = asyncHandler(async (req, res) => {
+  const { email, password, role } = req.body;
 
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ message: "User not found." });
-    }
+  const existingUser = await User.findOne({ email });
+  if (existingUser) return sendError(res, 400, "Email already registered.");
 
-    // Use the model method for password comparison
-    const isPasswordValid = await user.matchPassword(password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ message: "Invalid credentials." });
-    }
+  const user = new User({ email, password, role, isOnboarded: "notOnBoarded" });
+  await user.save();
 
-    // Generate JWT
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET_KEY, { expiresIn: "7d" });
+  const token = generateToken(user._id);
+  res.cookie("jwt", token, cookieOptions);
 
-    res.cookie("jwt", token, {
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      httpOnly: true,
-      sameSite: "strict",
-      secure: process.env.NODE_ENV === "production",
-    });
+  return sendSuccess(res, 201, "Account created successfully", { userId: user._id });
+});
 
-    return res.status(200).json({
-      message: "Login successful",
-      role: user.role,
-      userId: user._id,
-    });
+export const login = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
 
-  } catch (error) {
-    console.error("Login Error:", error);
-    return res.status(500).json({ message: "Internal server error" });
-  }
-};
+  const user = await User.findOne({ email });
+  if (!user) return sendError(res, 404, "User not found.");
 
-// ✅ Logout
-export const logout = (req, res) => {
+  const isPasswordValid = await user.matchPassword(password);
+  if (!isPasswordValid) return sendError(res, 401, "Invalid credentials.");
+
+  const token = generateToken(user._id);
+  res.cookie("jwt", token, cookieOptions);
+
+  return sendSuccess(res, 200, "Login successful", {
+    role: user.role,
+    userId: user._id,
+  });
+});
+
+export const logout = asyncHandler(async (req, res) => {
   res.clearCookie("jwt");
-  res.status(200).json({ success: true, message: "Logout successful" });
-};
+  return sendSuccess(res, 200, "Logout successful");
+});
 
-// ✅ Get Current User
-export const getMe = async (req, res) => {
-  try {
-    const userId = req.user?.id; // use id from authenticated JWT
+export const getMe = asyncHandler(async (req, res) => {
+  const { _id: id, firstName, lastName, email, role, profilePic } = req.user;
+  return sendSuccess(res, 200, "User fetched successfully", {
+    id,
+    firstName,
+    lastName,
+    email,
+    role,
+    profilePic,
+  });
+});
 
-    if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
-    }
+export const deleteMe = asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return sendError(res, 401, "Unauthorized");
 
-    // Return selected fields only
-    const { firstName, lastName, email, role, profilePic } = req.user;
+  const deletedUser = await User.findByIdAndDelete(userId);
+  if (!deletedUser) return sendError(res, 404, "User not found");
 
-    return res.status(200).json({
-      success: true,
-      user: {
-        id: userId,
-        firstName,
-        lastName,
-        email,
-        role,
-        profilePic,
-      },
-    });
-  } catch (error) {
-    console.error("Get Current User Error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error" });
-  }
-};
-
-
-// ✅ Delete Account
-export const deleteMe = async (req, res) => {
-  try {
-    const userId = req.user?.id; // ID from authenticated JWT
-
-    if (!userId) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    // Delete the user directly
-    const deletedUser = await User.findByIdAndDelete(userId);
-
-    if (!deletedUser) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // Clear the JWT cookie
-    res.clearCookie("jwt");
-
-    return res.status(200).json({ message: "Account deleted successfully" });
-  } catch (error) {
-    console.error("Delete Account Error:", error);
-    return res.status(500).json({ message: "Internal server error" });
-  }
-};
+  res.clearCookie("jwt");
+  return sendSuccess(res, 200, "Account deleted successfully");
+});

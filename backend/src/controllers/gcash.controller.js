@@ -3,32 +3,24 @@ import QrCode from "qrcode-reader";
 import QRCode from "qrcode";
 import { Jimp } from "jimp";
 import User from "../models/User.js";
+import asyncHandler from "../utils/asyncHandler.js";
+import { sendSuccess, sendError } from "../utils/response.js";
 
-// Configure Multer with MEMORY storage (no file saving)
-const storage = multer.memoryStorage(); // This keeps file in memory only
+const storage = multer.memoryStorage();
 
-// Create multer instance with proper configuration
 export const upload = multer({
-    storage: storage,
-    limits: {
-        fileSize: 5 * 1024 * 1024, // 5MB limit
-    },
+    storage,
+    limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
-        // Check if the file is an image
-        if (file.mimetype.startsWith('image/')) {
-            cb(null, true);
-        } else {
-            cb(new Error('Only image files are allowed!'), false);
-        }
-    }
+        if (file.mimetype.startsWith("image/")) cb(null, true);
+        else cb(new Error("Only image files are allowed!"), false);
+    },
 });
 
-// decode QR from memory buffer
 const decodeQR = async (buffer) => {
     const image = await Jimp.read(buffer);
-
     return new Promise((resolve, reject) => {
-        const qr = new QrCode(); // ✅ correct constructor from "qrcode-reader"
+        const qr = new QrCode();
         qr.callback = (err, value) => {
             if (err) return reject(err);
             resolve(value?.result || null);
@@ -37,108 +29,52 @@ const decodeQR = async (buffer) => {
     });
 };
 
-// 📥 Upload & extract GCash QR
-export const uploadGCashQR = async (req, res) => {
-    try {
-        const userId = req.user?.id;
+export const uploadGCashQR = asyncHandler(async (req, res) => {
+    const userId = req.user?.id;
 
-        if (!req.file) {
-            return res.status(400).json({ message: "No file uploaded" });
-        }
+    if (!req.file) return sendError(res, 400, "No file uploaded");
 
-        const qrData = await decodeQR(req.file.buffer);
+    const qrData = await decodeQR(req.file.buffer);
+    if (!qrData) return sendError(res, 400, "Invalid QR code.");
 
-        if (!qrData) {
-            return res.status(400).json({ message: "Invalid QR code." });
-        }
+    const { accountName, accountNumber } = req.body;
+    if (!accountName || !accountNumber) return sendError(res, 400, "Account name and number are required.");
 
-        const { accountName, accountNumber } = req.body;
+    const user = await User.findByIdAndUpdate(
+        userId,
+        { $set: { "gcash.qrData": qrData, "gcash.accountName": accountName, "gcash.accountNumber": accountNumber } },
+        { new: true }
+    );
 
-        if (!accountName || !accountNumber) {
-            return res.status(400).json({ message: "Account name and number are required." });
-        }
+    return sendSuccess(res, 200, "GCash QR uploaded successfully.", { gcash: user.gcash });
+});
 
-        const user = await User.findByIdAndUpdate(
-            userId,
-            {
-                $set: {
-                    "gcash.qrData": qrData,
-                    "gcash.accountName": accountName,
-                    "gcash.accountNumber": accountNumber,
-                },
-            },
-            { new: true }
-        );
+export const getGCashInfo = asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user.id).select("gcash");
+    if (!user) return sendError(res, 404, "User not found");
+    return sendSuccess(res, 200, "GCash info fetched", { gcash: user.gcash });
+});
 
-        res.json({
-            message: "GCash QR uploaded successfully.",
-            gcash: user.gcash,
-        });
+export const getGCashQR = asyncHandler(async (req, res) => {
+    const { userId } = req.params;
 
-    } catch (error) {
-        console.error("10. GCash upload error:", error);
-        // Make sure to return JSON even for errors
-        res.status(500).json({ message: "Server error uploading GCash QR." });
-    }
-};
+    const user = await User.findById(userId).select("gcash role firstName lastName facilityName");
+    if (!user) return sendError(res, 404, "User not found");
 
-// 📤 GET user GCash info
-export const getGCashInfo = async (req, res) => {
-    try {
-        const user = await User.findById(req.user.id).select("gcash");
-        if (!user) return res.status(404).json({ message: "User not found" });
-        res.json({ gcash: user.gcash });
-    } catch (error) {
-        res.status(500).json({ message: "Failed to fetch GCash info" });
-    }
-};
+    const allowedRoles = ["user", "doctor", "pharmacist", "institute"];
+    if (!allowedRoles.includes(user.role)) return sendError(res, 403, "This user doesn't have a GCash QR");
+    if (!user.gcash?.qrData) return sendError(res, 404, "No GCash QR found for this user");
 
-export const getGCashQR = async (req, res) => {
+    const dataUrl = await QRCode.toDataURL(user.gcash.qrData);
+    const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
+    const qrBuffer = Buffer.from(base64Data, "base64");
+    const displayName = user.facilityName || `${user.firstName} ${user.lastName}`;
 
-    try {
-        const { userId } = req.params; // Get the target user ID from URL params
-
-        // Find the target user (doctor, pharmacist, or institute)
-        const user = await User.findById(userId).select("gcash role firstName lastName facilityName");
-
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        }
-
-        const allowedRoles = ["user", "doctor", "pharmacist", "institute"];
-        if (!allowedRoles.includes(user.role)) {
-            return res.status(403).json({ message: "This user doesn't have a GCash QR" });
-        }
-
-        if (!user.gcash || !user.gcash.qrData) {
-            return res.status(404).json({ message: "No GCash QR found for this user" });
-        }
-
-        const qrString = user.gcash.qrData;
-
-        // Generate QR code image from the stored string
-        const dataUrl = await QRCode.toDataURL(qrString);
-
-        // Extract base64 part
-        const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
-
-        // Convert to buffer
-        const qrBuffer = Buffer.from(base64Data, "base64");
-
-        // Get user display name for potential use
-        const displayName = user.facilityName || `${user.firstName} ${user.lastName}`;
-
-        // Send as image with optional headers
-        res.writeHead(200, {
-            "Content-Type": "image/png",
-            "Content-Length": qrBuffer.length,
-            "X-User-Name": displayName, // Optional: send user info in headers
-            "X-User-Role": user.role
-        });
-        res.end(qrBuffer);
-
-    } catch (error) {
-        console.error("Error generating QR code:", error);
-        res.status(500).json({ message: "Internal server error" });
-    }
-};
+    res.writeHead(200, {
+        "Content-Type": "image/png",
+        "Content-Length": qrBuffer.length,
+        "X-User-Name": displayName,
+        "X-User-Role": user.role,
+    });
+    res.end(qrBuffer);
+});
