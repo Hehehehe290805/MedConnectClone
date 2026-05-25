@@ -21,7 +21,7 @@ export const getRecommendedUsers = asyncHandler(async (req, res) => {
 export const getMyFriends = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id)
     .select("friends")
-    .populate("friends", "fullName profilePic nativeLanguage learningLanguage");
+    .populate("friends", "firstName lastName profilePic nativeLanguage learningLanguage");
 
   return sendSuccess(res, 200, "Friends fetched", user.friends);
 });
@@ -68,9 +68,9 @@ export const acceptFriendRequest = asyncHandler(async (req, res) => {
 export const getFriendRequests = asyncHandler(async (req, res) => {
   const [incomingReqs, acceptedReqs] = await Promise.all([
     FriendRequest.find({ recipient: req.user._id, status: "pending" })
-      .populate("sender", "fullName profilePic nativeLanguage learningLanguage"),
+      .populate("sender", "firstName lastName profilePic nativeLanguage learningLanguage"),
     FriendRequest.find({ recipient: req.user._id, status: "accepted" })
-      .populate("recipient", "fullName profilePic"),
+      .populate("recipient", "firstName lastName profilePic"),
   ]);
 
   return sendSuccess(res, 200, "Friend requests fetched", { incomingReqs, acceptedReqs });
@@ -78,7 +78,7 @@ export const getFriendRequests = asyncHandler(async (req, res) => {
 
 export const getOutgoingFriendRequests = asyncHandler(async (req, res) => {
   const outgoingRequests = await FriendRequest.find({ sender: req.user._id, status: "pending" })
-    .populate("recipient", "fullName profilePic nativeLanguage learningLanguage");
+    .populate("recipient", "firstName lastName profilePic nativeLanguage learningLanguage");
 
   return sendSuccess(res, 200, "Outgoing friend requests fetched", outgoingRequests);
 });

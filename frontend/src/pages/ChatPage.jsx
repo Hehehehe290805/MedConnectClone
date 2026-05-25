@@ -45,7 +45,7 @@ const ChatPage = () => {
 
                 await client.connectUser({
                     id: authUser._id,
-                    name: authUser.fullName,
+                    name: `${authUser.firstName} ${authUser.lastName}`.trim(),
                     image: authUser.profilePic,
                 }, tokenData.token)
                 

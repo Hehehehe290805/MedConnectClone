@@ -50,10 +50,10 @@ const NotificationsPage = () => {
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-3">
                                                     <div className="avatar w-14 h-14 rounded-full bg-base-300">
-                                                        <img src={request.sender.profilePic} alt={request.sender.fullName} />
+                                                        <img src={request.sender.profilePic} alt={`${request.sender.firstName} ${request.sender.lastName}`} />
                                                     </div>
                                                     <div>
-                                                        <h3 className="font-semibold">{request.sender.fullName}</h3>
+                                                        <h3 className="font-semibold">{`${request.sender.firstName} ${request.sender.lastName}`}</h3>
                                                         <div className="flex flex-wrap gap-1.5 mt-1">
                                                             <span className="badge badge-primary badge-md">
                                                                 Native: {request.sender.nativeLanguage}
@@ -96,13 +96,13 @@ const NotificationsPage = () => {
                                             <div className="avatar mt-1 size-10 rounded-full">
                                                 <img
                                                 src={notification.recipient.profilePic}
-                                                alt={notification.recipient.fullName}
+                                                alt={`${notification.recipient.firstName} ${notification.recipient.lastName}`}
                                                 />
                                             </div>
                                             <div className="flex-1">
-                                                <h3 className="font-semibold">{notification.recipient.fullName}</h3>
+                                                <h3 className="font-semibold">{notification.recipient.firstName} {notification.recipient.lastName}</h3>
                                                 <p className="text-sm my-1">
-                                                    {notification.recipient.fullName} accepted your friend request
+                                                    {notification.recipient.firstName} {notification.recipient.lastName} accepted your friend request
                                                 </p>
                                                 <p className="text-xs flex items-center opacity-70">
                                                     <ClockIcon className="h-3 w-3 mr-1" />
