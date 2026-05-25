@@ -52,22 +52,20 @@ export const logout = asyncHandler(async (req, res) => {
 });
 
 export const getMe = asyncHandler(async (req, res) => {
-  const { _id: id, firstName, lastName, email, role, profilePic } = req.user;
+  const { _id, firstName, lastName, email, role, profilePic, status } = req.user;
   return sendSuccess(res, 200, "User fetched successfully", {
-    id,
+    _id,
     firstName,
     lastName,
     email,
     role,
     profilePic,
+    status
   });
 });
 
 export const deleteMe = asyncHandler(async (req, res) => {
-  const userId = req.user?.id;
-  if (!userId) return sendError(res, 401, "Unauthorized");
-
-  const deletedUser = await User.findByIdAndDelete(userId);
+  const deletedUser = await User.findByIdAndDelete(req.user._id);
   if (!deletedUser) return sendError(res, 404, "User not found");
 
   res.clearCookie("jwt");

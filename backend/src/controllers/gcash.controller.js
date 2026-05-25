@@ -30,7 +30,7 @@ const decodeQR = async (buffer) => {
 };
 
 export const uploadGCashQR = asyncHandler(async (req, res) => {
-    const userId = req.user?.id;
+    const userId = req.user._id;
 
     if (!req.file) return sendError(res, 400, "No file uploaded");
 
