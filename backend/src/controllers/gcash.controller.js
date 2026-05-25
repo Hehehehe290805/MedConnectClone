@@ -50,7 +50,7 @@ export const uploadGCashQR = asyncHandler(async (req, res) => {
 });
 
 export const getGCashInfo = asyncHandler(async (req, res) => {
-    const user = await User.findById(req.user.id).select("gcash");
+    const user = await User.findById(req.user._id).select("gcash");
     if (!user) return sendError(res, 404, "User not found");
     return sendSuccess(res, 200, "GCash info fetched", { gcash: user.gcash });
 });
