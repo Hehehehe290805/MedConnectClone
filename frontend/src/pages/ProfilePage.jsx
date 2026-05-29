@@ -99,7 +99,7 @@ const ProfilePage = () => {
               <div className="w-32 rounded-full ring ring-primary ring-offset-base-100 ring-offset-2">
                 {authUser?.profilePic ? (
                   <img
-                    src={authUser.profilePic}
+                    src={authUser.profilePic.url} 
                     alt={`${authUser.firstName} ${authUser.lastName}`}
                   />
                 ) : (

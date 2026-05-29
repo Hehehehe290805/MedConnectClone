@@ -67,11 +67,30 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
   const minDate = new Date(today.getFullYear() - 120, today.getMonth(), today.getDate())
     .toISOString().split("T")[0];
 
+  // step 1 required: firstName, lastName, birthDate, sex
+  const step1Complete = form.profilePic.url && form.firstName.trim() && form.lastName.trim() && form.birthDate && form.sex;
+
+  // step 2 required: languages, phoneNumber(10 digits), street, barangay, city, province, postalCode(4 digits)
+  const step2Complete =
+    form.languages.length > 0 &&
+    form.phoneNumber.length === 10 &&
+    form.address.street.trim() &&
+    form.address.barangay.trim() &&
+    form.address.city.trim() &&
+    form.address.province.trim() &&
+    /^\d{4}$/.test(form.address.postalCode);
+
   const validateStep1 = () => {
     const e = {};
     if (!form.firstName.trim()) e.firstName = "First name is required";
     if (!form.lastName.trim()) e.lastName = "Last name is required";
-    if (!form.birthDate) e.birthDate = "Date of birth is required";
+    if (!form.birthDate) {
+      e.birthDate = "Date of birth is required";
+    } else if (form.birthDate > maxDate) {
+      e.birthDate = "Age must be between 18 and 120 years old";
+    } else if (form.birthDate < minDate) {
+      e.birthDate = "Age must be between 18 and 120 years old";
+    }
     if (!form.sex) e.sex = "Sex is required";
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -81,14 +100,13 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
     const e = {};
     if (form.languages.length === 0) e.languages = "At least one language is required";
     if (!form.phoneNumber.trim()) e.phoneNumber = "Phone number is required";
-    if (form.phoneNumber.length !== 10) e.phoneNumber = "Phone number must be 10 digits";
+    else if (form.phoneNumber.length !== 10) e.phoneNumber = "Phone number must be 10 digits";
     if (!form.address.street.trim()) e["address.street"] = "Street is required";
     if (!form.address.barangay.trim()) e["address.barangay"] = "Barangay is required";
     if (!form.address.city.trim()) e["address.city"] = "City is required";
     if (!form.address.province.trim()) e["address.province"] = "Province is required";
     if (!form.address.postalCode.trim()) e["address.postalCode"] = "Postal code is required";
-    if (form.address.postalCode && !/^\d{4}$/.test(form.address.postalCode))
-      e["address.postalCode"] = "Postal code must be 4 digits";
+    else if (!/^\d{4}$/.test(form.address.postalCode)) e["address.postalCode"] = "Postal code must be 4 digits";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -114,28 +132,51 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
               value={form.profilePic}
               onChange={(val) => update("profilePic", val)}
               onUploadingChange={(v) => setUploading("profilePic", v)}
+              required
             />
             <div className="grid grid-cols-2 gap-4">
               <div className="form-control">
                 <label className="label"><span className="label-text">First Name <span className="text-error">*</span></span></label>
-                <input type="text" className={`input input-bordered w-full ${errors.firstName ? "input-error" : ""}`} placeholder="Juan" value={form.firstName} onChange={(e) => update("firstName", e.target.value)} />
+                <input
+                  type="text"
+                  className={`input input-bordered w-full ${errors.firstName ? "input-error" : ""}`}
+                  placeholder="Juan"
+                  value={form.firstName}
+                  onChange={(e) => update("firstName", e.target.value)}
+                />
                 {errors.firstName && <p className="text-error text-xs mt-1">{errors.firstName}</p>}
               </div>
               <div className="form-control">
                 <label className="label"><span className="label-text">Last Name <span className="text-error">*</span></span></label>
-                <input type="text" className={`input input-bordered w-full ${errors.lastName ? "input-error" : ""}`} placeholder="dela Cruz" value={form.lastName} onChange={(e) => update("lastName", e.target.value)} />
+                <input
+                  type="text"
+                  className={`input input-bordered w-full ${errors.lastName ? "input-error" : ""}`}
+                  placeholder="dela Cruz"
+                  value={form.lastName}
+                  onChange={(e) => update("lastName", e.target.value)}
+                />
                 {errors.lastName && <p className="text-error text-xs mt-1">{errors.lastName}</p>}
               </div>
             </div>
             <div className="form-control">
               <label className="label"><span className="label-text">Date of Birth <span className="text-error">*</span></span></label>
-              <input type="date" className={`input input-bordered w-full ${errors.birthDate ? "input-error" : ""}`} value={form.birthDate} min={minDate} max={maxDate} onChange={(e) => update("birthDate", e.target.value)} />
+              <input
+                type="date"
+                className={`input input-bordered w-full ${errors.birthDate ? "input-error" : ""}`}
+                value={form.birthDate}
+                min={minDate}
+                max={maxDate}
+                onChange={(e) => update("birthDate", e.target.value)}
+              />
               {errors.birthDate && <p className="text-error text-xs mt-1">{errors.birthDate}</p>}
-              <p className="text-xs opacity-50 mt-1">Must be 18–120 years old</p>
             </div>
             <div className="form-control">
               <label className="label"><span className="label-text">Sex <span className="text-error">*</span></span></label>
-              <select className={`select select-bordered w-full ${errors.sex ? "select-error" : ""}`} value={form.sex} onChange={(e) => update("sex", e.target.value)}>
+              <select
+                className={`select select-bordered w-full ${errors.sex ? "select-error" : ""}`}
+                value={form.sex}
+                onChange={(e) => update("sex", e.target.value)}
+              >
                 <option value="">Select</option>
                 <option value="male">Male</option>
                 <option value="female">Female</option>
@@ -144,9 +185,18 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
             </div>
             <div className="form-control">
               <label className="label"><span className="label-text">Bio</span></label>
-              <textarea className="textarea textarea-bordered h-24 resize-none" placeholder="Tell us about yourself" value={form.bio} onChange={(e) => update("bio", e.target.value)} />
+              <textarea
+                className="textarea textarea-bordered h-24 resize-none"
+                placeholder="Tell us about yourself"
+                value={form.bio}
+                onChange={(e) => update("bio", e.target.value)}
+              />
             </div>
-            <button className="btn btn-primary w-full" type="submit" disabled={isAnyUploading}>
+            <button
+              className="btn btn-primary w-full"
+              type="submit"
+              disabled={!step1Complete}
+            >
               {isAnyUploading ? <><span className="loading loading-spinner loading-xs" />Uploading...</> : "Next →"}
             </button>
           </form>
@@ -162,8 +212,16 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
               onTypeChange={(val) => update("phoneType", val)}
               error={errors.phoneNumber}
             />
-            <AddressFields value={form.address} onChange={(val) => update("address", val)} errors={errors} />
-            <button className="btn btn-primary w-full" type="submit" disabled={isPending}>
+            <AddressFields
+              value={form.address}
+              onChange={(val) => update("address", val)}
+              errors={errors}
+            />
+            <button
+              className="btn btn-primary w-full"
+              type="submit"
+              disabled={isPending || !step2Complete}
+            >
               {isPending ? <><span className="loading loading-spinner loading-xs" />Submitting...</> : "Complete Onboarding"}
             </button>
           </form>

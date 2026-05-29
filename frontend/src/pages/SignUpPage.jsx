@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { BriefcaseMedicalIcon, XIcon } from "lucide-react";
+import { BriefcaseMedicalIcon } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 import useSignUp from "../hooks/useSignUp";
 import { useSignupStore } from "../store/useSignupStore";
@@ -60,7 +60,7 @@ You have the right to access, correct, or delete your personal information at an
 8. Contact
 For privacy concerns, contact us at privacy@medconnect-112605.me`;
 
-const TermsPopup = ({ onAccept, onClose }) => {
+const TermsPopup = ({ onAccept }) => {
     const [scrolledToBottom, setScrolledToBottom] = useState(false);
     const contentRef = useRef(null);
 
@@ -109,21 +109,34 @@ const TermsPopup = ({ onAccept, onClose }) => {
 
 const SignUpPage = () => {
     const navigate = useNavigate();
-    const { email, step, setStep, setEmail, reset } = useSignupStore();
+    const { email, step, setEmail, reset } = useSignupStore();
 
-    const [formData, setFormData] = useState({ email: "", password: "", terms: false });
-    const [fieldErrors, setFieldErrors] = useState({});
+    const [formData, setFormData] = useState({ email: "", password: "" });
     const [termsAccepted, setTermsAccepted] = useState(false);
+    const [termsError, setTermsError] = useState("");
     const [showTermsPopup, setShowTermsPopup] = useState(false);
 
     const [code, setCode] = useState(["", "", "", "", "", ""]);
     const [resendCooldown, setResendCooldown] = useState(0);
+    const [codeError, setCodeError] = useState("");
+    const [codeInvalid, setCodeInvalid] = useState(false);
     const [resendMessage, setResendMessage] = useState("");
     const codeRefs = useRef([]);
+    const emailRef = useRef(null);
+    const passwordRef = useRef(null);
 
-    const { signupMutation, isSigningUp, signupError, verifyMutation, isVerifying, verifyError, resendMutation, isResending } = useSignUp();
+    const { signupMutation, isSigningUp, signupError, verifyMutation, isVerifying, resendMutation, isResending } = useSignUp();
 
     useEffect(() => { reset(); }, []);
+
+    useEffect(() => {
+        if (step === "verify") {
+            setResendCooldown(60);
+            // clear any pending validity on signup inputs so they don't tooltip over the verify popup
+            if (emailRef.current) emailRef.current.setCustomValidity("");
+            if (passwordRef.current) passwordRef.current.setCustomValidity("");
+        }
+    }, [step]);
 
     useEffect(() => {
         if (resendCooldown <= 0) return;
@@ -143,28 +156,28 @@ const SignUpPage = () => {
         return () => clearInterval(interval);
     }, []);
 
-    const validateForm = () => {
-        const e = {};
-        if (!formData.email) {
-            e.email = "Email is required";
-        } else if (!EMAIL_REGEX.test(formData.email)) {
-            e.email = "Please enter a valid email address";
-        }
-        if (!formData.password) {
-            e.password = "Password is required";
-        } else if (!PASSWORD_REGEX.test(formData.password)) {
-            e.password = "Password must be 8+ characters with uppercase, lowercase, number, and symbol (@$!%*?&)";
-        }
-        if (!termsAccepted) {
-            e.terms = "You must accept the Terms of Service and Privacy Policy";
-        }
-        setFieldErrors(e);
-        return Object.keys(e).length === 0;
+    const getPasswordValidity = (val) => {
+        if (!val) return "Password is required";
+        const missing = [];
+        if (val.length < 8) missing.push("at least 8 characters");
+        if (!/[A-Z]/.test(val)) missing.push("an uppercase letter");
+        if (!/[a-z]/.test(val)) missing.push("a lowercase letter");
+        if (!/\d/.test(val)) missing.push("a number");
+        if (!/[@$!%*?&]/.test(val)) missing.push("a symbol (@$!%*?&)");
+        return missing.length > 0 ? "Password needs: " + missing.join(", ") : "";
     };
 
     const handleSignup = (e) => {
         e.preventDefault();
-        if (!validateForm()) return;
+        if (!e.target.checkValidity()) {
+            e.target.reportValidity();
+            return;
+        }
+        if (!termsAccepted) {
+            setTermsError("Please accept the Terms of Service and Privacy Policy.");
+            return;
+        }
+        setTermsError("");
         signupMutation({ email: formData.email, password: formData.password });
     };
 
@@ -195,9 +208,16 @@ const SignUpPage = () => {
         e.preventDefault();
         const fullCode = code.join("");
         if (fullCode.length !== 6) return;
+        setCodeError("");
+        setCodeInvalid(false);
         verifyMutation({ email, code: fullCode }, {
             onSuccess: () => navigate("/onboarding"),
-            onError: () => { },
+            onError: (err) => {
+                setCodeInvalid(true);
+                setCodeError(err?.response?.data?.message || "Incorrect code. Please try again.");
+                setCode(["", "", "", "", "", ""]);
+                setTimeout(() => codeRefs.current[0]?.focus(), 50);
+            },
         });
     };
 
@@ -208,6 +228,8 @@ const SignUpPage = () => {
                 setResendMessage("A new code has been sent to your email.");
                 setResendCooldown(60);
                 setCode(["", "", "", "", "", ""]);
+                setCodeInvalid(false);
+                setCodeError("");
                 codeRefs.current[0]?.focus();
                 setTimeout(() => setResendMessage(""), 5000);
             },
@@ -229,67 +251,59 @@ const SignUpPage = () => {
                     </div>
 
                     <div className="w-full">
-                        <form onSubmit={handleSignup} noValidate>
+                        <form onSubmit={handleSignup}>
                             <div className="space-y-4">
                                 <div>
                                     <h2 className="text-xl font-semibold">Create an Account</h2>
                                     <p className="text-sm opacity-70">Live a healthy life today with MedConnect!</p>
                                 </div>
                                 <div className="space-y-3">
+
                                     {/* EMAIL */}
                                     <div className="form-control w-full">
                                         <label className="label"><span className="label-text">Email</span></label>
                                         <input
+                                            ref={emailRef}
                                             type="email"
                                             autoComplete="email"
                                             placeholder="john@gmail.com"
-                                            className={`input input-bordered w-full ${fieldErrors.email ? "input-error" : ""}`}
+                                            className="input input-bordered w-full"
                                             value={formData.email}
+                                            required
                                             onChange={(e) => {
                                                 setFormData({ ...formData, email: e.target.value });
-                                                if (fieldErrors.email) setFieldErrors(prev => ({ ...prev, email: undefined }));
+                                                e.target.setCustomValidity("");
                                             }}
-                                            onBlur={() => {
-                                                if (!formData.email) {
-                                                    setFieldErrors(prev => ({ ...prev, email: "Email is required" }));
-                                                } else if (!EMAIL_REGEX.test(formData.email)) {
-                                                    setFieldErrors(prev => ({ ...prev, email: "Please enter a valid email address" }));
-                                                }
+                                            onBlur={(e) => {
+                                                const val = e.target.value;
+                                                if (!val) e.target.setCustomValidity("Email is required");
+                                                else if (!EMAIL_REGEX.test(val)) e.target.setCustomValidity("Please enter a valid email address (e.g. name@example.com)");
+                                                else e.target.setCustomValidity("");
                                             }}
                                         />
-                                        {fieldErrors.email && (
-                                            <div className="label">
-                                                <span className="label-text-alt text-error">{fieldErrors.email}</span>
-                                            </div>
-                                        )}
                                     </div>
 
                                     {/* PASSWORD */}
                                     <div className="form-control w-full">
                                         <label className="label"><span className="label-text">Password</span></label>
                                         <input
+                                            ref={passwordRef}
                                             type="password"
                                             autoComplete="new-password"
                                             placeholder="••••••••"
-                                            className={`input input-bordered w-full ${fieldErrors.password ? "input-error" : ""}`}
+                                            className="input input-bordered w-full"
                                             value={formData.password}
+                                            required
                                             onChange={(e) => {
                                                 setFormData({ ...formData, password: e.target.value });
-                                                if (fieldErrors.password) setFieldErrors(prev => ({ ...prev, password: undefined }));
+                                                e.target.setCustomValidity("");
                                             }}
-                                            onBlur={() => {
-                                                if (!formData.password) {
-                                                    setFieldErrors(prev => ({ ...prev, password: "Password is required" }));
-                                                } else if (!PASSWORD_REGEX.test(formData.password)) {
-                                                    setFieldErrors(prev => ({ ...prev, password: "Password must be 8+ characters with uppercase, lowercase, number, and symbol (@$!%*?&)" }));
-                                                }
+                                            onBlur={(e) => {
+                                                const msg = getPasswordValidity(e.target.value);
+                                                e.target.setCustomValidity(msg);
                                             }}
                                         />
-                                        {fieldErrors.password ? (
-                                            <div className="label">
-                                                <span className="label-text-alt text-error">{fieldErrors.password}</span>
-                                            </div>
-                                        ) : (
+                                        {!formData.password && (
                                             <p className="text-xs opacity-70 mt-1">
                                                 Must be 8+ characters with uppercase, lowercase, number, and symbol
                                             </p>
@@ -303,11 +317,7 @@ const SignUpPage = () => {
                                                 type="checkbox"
                                                 className="checkbox checkbox-sm"
                                                 checked={termsAccepted}
-                                                disabled={!termsAccepted}
                                                 onChange={() => {
-                                                    if (!termsAccepted) setShowTermsPopup(true);
-                                                }}
-                                                onClick={() => {
                                                     if (!termsAccepted) setShowTermsPopup(true);
                                                 }}
                                             />
@@ -328,8 +338,8 @@ const SignUpPage = () => {
                                                 </span>
                                             </span>
                                         </label>
-                                        {fieldErrors.terms && (
-                                            <p className="text-error text-xs ml-1">{fieldErrors.terms}</p>
+                                        {termsError && (
+                                            <p className="text-error text-xs ml-1">{termsError}</p>
                                         )}
                                     </div>
 
@@ -374,9 +384,8 @@ const SignUpPage = () => {
                     onAccept={() => {
                         setTermsAccepted(true);
                         setShowTermsPopup(false);
-                        setFieldErrors(prev => ({ ...prev, terms: undefined }));
+                        setTermsError("");
                     }}
-                    onClose={() => setShowTermsPopup(false)}
                 />
             )}
 
@@ -393,28 +402,31 @@ const SignUpPage = () => {
                             </p>
                         </div>
 
-                        {verifyError && (
-                            <div className="alert alert-error mb-4">
-                                <span className="text-sm">{verifyError?.response?.data?.message || "Invalid code."}</span>
-                            </div>
-                        )}
-
                         <form onSubmit={handleVerify} className="space-y-6">
-                            <div className="flex justify-center gap-2">
-                                {code.map((digit, i) => (
-                                    <input
-                                        key={i}
-                                        ref={(el) => (codeRefs.current[i] = el)}
-                                        type="text"
-                                        inputMode="numeric"
-                                        maxLength={1}
-                                        value={digit}
-                                        onChange={(e) => handleCodeChange(i, e.target.value)}
-                                        onKeyDown={(e) => handleCodeKeyDown(i, e)}
-                                        onPaste={i === 0 ? handleCodePaste : undefined}
-                                        className="input input-bordered w-12 h-12 text-center text-xl font-bold"
-                                    />
-                                ))}
+                            <div className="flex flex-col items-center gap-2">
+                                <div className="flex justify-center gap-2">
+                                    {code.map((digit, i) => (
+                                        <input
+                                            key={i}
+                                            ref={(el) => (codeRefs.current[i] = el)}
+                                            type="text"
+                                            inputMode="numeric"
+                                            maxLength={1}
+                                            value={digit}
+                                            onChange={(e) => {
+                                                setCodeInvalid(false);
+                                                setCodeError("");
+                                                handleCodeChange(i, e.target.value);
+                                            }}
+                                            onKeyDown={(e) => handleCodeKeyDown(i, e)}
+                                            onPaste={i === 0 ? handleCodePaste : undefined}
+                                            className={`input input-bordered w-12 h-12 text-center text-xl font-bold ${codeInvalid ? "input-error" : ""}`}
+                                        />
+                                    ))}
+                                </div>
+                                {codeError && (
+                                    <p className="text-error text-xs text-center">{codeError}</p>
+                                )}
                             </div>
 
                             <button className="btn btn-primary w-full" type="submit" disabled={isVerifying || code.join("").length !== 6}>
@@ -422,16 +434,19 @@ const SignUpPage = () => {
                             </button>
 
                             <div className="text-center space-y-1">
-                                <button
-                                    type="button"
-                                    onClick={handleResend}
-                                    disabled={resendCooldown > 0 || isResending}
-                                    className="text-sm text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {isResending ? "Sending..."
-                                        : resendCooldown > 0 ? `Resend code (${resendCooldown}s)`
-                                            : "Resend code"}
-                                </button>
+                                <p className="text-sm text-base-content/70">
+                                    Did not receive an email?{" "}
+                                    <button
+                                        type="button"
+                                        onClick={handleResend}
+                                        disabled={resendCooldown > 0 || isResending}
+                                        className="text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                                    >
+                                        {isResending ? "Sending..."
+                                            : resendCooldown > 0 ? `Resend Code (${resendCooldown}s)`
+                                                : "Resend Code"}
+                                    </button>
+                                </p>
                                 {resendMessage && (
                                     <p className={`text-xs ${resendMessage.includes("sent") ? "text-success" : "text-error"}`}>
                                         {resendMessage}

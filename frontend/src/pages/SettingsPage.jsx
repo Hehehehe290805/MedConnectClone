@@ -246,7 +246,7 @@ const SettingsPage = () => {
                   <button onClick={() => setShowLogoutModal(false)} className="btn btn-ghost">Cancel</button>
                   <button
                     onClick={() => { logoutMutation(); setShowLogoutModal(false); }}
-                    className="btn btn-primary"
+                    className="btn btn-error"
                     disabled={isLoggingOut}
                   >
                     {isLoggingOut ? <><span className="loading loading-spinner loading-xs" />Logging out...</> : "Logout"}

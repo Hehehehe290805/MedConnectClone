@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { UploadCloudIcon, XIcon, PlusIcon, ArrowLeftIcon } from "lucide-react";
 import imageCompression from "browser-image-compression";
 import { uploadFile } from "../lib/api";
@@ -81,7 +81,7 @@ export const ImageUploadField = ({ label, field, value, onChange, required = fal
             const result = await uploadFile(compressed, field);
             // sendSuccess wraps as { success, message, data: { url, key } }
             const { url, key } = result.data;
-            if (!url && !key) throw new Error("Upload response missing url/key");
+            if (!url) throw new Error("Upload response missing url");
             onChange({ url, key });
             toast.success(`${label} uploaded successfully`);
         } catch (err) {
@@ -148,12 +148,11 @@ export const ImageUploadField = ({ label, field, value, onChange, required = fal
                 ref={inputRef}
                 type="file"
                 accept="image/*"
-                capture={field === "profilePic" ? "user" : undefined}
                 className="hidden"
                 onChange={(e) => handleFile(e.target.files[0])}
             />
             {required && !isUploaded && !uploading && (
-                <p className="text-xs text-error mt-1">Please upload {label}</p>
+                <p className="text-xs text-error mt-1">{label} is required</p>
             )}
         </div>
     );
@@ -164,6 +163,16 @@ export const LanguagesField = ({ value = [], onChange, error }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [otherText, setOtherText] = useState("");
     const dropdownRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
 
     const toggleLanguage = (lang) => {
         const updated = value.includes(lang)
@@ -180,15 +189,8 @@ export const LanguagesField = ({ value = [], onChange, error }) => {
         setOtherText("");
     };
 
-    // close on outside click
-    const handleBlur = (e) => {
-        if (dropdownRef.current && !dropdownRef.current.contains(e.relatedTarget)) {
-            setIsOpen(false);
-        }
-    };
-
     return (
-        <div className="form-control" ref={dropdownRef} onBlur={handleBlur} tabIndex={-1}>
+        <div className="form-control" ref={dropdownRef}>
             <label className="label">
                 <span className="label-text">Languages <span className="text-error">*</span></span>
             </label>
@@ -248,28 +250,29 @@ export const LanguagesField = ({ value = [], onChange, error }) => {
     );
 };
 
+// --- ADDRESS FIELD ITEM — defined outside to prevent remount on keystroke ---
+const AddressFieldItem = ({ label, fieldKey, placeholder, required, type = "text", maxLength, value, onChange, error }) => (
+    <div className="form-control">
+        <label className="label py-0">
+            <span className="label-text text-xs">
+                {label}{required && <span className="text-error ml-1">*</span>}
+            </span>
+        </label>
+        <input
+            type={type}
+            className={`input input-bordered w-full input-sm ${error ? "input-error" : ""}`}
+            placeholder={placeholder}
+            value={value}
+            maxLength={maxLength}
+            onChange={(e) => onChange(fieldKey, e.target.value)}
+        />
+        {error && <p className="text-error text-xs mt-0.5">{error}</p>}
+    </div>
+);
+
 // --- ADDRESS FIELDS ---
 export const AddressFields = ({ value = {}, onChange, errors = {} }) => {
     const update = (field, val) => onChange({ ...value, [field]: val });
-
-    const Field = ({ label, fieldKey, placeholder, required, type = "text", maxLength }) => (
-        <div className="form-control">
-            <label className="label py-0">
-                <span className="label-text text-xs">
-                    {label}{required && <span className="text-error ml-1">*</span>}
-                </span>
-            </label>
-            <input
-                type={type}
-                className={`input input-bordered w-full input-sm ${errors[fieldKey] ? "input-error" : ""}`}
-                placeholder={placeholder}
-                value={value[fieldKey] || ""}
-                maxLength={maxLength}
-                onChange={(e) => update(fieldKey, e.target.value)}
-            />
-            {errors[fieldKey] && <p className="text-error text-xs mt-0.5">{errors[fieldKey]}</p>}
-        </div>
-    );
 
     return (
         <div className="space-y-3">
@@ -279,19 +282,17 @@ export const AddressFields = ({ value = {}, onChange, errors = {} }) => {
                 </span>
             </label>
             <div className="grid grid-cols-2 gap-3">
-                <Field label="Building / House No." fieldKey="buildingNumber" placeholder="Unit 4B" />
-                <Field label="Street" fieldKey="street" placeholder="Rizal Street" required />
+                <AddressFieldItem label="Building / House No." fieldKey="buildingNumber" placeholder="Unit 4B" value={value.buildingNumber || ""} onChange={update} error={errors["address.buildingNumber"]} />
+                <AddressFieldItem label="Street" fieldKey="street" placeholder="Rizal Street" required value={value.street || ""} onChange={update} error={errors["address.street"]} />
             </div>
             <div className="grid grid-cols-2 gap-3">
-                <Field label="Barangay" fieldKey="barangay" placeholder="Barangay 1" required />
-                <Field label="City" fieldKey="city" placeholder="Manila" required />
+                <AddressFieldItem label="Barangay" fieldKey="barangay" placeholder="Barangay 1" required value={value.barangay || ""} onChange={update} error={errors["address.barangay"]} />
+                <AddressFieldItem label="City" fieldKey="city" placeholder="Manila" required value={value.city || ""} onChange={update} error={errors["address.city"]} />
             </div>
             <div className="grid grid-cols-2 gap-3">
-                <Field label="Province" fieldKey="province" placeholder="Metro Manila" required />
-                <Field label="Postal Code" fieldKey="postalCode" placeholder="1000" required type="text" maxLength={4} />
+                <AddressFieldItem label="Province" fieldKey="province" placeholder="Metro Manila" required value={value.province || ""} onChange={update} error={errors["address.province"]} />
+                <AddressFieldItem label="Postal Code" fieldKey="postalCode" placeholder="1000" required value={value.postalCode || ""} onChange={update} error={errors["address.postalCode"]} maxLength={4} />
             </div>
-            {errors.postalCode && <p className="text-error text-xs">{errors.postalCode}</p>}
-            {/* FLAG: map pin button — GeoJSON coordinates deferred */}
             <button
                 type="button"
                 className="btn btn-outline btn-sm gap-2 w-full"
@@ -306,8 +307,9 @@ export const AddressFields = ({ value = {}, onChange, errors = {} }) => {
 
 // --- PHONE NUMBER FIELD ---
 export const PhoneField = ({ phoneNumber, phoneType, onNumberChange, onTypeChange, error }) => {
+    const isMobile = phoneType === "mobile";
+
     const handleNumberInput = (e) => {
-        // strip everything except digits
         const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
         onNumberChange(digits);
     };
@@ -329,13 +331,15 @@ export const PhoneField = ({ phoneNumber, phoneType, onNumberChange, onTypeChang
                     <option value="telephone">Telephone</option>
                 </select>
                 <div className="relative flex-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm opacity-60 font-medium pointer-events-none">
-                        +63
-                    </span>
+                    {isMobile && (
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm opacity-60 font-medium pointer-events-none">
+                            +63
+                        </span>
+                    )}
                     <input
                         type="tel"
-                        className={`input input-bordered w-full pl-12 ${error ? "input-error" : ""}`}
-                        placeholder="9171234567"
+                        className={`input input-bordered w-full ${isMobile ? "pl-12" : ""} ${error ? "input-error" : ""}`}
+                        placeholder={isMobile ? "9171234567" : "028123456"}
                         value={phoneNumber}
                         onChange={handleNumberInput}
                         maxLength={10}
@@ -344,7 +348,7 @@ export const PhoneField = ({ phoneNumber, phoneType, onNumberChange, onTypeChang
             </div>
             {error && <p className="text-error text-xs mt-1">{error}</p>}
             <small className="text-xs opacity-50 mt-1">
-                10-digit number without +63 — letters and symbols are removed automatically
+                {isMobile ? "10-digit mobile number without +63" : "10-digit telephone number"}
             </small>
         </div>
     );

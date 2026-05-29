@@ -42,7 +42,7 @@ const OnboardingPage = () => {
     const [adminCodeLoading, setAdminCodeLoading] = useState(false);
 
     const handleRoleSelect = (role) => {
-        if (role.key === "institute") {
+        if (!role.enabled) {
             navigate("/coming-soon");
             return;
         }
@@ -180,13 +180,7 @@ const OnboardingPage = () => {
                                     <button
                                         key={role.key}
                                         onClick={() => handleRoleSelect(role)}
-                                        className={`
-                      flex flex-col items-center justify-center gap-3 p-6 rounded-xl border-2 transition-all
-                      ${role.enabled
-                                                ? "border-base-300 hover:border-primary hover:bg-primary/5 cursor-pointer"
-                                                : "border-base-300 opacity-40 cursor-not-allowed bg-base-300/30"
-                                            }
-                    `}
+                                        className="flex flex-col items-center justify-center gap-3 p-6 rounded-xl border-2 border-base-300 hover:border-primary hover:bg-primary/5 cursor-pointer transition-all"
                                     >
                                         <Icon className={`size-8 ${role.enabled ? "text-primary" : "text-base-content/40"}`} />
                                         <span className={`font-semibold ${role.enabled ? "text-base-content" : "text-base-content/40"}`}>
