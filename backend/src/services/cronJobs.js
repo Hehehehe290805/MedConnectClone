@@ -5,6 +5,7 @@ import Admin from "../models/Admin.js";
 import Appointment from "../models/Appointment.js";
 import EmailRegistry from "../models/EmailRegistry.js";
 import { logError } from "../utils/logger.js";
+import { deleteFromS3 } from "../services/s3.js";
 
 // FLAG: booking controller needs rewrite — stubs prevent startup crash
 const checkNoShows = async () => { };
@@ -42,7 +43,7 @@ export function startCronJobs() {
             const usersToDelete = await User.find({
                 pendingDeletion: true,
                 deletionRequestedAt: { $lte: cutoff },
-            }).select("_id email");
+            }).select("_id email profilePic licenseImage legalIDImage businessPermit fdaLicense pharmacistLicenseImage pharmacistLegalIDImage");
 
             const adminsToDelete = await Admin.find({
                 pendingDeletion: true,
@@ -60,6 +61,21 @@ export function startCronJobs() {
                         },
                     ],
                 });
+
+                // delete S3 files
+                const s3Keys = [
+                    user.profilePic?.key,
+                    user.licenseImage?.key,
+                    user.legalIDImage?.key,
+                    user.businessPermit?.key,
+                    user.fdaLicense?.key,
+                    user.pharmacistLicenseImage?.key,
+                    user.pharmacistLegalIDImage?.key,
+                ].filter(Boolean);
+                for (const key of s3Keys) await deleteFromS3(key);
+
+                if (admin.profilePic?.key) await deleteFromS3(admin.profilePic.key);
+
                 await EmailRegistry.deleteOne({ email: user.email });
                 await User.findByIdAndDelete(user._id);
             }
@@ -81,7 +97,7 @@ export function startCronJobs() {
         try {
             console.log("[CRON] Running license expiry checker");
             const now = new Date();
-            const in60Days = new Date(now.getTime(),  60 * 24 * 60 * 60 * 1000);
+            const in60Days = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
     
             // helper — earliest expiry date for a doc
             const earliestExpiry = (doc) => {

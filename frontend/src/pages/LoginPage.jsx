@@ -61,8 +61,10 @@ const LoginPage = () => {
 
           {/* ERROR MESSAGE DISPLAY */}
           {error && (
-            <div className="alert alert-error mb-4">
-              <span>{error.response.data.message}</span>
+            <div className="label mt-1">
+              <span className="label-text-alt text-error text-sm">
+                {error?.response?.data?.message || "Invalid email or password."}
+              </span>
             </div>
           )}
 

@@ -1,6 +1,6 @@
 import express from "express";
 import { 
-    signup, verifySignup,
+    signup, verifySignup, resendSignupCode,
     login, adminLogin, logout, getMe, deleteMe, 
     requestEmailUpdate, verifyCurrentEmailUpdate, verifyNewEmailUpdate,
     requestPasswordUpdate, verifyPasswordUpdate,
@@ -15,6 +15,7 @@ const router = express.Router();
 
 router.post("/signup", signupValidator, validate, signup);
 router.post("/signup/verify", validate, verifySignup);
+router.post("/signup/resend", resendSignupCode);
 router.post("/login", loginValidator, validate, login);
 router.post("/admin-login", adminLoginValidator, validate, adminLogin);
 router.post("/logout", logout);

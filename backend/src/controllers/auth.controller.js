@@ -7,6 +7,7 @@ import EmailRegistry from "../models/EmailRegistry.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { createAndSendCode, verifyCode } from "../services/verification.js";
+import VerificationCode from "../models/VerificationCode.js";
 
 const cookieOptions = {
   maxAge: 7 * 24 * 60 * 60 * 1000,
@@ -74,6 +75,28 @@ export const verifySignup = asyncHandler(async (req, res) => {
     session.endSession();
   }
 });
+
+export const resendSignupCode = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  
+  // check if a code was recently sent — rate limit 1 per minute
+  const existing = await VerificationCode.findOne({ email, type: "signup" });
+  if (existing) {
+    const secondsSinceCreated = (Date.now() - new Date(existing.createdAt).getTime()) / 1000;
+    if (secondsSinceCreated < 60) {
+        const waitSeconds = Math.ceil(60 - secondsSinceCreated);
+        return sendError(res, 429, `Please wait ${waitSeconds} seconds before requesting a new code.`);
+      }
+  }
+  
+  // check email exists in registry — can't resend for non-existent signup attempt
+  // note: for signup, no user exists yet so we just check a pending VerificationCode exists
+  if (!existing) return sendError(res, 400, "No pending verification found for this email.");
+
+  await createAndSendCode(email, "signup", existing.payload);
+  
+  return sendSuccess(res, 200, "Verification code resent.");
+  });
 
 export const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;

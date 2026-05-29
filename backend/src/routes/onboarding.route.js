@@ -9,6 +9,7 @@ import {
     onboardPatientValidator, onboardDoctorValidator,
     onboardPharmacyValidator, onboardAdminValidator
 } from "../validators/onboarding.validator.js";
+import { convertToAdmin } from "../controllers/adminConvert.controller.js";
 
 const router = express.Router();
 
@@ -16,5 +17,6 @@ router.post("/patient", protectRoute, onboardPatientValidator, validate, onboard
 router.post("/doctor", protectRoute, onboardDoctorValidator, validate, onboardAsDoctor);
 router.post("/pharmacy", protectRoute, onboardPharmacyValidator, validate, onboardAsPharmacy);
 router.post("/admin", protectRoute, onboardAdminValidator, validate, onboardAsAdmin);
+router.post("/admin/convert", protectRoute, convertToAdmin);
 
 export default router;

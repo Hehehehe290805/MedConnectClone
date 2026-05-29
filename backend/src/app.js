@@ -15,6 +15,7 @@ import permitsRoutes from "./routes/permits.route.js";
 import searchRoutes from "./routes/search.route.js";
 import specialtyAndServiceRoutes from "./routes/specialtyAndService.route.js";
 import userRoutes from "./routes/user.route.js";
+import uploadRoutes from "./routes/upload.route.js";
 
 import { errorMiddleware } from "./middleware/error.middleware.js";
 import { connectDB } from "./lib/db.js";
@@ -35,6 +36,7 @@ app.use(cookieParser());
 // Routes
 app.use("/api/admin", adminRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/upload", uploadRoutes);
 app.use("/api/booking", bookingRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/doctor-schedule", schedule);

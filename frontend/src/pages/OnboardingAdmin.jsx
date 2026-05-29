@@ -1,305 +1,113 @@
-import { useEffect, useRef, useState } from "react";
-import useAuthUser from "../hooks/useAuthUser.js";
-import { completeOnboarding } from "../lib/api.js";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import {
-    LoaderIcon,
-    BriefcaseMedicalIcon,
-    ShuffleIcon,
-} from "lucide-react";
-import { LANGUAGES, LOCATIONS } from "../constants/index.js";
-import { CameraIcon } from "@heroicons/react/24/outline";
+import { completeOnboarding } from "../lib/api";
+import { StepHeader, ImageUploadField, PhoneField } from "./OnboardingShared";
 
-const OnboardingPage = () => {
-    const { authUser } = useAuthUser();
+const OnboardingAdmin = ({ email, role, onBack, onSuccess }) => {
     const queryClient = useQueryClient();
-    const [isLangOpen, setIsLangOpen] = useState(false);
-    const dropdownRef = useRef(null);
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [uploadingFields, setUploadingFields] = useState({});
+    const [errors, setErrors] = useState({});
 
-    const [formState, setFormState] = useState({
-        role: authUser?.role,
-        firstName: authUser?.firstName || "",
-        lastName: authUser?.lastName || "",
-        birthDate: authUser?.birthDate || "",
-        bio: authUser?.bio || "",
-        languages: Array.isArray(authUser?.languages)
-            ? authUser.languages
-            : [],
-        location: authUser?.location || "",
-        profilePic: authUser?.profilePic || "",
-        adminCode: authUser?.adminCode || "",
+    const [form, setForm] = useState({
+        profilePic: { url: "", key: "" },
+        firstName: "",
+        lastName: "",
+        phoneNumber: "",
+        phoneType: "mobile",
     });
 
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-                setIsLangOpen(false);
-            }
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
+    const isAnyUploading = Object.values(uploadingFields).some(Boolean);
+    const setUploading = (field, val) =>
+        setUploadingFields((prev) => ({ ...prev, [field]: val }));
 
-    const { mutate: onboardingMutation, isPending } = useMutation({
+    const { mutate, isPending } = useMutation({
         mutationFn: completeOnboarding,
         onSuccess: () => {
-            toast.success("Profile onboarded successfully");
             queryClient.invalidateQueries({ queryKey: ["authUser"] });
-            setIsSubmitting(false);
+            onSuccess();
         },
-        onError: (error) => {
-            console.error("Onboarding error:", error);
-            const message =
-                error?.response?.data?.message ||
-                error?.message ||
-                "An unexpected error occurred";
-            toast.error(message);
-            setIsSubmitting(false);
+        onError: (err) => {
+            const data = err?.response?.data;
+            if (data?.errors && Array.isArray(data.errors)) {
+                const mapped = {};
+                data.errors.forEach((e) => { mapped[e.field] = e.message; });
+                setErrors(mapped);
+                toast.error("Please fix the errors below.");
+            } else {
+                toast.error(data?.message || "Onboarding failed.");
+            }
         },
     });
 
-    const handleSubmit = async (e) => {
+    const update = (field, value) => {
+        setForm((prev) => ({ ...prev, [field]: value }));
+        setErrors((prev) => ({ ...prev, [field]: undefined }));
+    };
+
+    const validate = () => {
+        const e = {};
+        if (!form.firstName.trim()) e.firstName = "First name is required";
+        if (!form.lastName.trim()) e.lastName = "Last name is required";
+        if (!form.phoneNumber.trim()) e.phoneNumber = "Phone number is required";
+        if (form.phoneNumber.length !== 10) e.phoneNumber = "Phone number must be 10 digits";
+        setErrors(e);
+        return Object.keys(e).length === 0;
+    };
+
+    const handleSubmit = (e) => {
         e.preventDefault();
-        setIsSubmitting(true);
-
-        try {
-            onboardingMutation(formState);
-        } catch (error) {
-            console.error("Onboarding error:", error);
-            toast.error("Failed to complete onboarding: " + error.message);
-            setIsSubmitting(false);
-        }
+        if (!validate()) return;
+        mutate({ ...form, role: "admin" });
     };
-
-    const handleRandomAvatar = () => {
-        const idx = Math.floor(Math.random() * 100) + 1;
-        const randomAvatar = `https://avatar.iran.liara.run/public/${idx}.png`;
-
-        setFormState({ ...formState, profilePic: randomAvatar });
-        toast.success("Random profile picture generated!");
-    };
-
-    const isSubmitDisabled = isPending || isSubmitting;
 
     return (
-        <div className="min-h-screen bg-base-100 flex items-center justify-center p-4">
-            <div className="card bg-base-200 w-full max-w-3xl shadow-xl">
-                <div className="card-body p-6 sm:p-8">
-                    <h1 className="text-2xl sm:text-3xl font-bold text-center mb-6">
-                        Complete Your Profile
-                    </h1>
-
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        {/* PROFILE PIC CONTAINER */}
-                        <div className="flex flex-col items-center justify-center space-y-4">
-                            <div className="size-32 rounded-full bg-base-300 overflow-hidden">
-                                {formState.profilePic ? (
-                                    <img
-                                        src={formState.profilePic}
-                                        alt="Profile Preview"
-                                        className="w-full h-full object-cover"
-                                    />
-                                ) : (
-                                    <div className="flex items-center justify-center h-full">
-                                        <CameraIcon className="size-12 text-base-content opacity-40" />
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                                <button
-                                    type="button"
-                                    onClick={handleRandomAvatar}
-                                    className="btn btn-primary"
-                                    disabled={isSubmitDisabled}
-                                >
-                                    <ShuffleIcon className="size-4 mr-2" />
-                                    Generate Random Avatar
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* NAME */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="form-control">
-                                <label className="label">
-                                    <span className="label-text">First Name</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    value={formState.firstName}
-                                    onChange={(e) =>
-                                        setFormState({ ...formState, firstName: e.target.value })
-                                    }
-                                    className="input input-bordered w-full"
-                                    placeholder="Your first name"
-                                    disabled={isSubmitDisabled}
-                                />
-                            </div>
-
-                            <div className="form-control">
-                                <label className="label">
-                                    <span className="label-text">Last Name</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    value={formState.lastName}
-                                    onChange={(e) =>
-                                        setFormState({ ...formState, lastName: e.target.value })
-                                    }
-                                    className="input input-bordered w-full"
-                                    placeholder="Your last name"
-                                    disabled={isSubmitDisabled}
-                                />
-                            </div>
-                        </div>
-
-                        {/* DOB */}
+        <div className="card bg-base-200 w-full max-w-2xl shadow-xl">
+            <div className="card-body p-6 sm:p-8">
+                <StepHeader
+                    title="Admin Profile"
+                    subtitle="Complete your admin profile"
+                    role={role}
+                    email={email}
+                    onBack={onBack}
+                    isFirstStep={true}
+                />
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <ImageUploadField
+                        label="Profile Picture"
+                        field="profilePic"
+                        value={form.profilePic}
+                        onChange={(val) => update("profilePic", val)}
+                        onUploadingChange={(v) => setUploading("profilePic", v)}
+                    />
+                    <div className="grid grid-cols-2 gap-4">
                         <div className="form-control">
-                            <label className="label">
-                                <span className="label-text">Date of Birth</span>
-                            </label>
-                            <input
-                                type="date"
-                                value={formState.birthDate}
-                                onChange={(e) =>
-                                    setFormState({ ...formState, birthDate: e.target.value })
-                                }
-                                className="input input-bordered w-full"
-                                disabled={isSubmitDisabled}
-                            />
+                            <label className="label"><span className="label-text">First Name <span className="text-error">*</span></span></label>
+                            <input type="text" className={`input input-bordered w-full ${errors.firstName ? "input-error" : ""}`} placeholder="Ana" value={form.firstName} onChange={(e) => update("firstName", e.target.value)} />
+                            {errors.firstName && <p className="text-error text-xs mt-1">{errors.firstName}</p>}
                         </div>
-
-                        {/* BIO */}
                         <div className="form-control">
-                            <label className="label">
-                                <span className="label-text">Bio</span>
-                            </label>
-                            <textarea
-                                value={formState.bio}
-                                onChange={(e) =>
-                                    setFormState({ ...formState, bio: e.target.value })
-                                }
-                                className="textarea textarea-bordered h-24"
-                                placeholder="Tell us about yourself"
-                                disabled={isSubmitDisabled}
-                            />
+                            <label className="label"><span className="label-text">Last Name <span className="text-error">*</span></span></label>
+                            <input type="text" className={`input input-bordered w-full ${errors.lastName ? "input-error" : ""}`} placeholder="Gonzales" value={form.lastName} onChange={(e) => update("lastName", e.target.value)} />
+                            {errors.lastName && <p className="text-error text-xs mt-1">{errors.lastName}</p>}
                         </div>
-
-                        <div className="form-control relative" ref={dropdownRef}>
-                            <label className="label">
-                                <span className="label-text">Languages</span>
-                            </label>
-                            <div
-                                tabIndex={0}
-                                className="select select-bordered w-full cursor-pointer"
-                                onClick={() => !isSubmitDisabled && setIsLangOpen(!isLangOpen)}
-                            >
-                                {formState.languages.length > 0
-                                    ? formState.languages.join(", ")
-                                    : "Select your languages"}
-                            </div>
-
-                            {isLangOpen && (
-                                <div className="absolute mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto z-10">
-                                    {LANGUAGES.map((lang) => (
-                                        <label
-                                            key={lang}
-                                            className="flex items-center gap-2 px-3 py-2 hover:bg-gray-100 cursor-pointer"
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={formState.languages.includes(lang)}
-                                                onChange={() => {
-                                                    if (isSubmitDisabled) return;
-                                                    const updated = formState.languages.includes(lang)
-                                                        ? formState.languages.filter((l) => l !== lang)
-                                                        : [...formState.languages, lang];
-                                                    setFormState({
-                                                        ...formState,
-                                                        languages: updated,
-                                                    });
-                                                }}
-                                                className="checkbox checkbox-sm"
-                                                disabled={isSubmitDisabled}
-                                            />
-                                            <span>{lang}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            )}
-
-                            <small className="text-gray-500 mt-1">
-                                Click to select multiple languages
-                            </small>
-                        </div>
-
-                        {/* LOCATION */}
-                        <div className="form-control">
-                            <label className="label">
-                                <span className="label-text">Location</span>
-                            </label>
-                            <select
-                                value={formState.location}
-                                onChange={(e) =>
-                                    setFormState({ ...formState, location: e.target.value })
-                                }
-                                className="select select-bordered w-full"
-                                disabled={isSubmitDisabled}
-                            >
-                                <option value="">Select Location</option>
-                                {LOCATIONS.map((location) => (
-                                    <option key={location} value={location}>
-                                        {location}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        {/* ADMIN CODE */}
-                        <div className="form-control">
-                            <label className="label">
-                                <span className="label-text">Admin Code</span>
-                            </label>
-                            <div className="relative">
-                                <input
-                                    type="text"
-                                    value={formState.adminCode}
-                                    onChange={(e) =>
-                                        setFormState({ ...formState, adminCode: e.target.value })
-                                    }
-                                    className="input input-bordered w-full"
-                                    placeholder="Admin Code"
-                                    disabled={isSubmitDisabled}
-                                />
-                            </div>
-                        </div>
-
-                        {/* SUBMIT BUTTON */}
-                        <button
-                            className="btn btn-primary w-full mt-6"
-                            disabled={isSubmitDisabled}
-                            type="submit"
-                        >
-                            {!isSubmitDisabled ? (
-                                <>
-                                    <BriefcaseMedicalIcon className="size-5 mr-2" />
-                                    Complete Onboarding
-                                </>
-                            ) : (
-                                <>
-                                    <LoaderIcon className="animate-spin size-5 mr-2" />
-                                    Onboarding...
-                                </>
-                            )}
-                        </button>
-                    </form>
-                </div>
+                    </div>
+                    <PhoneField
+                        phoneNumber={form.phoneNumber}
+                        phoneType={form.phoneType}
+                        onNumberChange={(val) => update("phoneNumber", val)}
+                        onTypeChange={(val) => update("phoneType", val)}
+                        error={errors.phoneNumber}
+                    />
+                    <button className="btn btn-primary w-full" type="submit" disabled={isPending || isAnyUploading}>
+                        {isPending ? <><span className="loading loading-spinner loading-xs" />Submitting</>
+                            : isAnyUploading ? <><span className="loading loading-spinner loading-xs" />Uploading...</>
+                                : "Submit for Approval"}
+                    </button>
+                </form>
             </div>
         </div>
     );
 };
 
-export default OnboardingPage;
+export default OnboardingAdmin;
