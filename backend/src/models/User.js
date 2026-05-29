@@ -1,101 +1,96 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
-import crypto from "crypto";
+import { encrypt, decrypt } from "../utils/crypto.js";
 
-const userSchema = new mongoose.Schema(
-  {
-    firstName: {
-      type: String,
-    },
-    lastName: {
-      type: String,
-    },
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-    },
-    password: {
-      type: String,
-      required: true,
-      minlength: 6,
-    },
-    birthDate: {
-      type: Date,
-    },
-    sex: {
-      type: String,
-      enum: ["male", "female"],
-    },
-    bio: {
-      type: String,
-      default: "",
-    },
-    profilePic: {
-      type: String,
-      default: "",
-    },
-    languages: [
-      {
-        type: String,
-        required: true,
-      },
-    ],
-    location: {
-      type: String,
-      default: "",
-    },
-    status: {
-      type: String,
-      enum: ["notOnBoarded", "onBoarded", "pending"],
-      default: "notOnBoarded",
-    },
-    friends: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
-    ],
-    pro: {
-      type: Boolean,
-      default: false,
-    },
-    role: {
-      type: String,
-      enum: ["user", "doctor", "institute", "pharmacist", "admin"],
-      default: "user",
-    },
-    profession: {
-      type: String,
-    },
-    licenseNumber: {
-      type: String,
-    },
-    facilityName: {
-      type: String,
-    },
-    adminCode: {
-      type: String,
-    },
-    approvedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-    },
+const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
-    // Payment Integration Fields
-    gcash: {
-      qrData: String,         // decoded string
-      accountName: String,    // manually provided by user
-      accountNumber: String,  // manually provided by user
-    }
+const imageSchema = new mongoose.Schema({
+  url: { type: String, default: "" },
+  key: { type: String, default: "" },
+}, { _id: false });
 
+const addressSchema = new mongoose.Schema({
+  buildingNumber: { type: String, default: "" },
+  street: { type: String, default: "" },
+  barangay: { type: String, default: "" },
+  city: { type: String, default: "" },
+  province: { type: String, default: "" },
+  postalCode: { type: String, default: "" },
+  coordinates: {
+    type: {
+      type: String,
+      enum: ["Point"],
+      default: "Point",
+    },
+    coordinates: {
+      type: [Number], // [longitude, latitude]
+      default: [0, 0],
+    },
   },
-  { timestamps: true }
-);
+}, { _id: false });
 
-// COMBINED pre-save hook to handle all modifications
-userSchema.pre("save", async function (next) {
-  // Password hashing
+const baseUserSchema = new mongoose.Schema({
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    lowercase: true,
+    trim: true,
+  },
+  password: {
+    type: String,
+    required: true,
+    validate: {
+      validator: function (v) {
+        // only validate if password is being set in plain text
+        return this.isModified("password") ? passwordRegex.test(v) : true;
+      },
+      message: "Password must be at least 8 characters and include 1 uppercase, 1 lowercase, 1 number, and 1 symbol (@$!%*?&)",
+    },
+  },
+  role: {
+    type: String,
+    enum: ["user", "patient", "doctor", "pharmacy", "institute", "department", "admin"],
+    default: "user",
+  },
+  status: {
+    type: String,
+    enum: ["notOnBoarded", "pending", "onBoarded",
+      "needsRenewal", "pendingRenewal", "pendingRenewalExpired", "suspended",
+    ],
+    default: "notOnBoarded",
+  },
+  phoneNumber: {
+    type: String,
+    default: "",
+  },
+  phoneType: {
+    type: String,
+    enum: ["mobile", "telephone"],
+    default: "mobile",
+  },
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Admin",
+  },
+  pendingDeletion: { type: Boolean, default: false },
+  deletionRequestedAt: { type: Date, default: null },
+  birthDate: {
+    type: Date,
+    validate: {
+      validator: function (v) {
+        if (!v) return true; // not all roles require it
+        const now = new Date();
+        const minAge = new Date(now.getFullYear() - 18, now.getMonth(), now.getDate());
+        const maxAge = new Date(now.getFullYear() - 120, now.getMonth(), now.getDate());
+        return v <= minAge && v >= maxAge;
+        },
+        message: "User must be between 18 and 120 years old",
+    },
+  },
+}, { timestamps: true, discriminatorKey: "__t" });
+
+baseUserSchema.pre("save", async function (next) {
   if (this.isModified("password")) {
     try {
       const salt = await bcrypt.genSalt(10);
@@ -104,55 +99,112 @@ userSchema.pre("save", async function (next) {
       return next(error);
     }
   }
-
-  // License number encryption
-  if (this.isModified("licenseNumber") && this.licenseNumber && !this.licenseNumber.includes(":")) {
-    this.licenseNumber = encrypt(this.licenseNumber);
-  }
-
-  // GCash account number encryption
-  if (this.isModified("gcash.accountNumber") && this.gcash?.accountNumber && !this.gcash.accountNumber.includes(":")) {
-    this.gcash.accountNumber = encrypt(this.gcash.accountNumber);
-  }
-
   next();
 });
 
-userSchema.methods.matchPassword = async function (enteredPassword) {
-  const isPasswordCorrect = await bcrypt.compare(enteredPassword, this.password);
-  return isPasswordCorrect;
+baseUserSchema.methods.matchPassword = async function (enteredPassword) {
+  return bcrypt.compare(enteredPassword, this.password);
 };
 
-const ENCRYPTION_KEY = process.env.LICENSE_SECRET_KEY; // 32 chars for AES-256
-const IV_LENGTH = 16;
+const User = mongoose.model("User", baseUserSchema);
+export default User;
 
-function encrypt(text) {
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const cipher = crypto.createCipheriv("aes-256-cbc", Buffer.from(ENCRYPTION_KEY), iv);
-  let encrypted = cipher.update(text);
-  encrypted = Buffer.concat([encrypted, cipher.final()]);
-  return iv.toString("hex") + ":" + encrypted.toString("hex");
-}
 
-function decrypt(text) {
-  const [ivHex, encryptedText] = text.split(":");
-  const iv = Buffer.from(ivHex, "hex");
-  const encrypted = Buffer.from(encryptedText, "hex");
-  const decipher = crypto.createDecipheriv("aes-256-cbc", Buffer.from(ENCRYPTION_KEY), iv);
-  let decrypted = decipher.update(encrypted);
-  decrypted = Buffer.concat([decrypted, decipher.final()]);
-  return decrypted.toString();
-}
+// --- PATIENT ---
+const patientSchema = new mongoose.Schema({
+  firstName: { type: String, required: true },
+  lastName: { type: String, required: true },
+  sex: { type: String, enum: ["male", "female"], required: true },
+  bio: { type: String, default: "" },
+  profilePic: { type: imageSchema, default: () => ({}) },
+  languages: [{ type: String }],
+  address: { type: addressSchema, default: () => ({}) },
+});
 
-// method to decrypt when needed
-userSchema.methods.getLicenseNumber = function () {
+export const Patient = User.discriminator("Patient", patientSchema);
+
+
+// --- DOCTOR ---
+const doctorSchema = new mongoose.Schema({
+  firstName: { type: String, required: true },
+  lastName: { type: String, required: true },
+  sex: { type: String, enum: ["male", "female"], required: true },
+  bio: { type: String, default: "" },
+  profilePic: { type: imageSchema, default: () => ({}) },
+  languages: [{ type: String }],
+  address: { type: addressSchema, default: () => ({}) },
+  licenseNumber: {
+    type: String,
+    required: true,
+    set: (v) => v && !v.includes(":") ? encrypt(v) : v,
+  },
+  licenseExpiration: {
+    type: Date,
+    required: true,
+    validate: {
+      validator: (v) => v > new Date(),
+      message: "License expiration date must be in the future",
+    },
+  },
+  licenseImage: { type: imageSchema, default: () => ({}) },
+  legalIDImage: { type: imageSchema, default: () => ({}), immutable: true },
+  specialty: [{ type: mongoose.Schema.Types.ObjectId, ref: "Specialty" }],
+  subspecialty: [{ type: mongoose.Schema.Types.ObjectId, ref: "Subspecialty" }],
+});
+
+doctorSchema.methods.getLicenseNumber = function () {
   return this.licenseNumber ? decrypt(this.licenseNumber) : null;
 };
 
-userSchema.methods.getGcashAccountNumber = function () {
-  return this.gcash.accountNumber ? decrypt(this.gcash.accountNumber) : null;
+export const Doctor = User.discriminator("Doctor", doctorSchema);
+
+
+// --- PHARMACY ---
+const pharmacySchema = new mongoose.Schema({
+  pharmacyName: { type: String, required: true },
+  pharmacistFirstName: { type: String, required: true },
+  pharmacistLastName: { type: String, required: true },
+  sex: { type: String, enum: ["male", "female"], required: true },
+  bio: { type: String, default: "" },
+  profilePic: { type: imageSchema, default: () => ({}) },
+  address: { type: addressSchema, default: () => ({}) },
+  businessPermit: { type: imageSchema, default: () => ({}) },
+  fdaLicense: { type: imageSchema, default: () => ({}) },
+  pharmacistLicenseNumber: {
+    type: String,
+    required: true,
+    set: (v) => v && !v.includes(":") ? encrypt(v) : v,
+  },
+  pharmacistLicenseExpiration: {
+    type: Date,
+    required: true,
+    validate: {
+      validator: (v) => v > new Date(),
+      message: "Pharmacist license expiration must be in the future",
+    },
+  },
+  pharmacistLicenseImage: { type: imageSchema, default: () => ({}) },
+  businessPermitExpiration: {
+    type: Date,
+    required: true,
+    validate: {
+      validator: (v) => v > new Date(),
+      message: "Business permit expiration must be in the future",
+    },
+  },
+  fdaLicenseExpiration: {
+    type: Date,
+    required: true,
+    validate: {
+      validator: (v) => v > new Date(),
+      message: "FDA license expiration must be in the future",
+    },
+  },
+  pharmacistLegalIDImage: { type: imageSchema, default: () => ({}), immutable: true },
+});
+
+pharmacySchema.methods.getPharmacistLicenseNumber = function () {
+  return this.pharmacistLicenseNumber ? decrypt(this.pharmacistLicenseNumber) : null;
 };
 
-const User = mongoose.model("User", userSchema);
-
-export default User;
+export const Pharmacy = User.discriminator("Pharmacy", pharmacySchema);
