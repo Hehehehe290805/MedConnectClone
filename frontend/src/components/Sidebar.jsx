@@ -8,11 +8,13 @@ const Sidebar = () => {
   const currentPath = location.pathname;
 
   // Generate full name from first and last name
-  const fullName = `${authUser?.firstName || ""} ${authUser?.lastName || ""}`.trim() || "User";
+  const fullName = authUser?.role === "pharmacy"
+    ? authUser?.pharmacyName || "Pharmacy"
+    : `${authUser?.firstName || ""} ${authUser?.lastName || ""}`.trim() || "User";
 
   // Define which navigation items each role can see
-  const canAccessSearch = authUser?.role === "user";
-  const canAccessNotifications = authUser?.role === "user";
+  const canAccessSearch = authUser?.role === "patient";
+  const canAccessNotifications = authUser?.role === "patient";
   const canAccessSpecialty = authUser?.role === "doctor";
 
   return (
@@ -97,8 +99,8 @@ const Sidebar = () => {
           <div className="flex items-center gap-3">
             <div className="avatar">
               <div className="w-10 rounded-full">
-                {authUser?.profilePic ? (
-                  <img src={authUser.profilePic} alt="User Avatar" />
+                {authUser?.profilePic?.url ? (
+                  <img src={authUser.profilePic.url} alt="User Avatar" />
                 ) : (
                   <div className="bg-base-300 w-10 h-10 rounded-full flex items-center justify-center">
                     <span className="text-sm">👤</span>

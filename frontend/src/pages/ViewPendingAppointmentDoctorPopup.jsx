@@ -1,6 +1,12 @@
 import { useState, useEffect } from "react";
 import { axiosInstance } from "../lib/axios";
 import toast from "react-hot-toast";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+dayjs.extend(utc);
+dayjs.extend(timezone);
+const PH_TZ = "Asia/Manila";
 
 const ViewPendingAppointmentDoctorPopup = ({ appointment, onClose, onAppointmentUpdated }) => {
   const [loading, setLoading] = useState(false);
@@ -11,17 +17,11 @@ const ViewPendingAppointmentDoctorPopup = ({ appointment, onClose, onAppointment
   const [showRejectModal, setShowRejectModal] = useState(false);
 
   const formatDateTime = (dateString) => {
-    const date = new Date(dateString);
+    const d = dayjs(dateString).tz(PH_TZ);
     return {
-      date: date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      }),
-      time: date.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit'
-      }),
+      date: d.format("MMMM D, YYYY"),
+      time: d.format("h:mm A"),
+      day: d.format("dddd"),
     };
   };
 

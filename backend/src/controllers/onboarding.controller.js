@@ -1,134 +1,216 @@
-import User from "../models/User.js";
+import mongoose from "mongoose";
+import User, { Patient, Doctor, Pharmacy } from "../models/User.js";
+import Admin from "../models/Admin.js";
+import EmailRegistry from "../models/EmailRegistry.js";
 import { upsertStreamUser } from "../lib/stream.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 
-const roleFieldMap = {
-    user: ["firstName", "lastName", "birthDate", "sex", "bio", "languages", "location", "gcash.qrData", "gcash.accountName", "gcash.accountNumber"],
-    doctor: ["firstName", "lastName", "birthDate", "sex", "bio", "languages", "location", "profession", "licenseNumber", "gcash.qrData", "gcash.accountName", "gcash.accountNumber"],
-    pharmacist: ["firstName", "lastName", "birthDate", "bio", "languages", "location", "licenseNumber", "gcash.qrData", "gcash.accountName", "gcash.accountNumber"],
-    institute: ["facilityName", "bio", "languages", "location", "gcash.qrData", "gcash.accountName", "gcash.accountNumber"],
-    admin: ["firstName", "lastName", "birthDate", "bio", "languages", "location", "adminCode"],
-};
+// Promotes a base User doc to a discriminator model by deleting and recreating
+// with the same _id. EmailRegistry is untouched — ref stays valid.
+async function promoteUser(userId, TargetModel, fields, session, registrantModel = "User") {
+    await User.deleteOne({ _id: userId }, { session });
 
-function getMissingFields(role, body) {
-    const required = roleFieldMap[role] || [];
-    return required.filter((field) => {
-        const parts = field.split(".");
-        let value = body;
-        for (const p of parts) value = value?.[p];
-        return !value;
-    });
+    const doc = new TargetModel({ _id: userId, ...fields });
+    // password is already hashed — prevent validator and pre-save hook from re-processing it
+    doc.$set("password", fields.password);
+    doc.unmarkModified("password");
+
+    await doc.save({ session });
+
+    await EmailRegistry.findOneAndUpdate(
+        { email: fields.email },
+        { registrantModel },
+        { session }
+    );
+    return doc;
 }
 
 const streamUpsert = async (user) => {
     try {
+        const name = user.firstName
+            ? `${user.firstName} ${user.lastName || ""}`.trim()
+            : user.pharmacyName || "Unknown";
         await upsertStreamUser({
             id: user._id.toString(),
-            name: user.firstName
-                ? `${user.firstName} ${user.lastName || ""}`.trim()
-                : user.facilityName || "Unknown",
-            image: user.profilePic || "",
+            name,
+            image: user.profilePic?.url || "",
         });
     } catch (err) {
-        console.log("Stream update error:", err.message);
+        // non-fatal — log and continue
+        console.error("Stream upsert error:", err.message);
     }
 };
 
-async function onboardHelper(req, res, role, status = "pending", extraFields = {}) {
+export const onboardAsPatient = asyncHandler(async (req, res) => {
     const userId = req.user._id;
-    const existingUser = await User.findById(userId).select("status");
-    if (!existingUser) return sendError(res, 404, "User not found");
+    const existing = await User.findById(userId).select("status role email password");
+    if (!existing) return sendError(res, 404, "User not found");
+    if (existing.status !== "notOnBoarded") return sendError(res, 400, "User is already onboarded or pending");
+    if (existing.role !== "user") return sendError(res, 400, "Account has already been assigned a role");
 
-    if (["onBoarded", "pending"].includes(existingUser.status)) {
-        return sendError(res, 400, "User is already onboarded or has a pending request");
+    const {
+        firstName, lastName, birthDate, sex, bio,
+        profilePic, languages, address, phoneNumber, phoneType,
+    } = req.body;
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const promoted = await promoteUser(userId, Patient, {
+            email: existing.email,
+            password: existing.password,
+            role: "patient",
+            status: "onBoarded",
+            firstName,
+            lastName,
+            birthDate,
+            sex,
+            bio,
+            profilePic,
+            languages,
+            address,
+            phoneNumber,
+            phoneType,
+        }, session);
+
+        await session.commitTransaction();
+        await streamUpsert(promoted);
+
+        return sendSuccess(res, 200, "Onboarding successful", { user: promoted });
+    } catch (err) {
+        await session.abortTransaction();
+        throw err;
+    } finally {
+        session.endSession();
     }
+});
 
-    const missingFields = getMissingFields(role, req.body);
-    if (missingFields.length > 0) {
-        return sendError(res, 400, "All fields are required", { missingFields });
-    }
-
-    const updateData = { ...req.body, status, role, ...extraFields };
-    if (role === "pharmacist") updateData.profession = "Pharmacist";
-
-    const updatedUser = await User.findByIdAndUpdate(userId, updateData, { new: true });
-    if (!updatedUser) return sendError(res, 404, "User not found");
-
-    await streamUpsert(updatedUser);
-    return sendSuccess(res, 200, "Onboarding successful", { user: updatedUser });
-}
-
-export const onboard = asyncHandler((req, res) => onboardHelper(req, res, "user", "onBoarded"));
-export const onboardAsDoctor = asyncHandler((req, res) => onboardHelper(req, res, "doctor", "pending", { profession: req.body.profession }));
-export const onboardAsPharmacist = asyncHandler((req, res) => onboardHelper(req, res, "pharmacist", "pending"));
-export const onboardAsInstitute = asyncHandler((req, res) => onboardHelper(req, res, "institute", "pending", { facilityName: req.body.facilityName }));
-export const onboardAsAdmin = asyncHandler((req, res) => onboardHelper(req, res, "admin", "pending", { adminCode: req.body.adminCode }));
-
-const roleSpecificFieldMap = {
-    doctor: ["profession", "licenseNumber", "gcash.accountName", "gcash.accountNumber"],
-    pharmacist: ["licenseNumber", "gcash.accountName", "gcash.accountNumber"],
-    institute: ["facilityName", "gcash.accountName", "gcash.accountNumber"],
-    admin: ["adminCode"],
-};
-
-function getRoleSpecificMissingFields(role, body) {
-    const required = roleSpecificFieldMap[role] || [];
-    return required.filter((field) => {
-        const parts = field.split(".");
-        let value = body;
-        for (const p of parts) value = value?.[p];
-        return !value;
-    });
-}
-
-export const changeRole = asyncHandler(async (req, res) => {
+export const onboardAsDoctor = asyncHandler(async (req, res) => {
     const userId = req.user._id;
-    const { role } = req.body;
+    const existing = await User.findById(userId).select("status role email password");
+    if (!existing) return sendError(res, 404, "User not found");
+    if (existing.status !== "notOnBoarded") return sendError(res, 400, "User is already onboarded or pending");
+    if (existing.role !== "user") return sendError(res, 400, "Account has already been assigned a role");
 
-    const existingUser = await User.findById(userId).select("role status");
-    if (!existingUser) return sendError(res, 404, "User not found");
+    const {
+        firstName, lastName, birthDate, sex, bio,
+        profilePic, languages, address, phoneNumber, phoneType,
+        specialty, subSpecialty,
+        licenseNumber, licenseExpiration, licenseImage, legalIDImage,
+    } = req.body;
 
-    if (existingUser.role !== "user") {
-        return sendError(res, 400, "Role change only allowed from regular user");
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const promoted = await promoteUser(userId, Doctor, {
+            email: existing.email,
+            password: existing.password,
+            role: "doctor",
+            status: "pending",
+            firstName,
+            lastName,
+            birthDate,
+            sex,
+            bio,
+            profilePic,
+            languages,
+            address,
+            phoneNumber,
+            phoneType,
+            specialty,
+            subSpecialty: subSpecialty || [],
+            licenseNumber,
+            licenseExpiration,
+            licenseImage,
+            legalIDImage,
+        }, session);
+
+        await session.commitTransaction();
+        await streamUpsert(promoted);
+
+        return sendSuccess(res, 200, "Onboarding submitted for approval", { user: promoted });
+    } catch (err) {
+        await session.abortTransaction();
+        throw err;
+    } finally {
+        session.endSession();
     }
-    if (existingUser.status === "pending") {
-        return sendError(res, 400, "You have a pending request");
+});
+
+export const onboardAsPharmacy = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const existing = await User.findById(userId).select("status role email password");
+    if (!existing) return sendError(res, 404, "User not found");
+    if (existing.status !== "notOnBoarded") return sendError(res, 400, "User is already onboarded or pending");
+    if (existing.role !== "user") return sendError(res, 400, "Account has already been assigned a role");
+
+    const {
+        pharmacyName, pharmacistFirstName, pharmacistLastName,
+        birthDate, sex, bio, profilePic, address, phoneNumber, phoneType,
+        businessPermit, businessPermitExpiration, fdaLicense, fdaLicenseExpiration,
+        pharmacistLicenseNumber, pharmacistLicenseExpiration,
+        pharmacistLicenseImage, pharmacistLegalIDImage,
+    } = req.body;
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const promoted = await promoteUser(userId, Pharmacy, {
+            email: existing.email,
+            password: existing.password,
+            role: "pharmacy",
+            status: "pending",
+            pharmacyName,
+            pharmacistFirstName,
+            pharmacistLastName,
+            birthDate,
+            sex,
+            bio,
+            profilePic,
+            address,
+            phoneNumber,
+            phoneType,
+            businessPermit,
+            businessPermitExpiration,
+            fdaLicense,
+            fdaLicenseExpiration,
+            pharmacistLicenseNumber,
+            pharmacistLicenseExpiration,
+            pharmacistLicenseImage,
+            pharmacistLegalIDImage,
+        }, session);
+
+        await session.commitTransaction();
+        await streamUpsert(promoted);
+
+        return sendSuccess(res, 200, "Onboarding submitted for approval", { user: promoted });
+    } catch (err) {
+        await session.abortTransaction();
+        throw err;
+    } finally {
+        session.endSession();
     }
+});
 
-    const missingFields = getRoleSpecificMissingFields(role, req.body);
-    if (missingFields.length > 0) {
-        return sendError(res, 400, "Missing required fields for this role", { missingFields });
-    }
+export const onboardAsAdmin = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
 
-    const updateData = { role, status: "pending" };
+    // admin doc created at signup — just update personal fields
+    const existing = await Admin.findById(userId).select("status");
+    if (!existing) return sendError(res, 404, "Admin account not found");
+    if (existing.status !== "notOnBoarded") return sendError(res, 400, "Account is already onboarded or pending");
 
-    switch (role) {
-        case "doctor":
-            updateData.profession = req.body.profession;
-            updateData.licenseNumber = req.body.licenseNumber;
-            updateData.gcash = req.body.gcash;
-            break;
-        case "pharmacist":
-            updateData.profession = "Pharmacist";
-            updateData.licenseNumber = req.body.licenseNumber;
-            updateData.gcash = req.body.gcash;
-            break;
-        case "institute":
-            updateData.facilityName = req.body.facilityName;
-            updateData.gcash = req.body.gcash;
-            updateData.firstName = undefined;
-            updateData.lastName = undefined;
-            break;
-        case "admin":
-            updateData.adminCode = req.body.adminCode;
-            break;
-        default:
-            return sendError(res, 400, "Invalid role specified");
-    }
+    const { firstName, lastName, phoneNumber, phoneType, profilePic } = req.body;
 
-    const updatedUser = await User.findByIdAndUpdate(userId, { $set: updateData }, { new: true });
-    await streamUpsert(updatedUser);
+    const updated = await Admin.findByIdAndUpdate(
+        userId,
+        { firstName, lastName, phoneNumber, phoneType, profilePic, status: "pending" },
+        { new: true, runValidators: true }
+    ).select("-password");
 
-    return sendSuccess(res, 200, "Role change request submitted for approval", { user: updatedUser });
+    return sendSuccess(res, 200, "Admin onboarding submitted for approval", { user: updated });
 });

@@ -33,7 +33,7 @@ function hasOverlap(existing, start, end) {
 
 export const bookAppointment = asyncHandler(async (req, res) => {
     const { doctorId, instituteId, serviceId: providedServiceId, start } = req.body;
-    const patientId = req.user.id;
+    const patientId = req.user._id;
     const providerType = doctorId ? "doctor" : "institute";
 
     let serviceId = providedServiceId;
@@ -219,7 +219,7 @@ export const payRemaining = asyncHandler(async (req, res) => {
 
 export const fileComplaint = asyncHandler(async (req, res) => {
     const appointmentId = req.params.id;
-    const userId = req.user.id || req.user._id;
+    const userId = req.user._id;
     const { complaint } = req.body;
 
     const appointment = await Appointment.findById(appointmentId);
@@ -276,7 +276,7 @@ export const getUserAppointments = asyncHandler(async (req, res) => {
 
 export const markAttendance = asyncHandler(async (req, res) => {
     const appointmentId = req.params.id;
-    const userId = req.user.id;
+    const userId = req.user._id;
 
     const appointment = await Appointment.findById(appointmentId);
     if (!appointment) return sendError(res, 404, "Appointment not found.");

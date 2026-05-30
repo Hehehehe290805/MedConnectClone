@@ -12,6 +12,12 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { axiosInstance } from "../lib/axios.js";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+dayjs.extend(utc);
+dayjs.extend(timezone);
+const PH_TZ = "Asia/Manila";
 
 
 const ProfilePage = () => {
@@ -59,12 +65,7 @@ const ProfilePage = () => {
   // Format date for display
   const formatDate = (dateString) => {
     if (!dateString) return "Not provided";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
+    return dayjs(dateString).tz(PH_TZ).format("MMMM D, YYYY");
   };
 
   // Format phone number
@@ -98,7 +99,7 @@ const ProfilePage = () => {
               <div className="w-32 rounded-full ring ring-primary ring-offset-base-100 ring-offset-2">
                 {authUser?.profilePic ? (
                   <img
-                    src={authUser.profilePic}
+                    src={authUser.profilePic.url} 
                     alt={`${authUser.firstName} ${authUser.lastName}`}
                   />
                 ) : (

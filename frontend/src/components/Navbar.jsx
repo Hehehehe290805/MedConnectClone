@@ -1,10 +1,12 @@
+import { useState } from "react";
 import { Link, useLocation } from "react-router";
 import useAuthUser from "../hooks/useAuthUser";
-import { BellIcon, BriefcaseMedicalIcon, LogOutIcon } from "lucide-react";
+import { BellIcon, BriefcaseMedicalIcon, LogOutIcon, UserIcon } from "lucide-react";
 import ThemeSelector from "./ThemeSelector";
 import useLogout from "../hooks/useLogout";
 
 const Navbar = () => {
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const { authUser } = useAuthUser();
   const location = useLocation();
   const isChatPage = location.pathname?.startsWith("/chat");
@@ -45,20 +47,40 @@ const Navbar = () => {
           <ThemeSelector />
           <Link to={"/profile"}>
             <button className="btn btn-ghost btn-circle">
-              <div className="avatar">
-                <div className="w-9 rounded-full">
-                  <img src={authUser?.profilePic} alt="User Avatar" rel="noreferrer" />
-                </div>
-              </div>
-            </button>
+                <div className="avatar">
+                    <div className="w-9 rounded-full bg-base-300 flex items-center justify-center">
+                        {authUser?.profilePic?.url ? (
+                            <img src={authUser.profilePic.url} alt="User Avatar" />
+                          ) : (
+                            <UserIcon className="size-5 text-base-content opacity-50" />
+                          )}
+                      </div>
+                  </div>
+              </button>
           </Link>
           
           {/* Logout button */}
-          <button className="btn btn-ghost btn-circle" onClick={logoutMutation}>
+          <button className="btn btn-ghost btn-circle" onClick={() => setShowLogoutModal(true)}>
             <LogOutIcon className="h-6 w-6 text-base-content opacity-70" />
           </button>
         </div>
       </div>
+
+      {showLogoutModal && (
+        <div className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold text-lg mb-2">Confirm Logout</h3>
+            <p className="text-sm opacity-70 mb-4">Are you sure you want to log out?</p>
+            <div className="modal-action">
+              <button onClick={() => setShowLogoutModal(false)} className="btn btn-ghost">Cancel</button>
+              <button onClick={() => { logoutMutation(); setShowLogoutModal(false); }} className="btn btn-error">
+                Logout
+              </button>
+            </div>
+          </div>
+          <div className="modal-backdrop" onClick={() => setShowLogoutModal(false)} />
+        </div>
+      )}
     </nav>
   );
 };

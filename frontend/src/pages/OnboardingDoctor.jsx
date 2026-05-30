@@ -1,546 +1,307 @@
-import { useEffect, useRef, useState } from "react";
-import useAuthUser from "../hooks/useAuthUser.js";
-import { completeOnboarding, uploadGCashQR } from "../lib/api.js";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { PlusIcon, XIcon } from "lucide-react";
 import toast from "react-hot-toast";
-import {
-    LoaderIcon,
-    MapPinIcon,
-    BriefcaseMedicalIcon,
-    ShuffleIcon,
-    BriefcaseBusinessIcon,
-    IdCardLanyardIcon,
-} from "lucide-react";
-import { LANGUAGES, LOCATIONS } from "../constants/index.js";
-import { CameraIcon } from "@heroicons/react/24/outline";
+import { completeOnboarding } from "../lib/api";
+import { StepProgress, StepHeader, ImageUploadField, LanguagesField, AddressFields, PhoneField } from "./OnboardingShared";
 
-const OnboardingPage = () => {
-    const { authUser } = useAuthUser();
+const TOTAL_STEPS = 3;
+
+const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
     const queryClient = useQueryClient();
-    const [isLangOpen, setIsLangOpen] = useState(false);
-    const dropdownRef = useRef(null);
-    const [gcashFile, setGcashFile] = useState(null);
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [step, setStep] = useState(1);
+    const [specialtyInput, setSpecialtyInput] = useState("");
+    const [subspecialtyInput, setSubspecialtyInput] = useState("");
+    const [uploadingFields, setUploadingFields] = useState({});
 
-    const [formState, setFormState] = useState({
-        role: authUser?.role,
-        firstName: authUser?.firstName || "",
-        lastName: authUser?.lastName || "",
-        birthDate: authUser?.birthDate || "",
-        sex: authUser?.sex || "",
-        bio: authUser?.bio || "",
-        languages: Array.isArray(authUser?.languages)
-            ? authUser.languages
-            : [],
-        location: authUser?.location || "",
-        profession: authUser?.profession || "",
-        licenseNumber: authUser?.licenseNumber || "",
-        profilePic: authUser?.profilePic || "",
-        gcash: {
-            qrData: authUser?.gcash?.qrData || "",
-            accountName: authUser?.gcash?.accountName || "",
-            accountNumber: authUser?.gcash?.accountNumber || "",
-            isVerified: authUser?.gcash?.isVerified || false,
+    const [form, setForm] = useState({
+        profilePic: { url: "", key: "" },
+        firstName: "",
+        lastName: "",
+        birthDate: "",
+        sex: "",
+        bio: "",
+        languages: [],
+        phoneNumber: "",
+        phoneType: "mobile",
+        address: {
+            buildingNumber: "",
+            street: "",
+            barangay: "",
+            city: "",
+            province: "",
+            postalCode: "",
+            coordinates: { type: "Point", coordinates: [0, 0] },
         },
+        specialty: [],
+        subSpecialty: [],
+        licenseNumber: "",
+        licenseExpiration: "",
+        licenseImage: { url: "", key: "" },
+        legalIDImage: { url: "", key: "" },
     });
 
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-                setIsLangOpen(false);
-            }
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
+    const [errors, setErrors] = useState({});
 
-    const { mutate: onboardingMutation, isPending } = useMutation({
+    const isAnyUploading = Object.values(uploadingFields).some(Boolean);
+
+    const setUploading = (field, val) =>
+        setUploadingFields((prev) => ({ ...prev, [field]: val }));
+
+    const { mutate, isPending } = useMutation({
         mutationFn: completeOnboarding,
         onSuccess: () => {
-            toast.success("Profile onboarded successfully");
             queryClient.invalidateQueries({ queryKey: ["authUser"] });
-            setIsSubmitting(false);
+            onSuccess();
         },
-        onError: (error) => {
-            console.error("Onboarding error:", error);
-            const message =
-                error?.response?.data?.message ||
-                error?.message ||
-                "An unexpected error occurred";
-            toast.error(message);
-            setIsSubmitting(false);
+        onError: (err) => {
+            const data = err?.response?.data;
+            if (data?.errors && Array.isArray(data.errors)) {
+                const mapped = {};
+                data.errors.forEach((e) => { mapped[e.field] = e.message; });
+                setErrors(mapped);
+                toast.error("Please fix the errors below.");
+            } else {
+                toast.error(data?.message || "Onboarding failed.");
+            }
         },
     });
 
-    const handleSubmit = async (e) => {
+    const update = (field, value) => {
+        setForm((prev) => ({ ...prev, [field]: value }));
+        setErrors((prev) => ({ ...prev, [field]: undefined }));
+    };
+
+    const today = new Date();
+    const maxDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate())
+        .toISOString().split("T")[0];
+    const minDate = new Date(today.getFullYear() - 120, today.getMonth(), today.getDate())
+        .toISOString().split("T")[0];
+
+    const minExpiration = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)
+        .toISOString().split("T")[0];
+
+    const validateStep1 = () => {
+        const e = {};
+        if (!form.firstName.trim()) e.firstName = "First name is required";
+        if (!form.lastName.trim()) e.lastName = "Last name is required";
+        if (!form.birthDate) e.birthDate = "Date of birth is required";
+        if (!form.sex) e.sex = "Sex is required";
+        setErrors(e);
+        return Object.keys(e).length === 0;
+    };
+
+    const validateStep2 = () => {
+        const e = {};
+        if (form.languages.length === 0) e.languages = "At least one language is required";
+        if (!form.phoneNumber.trim()) e.phoneNumber = "Phone number is required";
+        if (form.phoneNumber.length !== 10) e.phoneNumber = "Phone number must be 10 digits";
+        if (!form.address.street.trim()) e["address.street"] = "Street is required";
+        if (!form.address.barangay.trim()) e["address.barangay"] = "Barangay is required";
+        if (!form.address.city.trim()) e["address.city"] = "City is required";
+        if (!form.address.province.trim()) e["address.province"] = "Province is required";
+        if (!form.address.postalCode.trim()) e["address.postalCode"] = "Postal code is required";
+        if (form.address.postalCode && !/^\d{4}$/.test(form.address.postalCode))
+            e["address.postalCode"] = "Postal code must be 4 digits";
+        setErrors(e);
+        return Object.keys(e).length === 0;
+    };
+
+    const validateStep3 = () => {
+        const e = {};
+        if (form.specialty.length === 0) e.specialty = "At least one specialty is required";
+        if (!form.licenseNumber.trim()) e.licenseNumber = "License number is required";
+        if (!form.licenseExpiration) e.licenseExpiration = "License expiration is required";
+        if (!form.licenseImage.url) e.licenseImage = "License image is required";
+        if (!form.legalIDImage.url) e.legalIDImage = "Legal ID image is required";
+        setErrors(e);
+        return Object.keys(e).length === 0;
+    };
+
+    const addSpecialty = () => {
+        const trimmed = specialtyInput.trim();
+        if (!trimmed) return;
+        if (form.specialty.includes(trimmed)) { toast.error("Specialty already added"); return; }
+        update("specialty", [...form.specialty, trimmed]);
+        setSpecialtyInput("");
+    };
+
+    const addSubspecialty = () => {
+        const trimmed = subspecialtyInput.trim();
+        if (!trimmed) return;
+        if (form.subSpecialty.includes(trimmed)) { toast.error("Subspecialty already added"); return; }
+        update("subSpecialty", [...form.subSpecialty, trimmed]);
+        setSubspecialtyInput("");
+    };
+
+    const handleSubmit = (e) => {
         e.preventDefault();
-        setIsSubmitting(true);
-
-        try {
-            onboardingMutation(formState);
-
-        } catch (error) {
-            console.error("GCash upload error:", error);
-            toast.error("Failed to upload GCash QR: " + error.message);
-            setIsSubmitting(false);
-        }
+        if (!validateStep3()) return;
+        mutate({ ...form, role: "doctor" });
     };
-
-    const handleRandomAvatar = () => {
-        const idx = Math.floor(Math.random() * 100) + 1;
-        const randomAvatar = `https://avatar.iran.liara.run/public/${idx}.png`;
-
-        setFormState({ ...formState, profilePic: randomAvatar });
-        toast.success("Random profile picture generated!");
-    };
-
-    const handleGcashFileChange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            setGcashFile(file);
-
-            // Create preview
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setFormState(prev => ({
-                    ...prev,
-                    gcash: {
-                        ...prev.gcash,
-                        qrData: reader.result
-                    }
-                }));
-            };
-            reader.readAsDataURL(file);
-        }
-    };
-
-    const isSubmitDisabled = isPending || isSubmitting;
 
     return (
-        <div className="min-h-screen bg-base-100 flex items-center justify-center p-4">
-            <div className="card bg-base-200 w-full max-w-3xl shadow-xl">
-                <div className="card-body p-6 sm:p-8">
-                    <h1 className="text-2xl sm:text-3xl font-bold text-center mb-6">
-                        Complete Your Profile
-                    </h1>
+        <div className="card bg-base-200 w-full max-w-2xl shadow-xl">
+            <div className="card-body p-6 sm:p-8">
+                <StepProgress currentStep={step} totalSteps={TOTAL_STEPS} />
+                <StepHeader
+                    title={step === 1 ? "Personal Information" : step === 2 ? "Contact & Location" : "Professional Details"}
+                    subtitle={step === 1 ? "Tell us about yourself" : step === 2 ? "How can we reach you?" : "Your credentials and specialties"}
+                    role={role}
+                    email={email}
+                    onBack={step === 1 ? onBack : () => setStep(step - 1)}
+                    isFirstStep={step === 1}
+                />
 
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        {/* PROFILE PIC CONTAINER */}
-                        <div className="flex flex-col items-center justify-center space-y-4">
-                            <div className="size-32 rounded-full bg-base-300 overflow-hidden">
-                                {formState.profilePic ? (
-                                    <img
-                                        src={formState.profilePic}
-                                        alt="Profile Preview"
-                                        className="w-full h-full object-cover"
-                                    />
-                                ) : (
-                                    <div className="flex items-center justify-center h-full">
-                                        <CameraIcon className="size-12 text-base-content opacity-40" />
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                                <button
-                                    type="button"
-                                    onClick={handleRandomAvatar}
-                                    className="btn btn-primary"
-                                    disabled={isSubmitDisabled}
-                                >
-                                    <ShuffleIcon className="size-4 mr-2" />
-                                    Generate Random Avatar
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* NAME */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* STEP 1 */}
+                {step === 1 && (
+                    <form onSubmit={(e) => { e.preventDefault(); if (validateStep1()) setStep(2); }} className="space-y-4">
+                        <ImageUploadField
+                            label="Profile Picture"
+                            field="profilePic"
+                            value={form.profilePic}
+                            onChange={(val) => update("profilePic", val)}
+                            onUploadingChange={(v) => setUploading("profilePic", v)}
+                        />
+                        <div className="grid grid-cols-2 gap-4">
                             <div className="form-control">
-                                <label className="label">
-                                    <span className="label-text">First Name</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    value={formState.firstName}
-                                    onChange={(e) =>
-                                        setFormState({ ...formState, firstName: e.target.value })
-                                    }
-                                    className="input input-bordered w-full"
-                                    placeholder="Your first name"
-                                    disabled={isSubmitDisabled}
-                                />
+                                <label className="label"><span className="label-text">First Name <span className="text-error">*</span></span></label>
+                                <input type="text" className={`input input-bordered w-full ${errors.firstName ? "input-error" : ""}`} placeholder="Maria" value={form.firstName} onChange={(e) => update("firstName", e.target.value)} />
+                                {errors.firstName && <p className="text-error text-xs mt-1">{errors.firstName}</p>}
                             </div>
-
                             <div className="form-control">
-                                <label className="label">
-                                    <span className="label-text">Last Name</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    value={formState.lastName}
-                                    onChange={(e) =>
-                                        setFormState({ ...formState, lastName: e.target.value })
-                                    }
-                                    className="input input-bordered w-full"
-                                    placeholder="Your last name"
-                                    disabled={isSubmitDisabled}
-                                />
+                                <label className="label"><span className="label-text">Last Name <span className="text-error">*</span></span></label>
+                                <input type="text" className={`input input-bordered w-full ${errors.lastName ? "input-error" : ""}`} placeholder="Santos" value={form.lastName} onChange={(e) => update("lastName", e.target.value)} />
+                                {errors.lastName && <p className="text-error text-xs mt-1">{errors.lastName}</p>}
                             </div>
                         </div>
-
-                        {/* DOB */}
                         <div className="form-control">
-                            <label className="label">
-                                <span className="label-text">Date of Birth</span>
-                            </label>
-                            <input
-                                type="date"
-                                value={formState.birthDate}
-                                onChange={(e) =>
-                                    setFormState({ ...formState, birthDate: e.target.value })
-                                }
-                                className="input input-bordered w-full"
-                                disabled={isSubmitDisabled}
-                            />
+                            <label className="label"><span className="label-text">Date of Birth <span className="text-error">*</span></span></label>
+                            <input type="date" className={`input input-bordered w-full ${errors.birthDate ? "input-error" : ""}`} value={form.birthDate} min={minDate} max={maxDate} onChange={(e) => update("birthDate", e.target.value)} />
+                            {errors.birthDate && <p className="text-error text-xs mt-1">{errors.birthDate}</p>}
+                            <p className="text-xs opacity-50 mt-1">Must be 18–120 years old</p>
                         </div>
-
-                        {/* SEX */}
                         <div className="form-control">
-                            <label className="label">
-                                <span className="label-text">Sex</span>
-                            </label>
-                            <select
-                                className="select select-bordered w-full"
-                                value={formState.sex}
-                                onChange={(e) =>
-                                    setFormState({ ...formState, sex: e.target.value })
-                                }
-                                required
-                                disabled={isSubmitDisabled}
-                            >
+                            <label className="label"><span className="label-text">Sex <span className="text-error">*</span></span></label>
+                            <select className={`select select-bordered w-full ${errors.sex ? "select-error" : ""}`} value={form.sex} onChange={(e) => update("sex", e.target.value)}>
                                 <option value="">Select</option>
                                 <option value="male">Male</option>
                                 <option value="female">Female</option>
                             </select>
+                            {errors.sex && <p className="text-error text-xs mt-1">{errors.sex}</p>}
                         </div>
-
-                        {/* BIO */}
                         <div className="form-control">
-                            <label className="label">
-                                <span className="label-text">Bio</span>
-                            </label>
-                            <textarea
-                                value={formState.bio}
-                                onChange={(e) =>
-                                    setFormState({ ...formState, bio: e.target.value })
-                                }
-                                className="textarea textarea-bordered h-24"
-                                placeholder="Tell us about yourself"
-                                disabled={isSubmitDisabled}
-                            />
+                            <label className="label"><span className="label-text">Bio</span></label>
+                            <textarea className="textarea textarea-bordered h-24 resize-none" placeholder="Tell us about yourself" value={form.bio} onChange={(e) => update("bio", e.target.value)} />
                         </div>
-
-                        <div className="form-control relative" ref={dropdownRef}>
-                            <label className="label">
-                                <span className="label-text">Languages</span>
-                            </label>
-                            <div
-                                tabIndex={0}
-                                className="select select-bordered w-full cursor-pointer"
-                                onClick={() => !isSubmitDisabled && setIsLangOpen(!isLangOpen)}
-                            >
-                                {formState.languages.length > 0
-                                    ? formState.languages.join(", ")
-                                    : "Select your languages"}
-                            </div>
-
-                            {isLangOpen && (
-                                <div className="absolute mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto z-10">
-                                    {LANGUAGES.map((lang) => (
-                                        <label
-                                            key={lang}
-                                            className="flex items-center gap-2 px-3 py-2 hover:bg-gray-100 cursor-pointer"
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={formState.languages.includes(lang)}
-                                                onChange={() => {
-                                                    if (isSubmitDisabled) return;
-                                                    const updated = formState.languages.includes(lang)
-                                                        ? formState.languages.filter((l) => l !== lang)
-                                                        : [...formState.languages, lang];
-                                                    setFormState({
-                                                        ...formState,
-                                                        languages: updated,
-                                                    });
-                                                }}
-                                                className="checkbox checkbox-sm"
-                                                disabled={isSubmitDisabled}
-                                            />
-                                            <span>{lang}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            )}
-
-                            <small className="text-gray-500 mt-1">
-                                Click to select multiple languages
-                            </small>
-                        </div>
-
-                        {/* LOCATION */}
-                        <div className="form-control">
-                            <label className="label">
-                                <span className="label-text">Location</span>
-                            </label>
-                            <div className="relative">
-                                <MapPinIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-base-content opacity-70 pointer-events-none" />
-                                <select
-                                    value={formState.location}
-                                    onChange={(e) =>
-                                        setFormState({ ...formState, location: e.target.value })
-                                    }
-                                    className="select select-bordered w-full pl-10"
-                                    disabled={isSubmitDisabled}
-                                >
-                                    <option value="">Select Location</option>
-                                    {LOCATIONS.map((location) => (
-                                        <option key={location} value={location}>
-                                            {location}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-
-                        {/* PROFESSION */}
-                        <div className="form-control">
-                            <label className="label">
-                                <span className="label-text">Profession</span>
-                            </label>
-                            <div className="relative">
-                                <BriefcaseBusinessIcon className="absolute top-1/2 transform -translate-y-1/2 left-3 size-5 text-base-content opacity-70" />
-                                <input
-                                    type="text"
-                                    value={formState.profession}
-                                    onChange={(e) =>
-                                        setFormState({ ...formState, profession: e.target.value })
-                                    }
-                                    className="input input-bordered w-full pl-10"
-                                    placeholder="General Practicioner"
-                                    disabled={isSubmitDisabled}
-                                />
-                            </div>
-                        </div>
-
-                        {/* LICENSE NUMBER */}
-                        <div className="form-control">
-                            <label className="label">
-                                <span className="label-text">License Number</span>
-                            </label>
-                            <div className="relative">
-                                <IdCardLanyardIcon className="absolute top-1/2 transform -translate-y-1/2 left-3 size-5 text-base-content opacity-70" />    
-                                <input
-                                    type="text"
-                                    value={formState.licenseNumber}
-                                    onChange={(e) =>
-                                        setFormState({ ...formState, licenseNumber: e.target.value })
-                                    }
-                                    className="input input-bordered w-full pl-10"
-                                    placeholder="General Practicioner"
-                                    disabled={isSubmitDisabled}
-                                />
-                            </div>
-                        </div>
-
-                        {/* GCASH SECTION */}
-                        <div className="border-t pt-6">
-                            <h3 className="text-lg font-semibold mb-4">GCash Payment Details (Optional)</h3>
-
-                            {/* GCASH QR CODE IMAGE */}
-                            <div className="form-control">
-                                <label className="label">
-                                    <span className="label-text">GCash QR Code</span>
-                                </label>
-                                <div className="relative">
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={handleGcashFileChange}
-                                        className="file-input file-input-bordered w-full"
-                                        disabled={isSubmitDisabled}
-                                    />
-                                </div>
-                                {formState.gcash.qrData && (
-                                    <div className="mt-2">
-                                        <p className="text-sm text-gray-600 mb-2">QR Code Preview:</p>
-                                        <img
-                                            src={formState.gcash.qrData}
-                                            alt="GCash QR Code"
-                                            className="w-32 h-32 object-contain border rounded-lg"
-                                        />
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* GCASH ACCOUNT NAME */}
-                            <div className="form-control">
-                                <label className="label">
-                                    <span className="label-text">GCash Account Name</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    value={formState.gcash.accountName}
-                                    onChange={(e) =>
-                                        setFormState(prev => ({
-                                            ...prev,
-                                            gcash: {
-                                                ...prev.gcash,
-                                                accountName: e.target.value
-                                            }
-                                        }))
-                                    }
-                                    className="input input-bordered w-full"
-                                    placeholder="John Doe"
-                                    disabled={isSubmitDisabled}
-                                />
-                            </div>
-
-                            {/* GCASH PHONE NUMBER */}
-                            <div className="form-control">
-                                <label className="label">
-                                    <span className="label-text">GCash Phone Number</span>
-                                </label>
-                                <div className="relative">
-                                    <span className="absolute top-1/2 transform -translate-y-1/2 left-3 text-base-content opacity-70">+63</span>
-                                    <input
-                                        type="tel"
-                                        value={formState.gcash.accountNumber}
-                                        onChange={(e) =>
-                                            setFormState(prev => ({
-                                                ...prev,
-                                                gcash: {
-                                                    ...prev.gcash,
-                                                    accountNumber: e.target.value.replace(/\D/g, '').slice(0, 10)
-                                                }
-                                            }))
-                                        }
-                                        className="input input-bordered w-full pl-12"
-                                        placeholder="9123456789"
-                                        disabled={isSubmitDisabled}
-                                    />
-                                </div>
-                                <small className="text-gray-500 mt-1">Enter your 10-digit mobile number without +63</small>
-                            </div>
-
-                            {gcashFile && (!formState.gcash.accountName || !formState.gcash.accountNumber) && (
-                                <div className="alert alert-warning mt-2">
-                                    <span>Please fill in both account name and phone number to upload GCash QR.</span>
-                                </div>
-                            )}
-                        </div>
-
-
-
-                        {/* ACTION BUTTONS */}
-                        <div className="flex flex-col sm:flex-row gap-3 mt-6">
-                            {/* BUTTON 1 — Upload GCash QR */}
-                            <button
-                                type="button"
-                                onClick={async () => {
-                                    if (!gcashFile) {
-                                        toast.error("Please select a GCash QR file first.");
-                                        return;
-                                    }
-                                    if (!formState.gcash.accountName || !formState.gcash.accountNumber) {
-                                        toast.error("Please fill in GCash account name and number.");
-                                        return;
-                                    }
-
-                                    try {
-                                        setIsSubmitting(true);
-                                        const formData = new FormData();
-                                        formData.append("file", gcashFile);
-                                        formData.append("accountName", formState.gcash.accountName);
-                                        formData.append(
-                                            "accountNumber",
-                                            formState.gcash.accountNumber.replace(/\D/g, "")
-                                        );
-
-                                        const gcashResponse = await uploadGCashQR(formData);
-                                        setFormState((prev) => ({
-                                            ...prev,
-                                            gcash: {
-                                                ...prev.gcash,
-                                                ...gcashResponse.gcash,
-                                                isConfirmed: true, // Add confirmation flag
-                                            },
-                                        }));
-                                        toast.success("GCash confirmed successfully!");
-                                    } catch (error) {
-                                        console.error("GCash upload error:", error);
-                                        toast.error("Failed to upload GCash QR.");
-                                    } finally {
-                                        setIsSubmitting(false);
-                                    }
-                                }}
-                                disabled={isSubmitting}
-                                className="btn btn-outline w-full sm:w-1/2"
-                            >
-                                {!isSubmitting ? (
-                                    <>
-                                        <LoaderIcon className="size-4 mr-2" />
-                                        Confirm GCash QR
-                                    </>
-                                ) : (
-                                    <>
-                                        <LoaderIcon className="animate-spin size-4 mr-2" />
-                                        Uploading...
-                                    </>
-                                )}
-                            </button>
-
-                            {/* BUTTON 2 — Complete Onboarding */}
-                            <button
-                                className="btn btn-primary w-full sm:w-1/2"
-                                disabled={!formState.gcash.isConfirmed || isSubmitDisabled} // Disabled until GCash is confirmed
-                                type="submit"
-                            >
-                                {!isSubmitDisabled ? (
-                                    <>
-                                        <BriefcaseMedicalIcon className="size-5 mr-2" />
-                                        Complete Onboarding
-                                    </>
-                                ) : (
-                                    <>
-                                        <LoaderIcon className="animate-spin size-5 mr-2" />
-                                        Onboarding...
-                                    </>
-                                )}
-                            </button>
-                        </div>
-
-                        {/* Status Message */}
-                        {formState.gcash.isConfirmed ? (
-                            <div className="alert alert-success mt-4">
-                                <div className="flex items-center gap-2">
-                                    <span>GCash confirmed! You can now complete onboarding.</span>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="alert alert-warning mt-4">
-                                <div className="flex items-center gap-2">
-                                    <span>Please confirm your GCash QR to enable onboarding</span>
-                                </div>
-                            </div>
-                        )}
-
+                        <button className="btn btn-primary w-full" type="submit" disabled={isAnyUploading}>
+                            {isAnyUploading ? <><span className="loading loading-spinner loading-xs" />Uploading...</> : "Next →"}
+                        </button>
                     </form>
-                </div>
+                )}
+
+                {/* STEP 2 */}
+                {step === 2 && (
+                    <form onSubmit={(e) => { e.preventDefault(); if (validateStep2()) setStep(3); }} className="space-y-4">
+                        <LanguagesField value={form.languages} onChange={(val) => update("languages", val)} error={errors.languages} />
+                        <PhoneField
+                            phoneNumber={form.phoneNumber}
+                            phoneType={form.phoneType}
+                            onNumberChange={(val) => update("phoneNumber", val)}
+                            onTypeChange={(val) => update("phoneType", val)}
+                            error={errors.phoneNumber}
+                        />
+                        <AddressFields value={form.address} onChange={(val) => update("address", val)} errors={errors} />
+                        <button className="btn btn-primary w-full" type="submit">Next →</button>
+                    </form>
+                )}
+
+                {/* STEP 3 */}
+                {step === 3 && (
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div className="form-control">
+                            <label className="label"><span className="label-text">Specialty <span className="text-error">*</span></span></label>
+                            <div className="flex gap-2">
+                                <input type="text" className="input input-bordered flex-1" placeholder="e.g. Cardiology" value={specialtyInput} onChange={(e) => setSpecialtyInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addSpecialty())} />
+                                <button type="button" className="btn btn-primary" onClick={addSpecialty}><PlusIcon className="size-4" /></button>
+                            </div>
+                            {/* FLAG: per-letter specialty recommendations from DB when populated */}
+                            {errors.specialty && <p className="text-error text-xs mt-1">{errors.specialty}</p>}
+                            {form.specialty.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                    {form.specialty.map((s) => (
+                                        <span key={s} className="badge badge-primary gap-1">{s}
+                                            <button type="button" onClick={() => update("specialty", form.specialty.filter(x => x !== s))}><XIcon className="size-3" /></button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="form-control">
+                            <label className="label"><span className="label-text">Subspecialty <span className="opacity-50 text-xs">(optional)</span></span></label>
+                            <div className="flex gap-2">
+                                <input type="text" className="input input-bordered flex-1" placeholder="e.g. Interventional Cardiology" value={subspecialtyInput} onChange={(e) => setSubspecialtyInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addSubspecialty())} />
+                                <button type="button" className="btn btn-outline" onClick={addSubspecialty}><PlusIcon className="size-4" /></button>
+                            </div>
+                            {form.subSpecialty.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                    {form.subSpecialty.map((s) => (
+                                        <span key={s} className="badge badge-outline gap-1">{s}
+                                            <button type="button" onClick={() => update("subSpecialty", form.subSpecialty.filter(x => x !== s))}><XIcon className="size-3" /></button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="form-control">
+                            <label className="label"><span className="label-text">License Number <span className="text-error">*</span></span></label>
+                            <input type="text" className={`input input-bordered w-full ${errors.licenseNumber ? "input-error" : ""}`} placeholder="MD-12345" value={form.licenseNumber} onChange={(e) => update("licenseNumber", e.target.value)} />
+                            {errors.licenseNumber && <p className="text-error text-xs mt-1">{errors.licenseNumber}</p>}
+                        </div>
+
+                        <div className="form-control">
+                            <label className="label"><span className="label-text">License Expiration <span className="text-error">*</span></span></label>
+                            <input type="date" className={`input input-bordered w-full ${errors.licenseExpiration ? "input-error" : ""}`} min={minExpiration} value={form.licenseExpiration} onChange={(e) => update("licenseExpiration", e.target.value)} />
+                            {errors.licenseExpiration && <p className="text-error text-xs mt-1">{errors.licenseExpiration}</p>}
+                            <p className="text-xs opacity-50 mt-1">Must be a future date</p>
+                        </div>
+
+                        <ImageUploadField
+                            label="License Image"
+                            field="licenseImage"
+                            value={form.licenseImage}
+                            onChange={(val) => update("licenseImage", val)}
+                            onUploadingChange={(v) => setUploading("licenseImage", v)}
+                            required
+                        />
+                        {errors.licenseImage && <p className="text-error text-xs">{errors.licenseImage}</p>}
+
+                        <ImageUploadField
+                            label="Legal ID Image"
+                            field="legalIDImage"
+                            value={form.legalIDImage}
+                            onChange={(val) => update("legalIDImage", val)}
+                            onUploadingChange={(v) => setUploading("legalIDImage", v)}
+                            required
+                        />
+                        {errors.legalIDImage && <p className="text-error text-xs">{errors.legalIDImage}</p>}
+
+                        <button
+                            className="btn btn-primary w-full"
+                            type="submit"
+                            disabled={isPending || isAnyUploading || !form.licenseImage.url || !form.legalIDImage.url}
+                        >
+                            {isPending ? <><span className="loading loading-spinner loading-xs" />Submitting...</>
+                                : isAnyUploading ? <><span className="loading loading-spinner loading-xs" />Uploading...</>
+                                    : "Submit Application"}
+                        </button>
+                    </form>
+                )}
             </div>
         </div>
     );
 };
 
-export default OnboardingPage;
+export default OnboardingDoctor;

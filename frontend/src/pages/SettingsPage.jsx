@@ -1,9 +1,16 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import useAuthUser from "../hooks/useAuthUser.js";
-import { Trash2Icon, AlertTriangleIcon, XIcon, EyeIcon, EyeOffIcon } from "lucide-react";
+import { Trash2Icon, AlertTriangleIcon, XIcon, EyeIcon, EyeOffIcon, LogOutIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios.js";
+import useLogout from "../hooks/useLogout.js";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+dayjs.extend(utc);
+dayjs.extend(timezone);
+const PH_TZ = "Asia/Manila";
 
 const SettingsPage = () => {
   const { authUser } = useAuthUser();
@@ -11,6 +18,8 @@ const SettingsPage = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const [showEmail, setShowEmail] = useState(false);
+  const { logoutMutation, isPending: isLoggingOut } = useLogout();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   // Function to mask email
   const maskEmail = (email) => {
@@ -106,7 +115,30 @@ const SettingsPage = () => {
                 <p className="text-sm opacity-70">Status</p>
                 <p className="font-semibold capitalize">{authUser?.status || "Not onboarded"}</p>
               </div>
+              <div>
+                <p className="text-sm opacity-70">Joined</p>
+                <p className="font-semibold">
+                  {authUser?.createdAt
+                    ? dayjs(authUser.createdAt).tz(PH_TZ).format("MMMM D, YYYY")
+                    : "Unknown"}
+                </p>
+              </div>
             </div>
+          </div>
+        </div>
+
+        <div className="card bg-base-200 shadow-xl">
+          <div className="card-body">
+              <h2 className="card-title text-xl mb-2">Session</h2>
+              <p className="text-sm opacity-70 mb-4">Sign out of your account on this device.</p>
+              <button
+                onClick={() => setShowLogoutModal(true)}
+                className="btn btn-outline gap-2"
+                disabled={isLoggingOut}
+              > 
+                <LogOutIcon className="w-5 h-5" />
+                  Logout
+              </button>
           </div>
         </div>
 
@@ -203,6 +235,28 @@ const SettingsPage = () => {
           <div className="modal-backdrop" onClick={() => !isPending && setShowDeleteModal(false)}></div>
         </div>
       )}
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && (
+        <div className="modal modal-open">
+            <div className="modal-box">
+                <h3 className="font-bold text-lg mb-2">Confirm Logout</h3>
+                <p className="text-sm opacity-70 mb-4">Are you sure you want to log out?</p>
+                <div className="modal-action">
+                  <button onClick={() => setShowLogoutModal(false)} className="btn btn-ghost">Cancel</button>
+                  <button
+                    onClick={() => { logoutMutation(); setShowLogoutModal(false); }}
+                    className="btn btn-error"
+                    disabled={isLoggingOut}
+                  >
+                    {isLoggingOut ? <><span className="loading loading-spinner loading-xs" />Logging out...</> : "Logout"}
+                  </button>
+                </div>
+            </div>
+         <div className="modal-backdrop" onClick={() => setShowLogoutModal(false)} />
+        </div>
+      )}
+
     </div>
   );
 };

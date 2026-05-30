@@ -92,7 +92,7 @@ const formatAppointment = (a) => ({
 
 export const getDoctorCalendar = asyncHandler(async (req, res) => {
     const { daysAhead = 5 } = req.query;
-    const doctorId = req.user?.id;
+    const doctorId = req.user._id;
     if (!doctorId) return sendError(res, 400, "doctorId is required");
 
     const [slots, appointments] = await Promise.all([

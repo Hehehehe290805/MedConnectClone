@@ -4,7 +4,7 @@ import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 
 export const getRecommendedUsers = asyncHandler(async (req, res) => {
-  const currentUserId = req.user.id;
+  const currentUserId = req.user._id;
   const currentUser = req.user;
 
   const recommendedUsers = await User.find({
@@ -19,15 +19,15 @@ export const getRecommendedUsers = asyncHandler(async (req, res) => {
 });
 
 export const getMyFriends = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user.id)
+  const user = await User.findById(req.user._id)
     .select("friends")
-    .populate("friends", "fullName profilePic nativeLanguage learningLanguage");
+    .populate("friends", "firstName lastName profilePic nativeLanguage learningLanguage");
 
   return sendSuccess(res, 200, "Friends fetched", user.friends);
 });
 
 export const sendFriendRequest = asyncHandler(async (req, res) => {
-  const myId = req.user.id;
+  const myId = req.user._id;
   const { id: recipientId } = req.params;
 
   if (myId === recipientId) return sendError(res, 400, "Cannot send friend request to oneself");
@@ -54,7 +54,7 @@ export const acceptFriendRequest = asyncHandler(async (req, res) => {
 
   const friendRequest = await FriendRequest.findById(requestId);
   if (!friendRequest) return sendError(res, 404, "Friend request not found");
-  if (friendRequest.recipient.toString() !== req.user.id) return sendError(res, 403, "You are not authorized to accept this friend request");
+  if (friendRequest.recipient.toString() !== req.user._id) return sendError(res, 403, "You are not authorized to accept this friend request");
 
   friendRequest.status = "accepted";
   await friendRequest.save();
@@ -67,18 +67,18 @@ export const acceptFriendRequest = asyncHandler(async (req, res) => {
 
 export const getFriendRequests = asyncHandler(async (req, res) => {
   const [incomingReqs, acceptedReqs] = await Promise.all([
-    FriendRequest.find({ recipient: req.user.id, status: "pending" })
-      .populate("sender", "fullName profilePic nativeLanguage learningLanguage"),
-    FriendRequest.find({ recipient: req.user.id, status: "accepted" })
-      .populate("recipient", "fullName profilePic"),
+    FriendRequest.find({ recipient: req.user._id, status: "pending" })
+      .populate("sender", "firstName lastName profilePic nativeLanguage learningLanguage"),
+    FriendRequest.find({ recipient: req.user._id, status: "accepted" })
+      .populate("recipient", "firstName lastName profilePic"),
   ]);
 
   return sendSuccess(res, 200, "Friend requests fetched", { incomingReqs, acceptedReqs });
 });
 
 export const getOutgoingFriendRequests = asyncHandler(async (req, res) => {
-  const outgoingRequests = await FriendRequest.find({ sender: req.user.id, status: "pending" })
-    .populate("recipient", "fullName profilePic nativeLanguage learningLanguage");
+  const outgoingRequests = await FriendRequest.find({ sender: req.user._id, status: "pending" })
+    .populate("recipient", "firstName lastName profilePic nativeLanguage learningLanguage");
 
   return sendSuccess(res, 200, "Outgoing friend requests fetched", outgoingRequests);
 });

@@ -1,10 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { FilterIcon, XIcon, ChevronDownIcon } from "lucide-react";
 import {
-  ROLES,
-  GENDERS,
+  SEX,
   LANGUAGES,
-  LOCATIONS,
 } from "../constants/index.js";
 
 const FilterSearch = ({ onFilterChange }) => {
@@ -202,7 +200,7 @@ const FilterSearch = ({ onFilterChange }) => {
             <div>
               <p className="font-semibold mb-2">Gender</p>
               <div className="space-y-2">
-                {GENDERS.map((gender) => (
+                {SEX.map((gender) => (
                   <label key={gender} className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -249,25 +247,13 @@ const FilterSearch = ({ onFilterChange }) => {
             {/* Location Filter */}
             <div>
               <p className="font-semibold mb-2">Location</p>
-              <div className="space-y-2 max-h-40 overflow-y-auto">
-                {LOCATIONS.map((location) => (
-                  <label key={location} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="checkbox checkbox-primary checkbox-sm"
-                      checked={selectedLocations.includes(location)}
-                      onChange={() =>
-                        toggleSelection(
-                          location,
-                          selectedLocations,
-                          setSelectedLocations
-                        )
-                      }
-                    />
-                    <span className="text-sm">{location}</span>
-                  </label>
-                ))}
-              </div>
+              <input
+                type="text"
+                placeholder="e.g., Manila, Quezon City"
+                value={selectedLocations[0] || ""}
+                onChange={(e) => setSelectedLocations(e.target.value ? [e.target.value] : [])}
+                className="input input-bordered input-sm w-full"
+              />
             </div>
 
             <div className="divider my-2"></div>
