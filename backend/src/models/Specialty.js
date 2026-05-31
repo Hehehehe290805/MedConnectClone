@@ -13,9 +13,13 @@ const SpecialtySchema = new mongoose.Schema(
             enum: ["pending", "verified"],
             default: "pending",
         },
+        suggestedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+        },
         approvedBy: {
               type: mongoose.Schema.Types.ObjectId,
-              ref: "User",
+              ref: "Admin",
         },
     },
     { timestamps: true }

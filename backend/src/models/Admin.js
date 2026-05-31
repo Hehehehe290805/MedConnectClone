@@ -4,13 +4,13 @@ import bcrypt from "bcryptjs";
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
 const imageSchema = new mongoose.Schema({
-    url: { type: String, default: "" },
-    key: { type: String, default: "" },
+    url: { type: String },
+    key: { type: String },
 }, { _id: false });
 
 const adminSchema = new mongoose.Schema({
-    firstName: { type: String, default: " " },
-    lastName: { type: String, default: " " },
+    firstName: { type: String },
+    lastName: { type: String },
     email: {
         type: String,
         required: true,
@@ -46,7 +46,7 @@ const adminSchema = new mongoose.Schema({
     },
     pendingDeletion: { type: Boolean, default: false },
     deletionRequestedAt: { type: Date, default: null },
-    phoneNumber: { type: String, default: "" },
+    phoneNumber: { type: String },
     phoneType: {
         type: String,
         enum: ["mobile", "telephone"],

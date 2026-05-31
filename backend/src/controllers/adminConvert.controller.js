@@ -1,7 +1,6 @@
 // POST /api/onboarding/admin/convert
 // Called when user selects Admin role during onboarding
-// Verifies adminCode, converts base User doc to Admin doc
-import mongoose from "mongoose";
+// Verifies adminCode, converts base User doc to Admin doc (delete + recreate pattern — same as promoteUser)import mongoose from "mongoose";
 import User from "../models/User.js";
 import Admin from "../models/Admin.js";
 import EmailRegistry from "../models/EmailRegistry.js";
@@ -25,13 +24,17 @@ export const convertToAdmin = asyncHandler(async (req, res) => {
     try {
         await User.deleteOne({ _id: userId }, { session });
 
-        const [admin] = await Admin.create([{
+        const admin = new Admin({
             _id: userId,
             email: existing.email,
             password: existing.password,
             adminCode,
             status: "notOnBoarded",
-        }], { session });
+        });
+        // password is already hashed — skip validator and pre-save hook
+        admin.$set("password", existing.password);
+        admin.unmarkModified("password");
+        await admin.save({ session });
 
         await EmailRegistry.findOneAndUpdate(
             { email: existing.email },

@@ -5,17 +5,17 @@ import { encrypt, decrypt } from "../utils/crypto.js";
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
 const imageSchema = new mongoose.Schema({
-  url: { type: String, default: "" },
-  key: { type: String, default: "" },
+  url: { type: String },
+  key: { type: String },
 }, { _id: false });
 
 const addressSchema = new mongoose.Schema({
-  buildingNumber: { type: String, default: "" },
-  street: { type: String, default: "" },
-  barangay: { type: String, default: "" },
-  city: { type: String, default: "" },
-  province: { type: String, default: "" },
-  postalCode: { type: String, default: "" },
+  buildingNumber: { type: String },
+  street: { type: String },
+  barangay: { type: String },
+  city: { type: String },
+  province: { type: String },
+  postalCode: { type: String },
   coordinates: {
     type: {
       type: String,
@@ -24,7 +24,6 @@ const addressSchema = new mongoose.Schema({
     },
     coordinates: {
       type: [Number], // [longitude, latitude]
-      default: [0, 0],
     },
   },
 }, { _id: false });
@@ -60,10 +59,7 @@ const baseUserSchema = new mongoose.Schema({
     ],
     default: "notOnBoarded",
   },
-  phoneNumber: {
-    type: String,
-    default: "",
-  },
+  phoneNumber: { type: String },
   phoneType: {
     type: String,
     enum: ["mobile", "telephone"],
@@ -84,8 +80,8 @@ const baseUserSchema = new mongoose.Schema({
         const minAge = new Date(now.getFullYear() - 18, now.getMonth(), now.getDate());
         const maxAge = new Date(now.getFullYear() - 120, now.getMonth(), now.getDate());
         return v <= minAge && v >= maxAge;
-        },
-        message: "User must be between 18 and 120 years old",
+      },
+      message: "User must be between 18 and 120 years old",
     },
   },
 }, { timestamps: true, discriminatorKey: "__t" });
@@ -115,8 +111,8 @@ const patientSchema = new mongoose.Schema({
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
   sex: { type: String, enum: ["male", "female"], required: true },
-  bio: { type: String, default: "" },
-  profilePic: { type: imageSchema, default: () => ({}) },
+  bio: { type: String },
+  profilePic: { type: imageSchema },
   languages: [{ type: String }],
   address: { type: addressSchema, default: () => ({}) },
 });
@@ -129,8 +125,8 @@ const doctorSchema = new mongoose.Schema({
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
   sex: { type: String, enum: ["male", "female"], required: true },
-  bio: { type: String, default: "" },
-  profilePic: { type: imageSchema, default: () => ({}) },
+  bio: { type: String },
+  profilePic: { type: imageSchema },
   languages: [{ type: String }],
   address: { type: addressSchema, default: () => ({}) },
   licenseNumber: {
@@ -149,7 +145,7 @@ const doctorSchema = new mongoose.Schema({
   licenseImage: { type: imageSchema, default: () => ({}) },
   legalIDImage: { type: imageSchema, default: () => ({}), immutable: true },
   specialty: [{ type: mongoose.Schema.Types.ObjectId, ref: "Specialty" }],
-  subspecialty: [{ type: mongoose.Schema.Types.ObjectId, ref: "Subspecialty" }],
+  subSpecialty: [{ type: mongoose.Schema.Types.ObjectId, ref: "Subspecialty" }],
 });
 
 doctorSchema.methods.getLicenseNumber = function () {
@@ -165,8 +161,8 @@ const pharmacySchema = new mongoose.Schema({
   pharmacistFirstName: { type: String, required: true },
   pharmacistLastName: { type: String, required: true },
   sex: { type: String, enum: ["male", "female"], required: true },
-  bio: { type: String, default: "" },
-  profilePic: { type: imageSchema, default: () => ({}) },
+  bio: { type: String },
+  profilePic: { type: imageSchema },
   address: { type: addressSchema, default: () => ({}) },
   businessPermit: { type: imageSchema, default: () => ({}) },
   fdaLicense: { type: imageSchema, default: () => ({}) },

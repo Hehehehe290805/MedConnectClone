@@ -91,7 +91,6 @@ export const suggest = asyncHandler(async (req, res) => {
             Model = Subspecialty;
             const rootSpecialty = await Specialty.findById(rootSpecialtyId);
             if (!rootSpecialty) return sendError(res, 404, "Root specialty not found");
-            if (rootSpecialty.status !== "verified") return sendError(res, 400, "Cannot add subspecialty to an unverified root specialty");
             extra.rootSpecialty = rootSpecialtyId;
             break;
         case "service":

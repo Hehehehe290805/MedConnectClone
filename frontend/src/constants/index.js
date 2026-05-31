@@ -36,17 +36,17 @@ export const THEMES = [
 export const LANGUAGES = [
   "English",
   "Tagalog",
-  "Cebuano",
-  "Ilocano",
-  "Hiligaynon",
   "Bicolano",
-  "Waray",
-  "Kapampangan",
-  "Pangasinan",
-  "Maranao",
-  "Maguindanao",
-  "Tausug",
+  "Cebuano",
   "Chavacano",
+  "Hiligaynon",
+  "Ilocano",
+  "Kapampangan",
+  "Maguindanao",
+  "Maranao",
+  "Pangasinan",
+  "Tausug",
+  "Waray",
 ];
 
 export const SEX = ["Male", "Female"];

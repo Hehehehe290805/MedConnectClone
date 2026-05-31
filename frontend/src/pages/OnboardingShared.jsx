@@ -1,9 +1,11 @@
-import { useState, useRef, useEffect } from "react";
-import { UploadCloudIcon, XIcon, PlusIcon, ArrowLeftIcon } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { UploadCloudIcon, XIcon, PlusIcon, ArrowLeftIcon, MapPinIcon } from "lucide-react";
 import imageCompression from "browser-image-compression";
 import { uploadFile } from "../lib/api";
 import toast from "react-hot-toast";
 import { LANGUAGES } from "../constants";
+import MapPinModal from "../components/MapPinModal";
+export { forwardGeocode } from "../components/MapPinModal";
 
 // --- STEP PROGRESS BAR ---
 export const StepProgress = ({ currentStep, totalSteps }) => (
@@ -81,7 +83,7 @@ export const ImageUploadField = ({ label, field, value, onChange, required = fal
             const result = await uploadFile(compressed, field);
             // sendSuccess wraps as { success, message, data: { url, key } }
             const { url, key } = result.data;
-            if (!url) throw new Error("Upload response missing url");
+            if (!key) throw new Error("Upload response missing key");
             onChange({ url, key });
             toast.success(`${label} uploaded successfully`);
         } catch (err) {
@@ -102,9 +104,6 @@ export const ImageUploadField = ({ label, field, value, onChange, required = fal
                     {label}
                     {required && <span className="text-error ml-1">*</span>}
                 </span>
-                {isUploaded && (
-                    <span className="label-text-alt text-success text-xs">✓ Uploaded</span>
-                )}
             </label>
             <div
                 className={`border-2 border-dashed rounded-xl p-4 text-center transition-all ${uploading
@@ -116,14 +115,21 @@ export const ImageUploadField = ({ label, field, value, onChange, required = fal
                 onClick={() => !uploading && inputRef.current?.click()}
             >
                 {isUploaded ? (
-                    <div className="relative">
+                    <div className="relative flex flex-col items-center">
                         <img
                             src={value.url}
                             alt={label}
-                            className={`mx-auto object-cover rounded-lg ${field === "profilePic" ? "size-24 rounded-full" : "h-32 w-full"
-                                }`}
+                            className={`mx-auto object-cover rounded-lg transition-opacity ${
+                                field === "profilePic" ? "size-24 rounded-full" : "h-32 w-full"
+                            } ${uploading ? "opacity-40" : ""}`}
                         />
-                        <p className="text-xs opacity-60 mt-2">Click to replace</p>
+                        {uploading ? (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <span className="loading loading-ring loading-lg text-primary" />
+                            </div>
+                        ) : (
+                            <p className="text-xs opacity-60 mt-2">Click to replace</p>
+                        )}
                     </div>
                 ) : (
                     <div className="py-4">
@@ -235,7 +241,7 @@ export const LanguagesField = ({ value = [], onChange, error }) => {
             {value.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
                     {value.map((lang) => (
-                        <span key={lang} className="badge badge-primary badge-outline gap-1">
+                        <span key={lang} className="badge badge-primary gap-1 py-3">
                             {lang}
                             <button type="button" onClick={() => toggleLanguage(lang)}>
                                 <XIcon className="size-3" />
@@ -245,20 +251,19 @@ export const LanguagesField = ({ value = [], onChange, error }) => {
                 </div>
             )}
             {error && <p className="text-error text-xs mt-1">{error}</p>}
-            <small className="text-xs opacity-50 mt-1">Click to select multiple languages</small>
         </div>
     );
 };
 
 // --- ADDRESS FIELD ITEM — defined outside to prevent remount on keystroke ---
-const AddressFieldItem = ({ label, fieldKey, placeholder, required, type = "text", maxLength, value, onChange, error }) => (
-    <div className="form-control">
+const AddressFieldItem = ({ label, fieldKey, placeholder, required, type = "text", maxLength, value, onChange, error, inputRef }) => (    <div className="form-control">
         <label className="label py-0">
             <span className="label-text text-xs">
                 {label}{required && <span className="text-error ml-1">*</span>}
             </span>
         </label>
         <input
+            ref={inputRef}
             type={type}
             className={`input input-bordered w-full input-sm ${error ? "input-error" : ""}`}
             placeholder={placeholder}
@@ -271,37 +276,59 @@ const AddressFieldItem = ({ label, fieldKey, placeholder, required, type = "text
 );
 
 // --- ADDRESS FIELDS ---
-export const AddressFields = ({ value = {}, onChange, errors = {} }) => {
+export const AddressFields = ({ value = {}, onChange, errors = {}, cityRef }) => {
+    const [mapOpen, setMapOpen] = useState(false);
     const update = (field, val) => onChange({ ...value, [field]: val });
 
+    const handleMapConfirm = useCallback((result) => {
+        // result: { street, barangay, city, province, postalCode, coordinates }
+        // Only overwrite fields that Nominatim returned a value for
+        onChange({
+            ...value,
+            ...(result.street && { street: result.street }),
+            ...(result.barangay && { barangay: result.barangay }),
+            ...(result.city && { city: result.city }),
+            ...(result.postalCode && { postalCode: result.postalCode }),
+            coordinates: result.coordinates,
+        });
+        toast.success("Address autofilled from pin location");
+    }, [value, onChange]);
+
     return (
+        <>
+        <MapPinModal
+            isOpen={mapOpen}
+            onClose={() => setMapOpen(false)}
+            onConfirm={handleMapConfirm}
+        />
         <div className="space-y-3">
             <label className="label">
                 <span className="label-text font-medium">
                     Address <span className="text-error">*</span>
                 </span>
             </label>
+                <button
+                    type="button"
+                    className="btn btn-outline btn-primary btn-sm gap-2 w-full"
+                    onClick={() => setMapOpen(true)}
+                >   
+                    <MapPinIcon className="size-4" />
+                    Pin Location on Map
+                </button>
             <div className="grid grid-cols-2 gap-3">
-                <AddressFieldItem label="Building / House No." fieldKey="buildingNumber" placeholder="Unit 4B" value={value.buildingNumber || ""} onChange={update} error={errors["address.buildingNumber"]} />
+                <AddressFieldItem label="Building / House No." fieldKey="buildingNumber" placeholder="Unit 4B" required value={value.buildingNumber || ""} onChange={update} error={errors["address.buildingNumber"]} />
                 <AddressFieldItem label="Street" fieldKey="street" placeholder="Rizal Street" required value={value.street || ""} onChange={update} error={errors["address.street"]} />
             </div>
             <div className="grid grid-cols-2 gap-3">
                 <AddressFieldItem label="Barangay" fieldKey="barangay" placeholder="Barangay 1" required value={value.barangay || ""} onChange={update} error={errors["address.barangay"]} />
-                <AddressFieldItem label="City" fieldKey="city" placeholder="Manila" required value={value.city || ""} onChange={update} error={errors["address.city"]} />
+                <AddressFieldItem label="City" fieldKey="city" placeholder="Manila" required value={value.city || ""} onChange={update} error={errors["address.city"]} inputRef={cityRef} />
             </div>
             <div className="grid grid-cols-2 gap-3">
                 <AddressFieldItem label="Province" fieldKey="province" placeholder="Metro Manila" required value={value.province || ""} onChange={update} error={errors["address.province"]} />
                 <AddressFieldItem label="Postal Code" fieldKey="postalCode" placeholder="1000" required value={value.postalCode || ""} onChange={update} error={errors["address.postalCode"]} maxLength={4} />
             </div>
-            <button
-                type="button"
-                className="btn btn-outline btn-sm gap-2 w-full"
-                onClick={() => toast("Map pinning coming soon!")}
-            >
-                📍 Pin Location on Map
-                <span className="badge badge-warning badge-xs">Coming Soon</span>
-            </button>
         </div>
+        </>
     );
 };
 
@@ -347,9 +374,6 @@ export const PhoneField = ({ phoneNumber, phoneType, onNumberChange, onTypeChang
                 </div>
             </div>
             {error && <p className="text-error text-xs mt-1">{error}</p>}
-            <small className="text-xs opacity-50 mt-1">
-                {isMobile ? "10-digit mobile number without +63" : "10-digit telephone number"}
-            </small>
         </div>
     );
 };

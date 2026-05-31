@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { BriefcaseMedicalIcon } from "lucide-react";
+import { BriefcaseMedicalIcon, XIcon } from "lucide-react";
 import { Link, useNavigate } from "react-router";
+import toast from "react-hot-toast";
 import useSignUp from "../hooks/useSignUp";
 import { useSignupStore } from "../store/useSignupStore";
 
@@ -60,7 +61,7 @@ You have the right to access, correct, or delete your personal information at an
 8. Contact
 For privacy concerns, contact us at privacy@medconnect-112605.me`;
 
-const TermsPopup = ({ onAccept }) => {
+const TermsPopup = ({ onAccept, onClose }) => {
     const [scrolledToBottom, setScrolledToBottom] = useState(false);
     const contentRef = useRef(null);
 
@@ -73,10 +74,19 @@ const TermsPopup = ({ onAccept }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-            <div className="bg-base-100 rounded-xl shadow-xl w-full max-w-lg flex flex-col max-h-[80vh]">
+        <div
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+            onClick={onClose}
+        >
+            <div
+                className="bg-base-100 rounded-xl shadow-xl w-full max-w-lg flex flex-col max-h-[80vh]"
+                onClick={(e) => e.stopPropagation()}
+            >
                 <div className="flex items-center justify-between p-6 border-b border-base-300">
                     <h2 className="text-lg font-bold">Terms of Service & Privacy Policy</h2>
+                    <button type="button" className="btn btn-ghost btn-sm btn-circle" onClick={onClose}>
+                        <XIcon className="size-4" />
+                    </button>
                 </div>
                 <div
                     ref={contentRef}
@@ -113,7 +123,6 @@ const SignUpPage = () => {
 
     const [formData, setFormData] = useState({ email: "", password: "" });
     const [termsAccepted, setTermsAccepted] = useState(false);
-    const [termsError, setTermsError] = useState("");
     const [showTermsPopup, setShowTermsPopup] = useState(false);
 
     const [code, setCode] = useState(["", "", "", "", "", ""]);
@@ -124,15 +133,15 @@ const SignUpPage = () => {
     const codeRefs = useRef([]);
     const emailRef = useRef(null);
     const passwordRef = useRef(null);
+    const termsCheckboxRef = useRef(null);
 
-    const { signupMutation, isSigningUp, signupError, verifyMutation, isVerifying, resendMutation, isResending } = useSignUp();
+    const { signupMutation, isSigningUp, verifyMutation, isVerifying, resendMutation, isResending } = useSignUp();
 
     useEffect(() => { reset(); }, []);
 
     useEffect(() => {
         if (step === "verify") {
             setResendCooldown(60);
-            // clear any pending validity on signup inputs so they don't tooltip over the verify popup
             if (emailRef.current) emailRef.current.setCustomValidity("");
             if (passwordRef.current) passwordRef.current.setCustomValidity("");
         }
@@ -169,16 +178,38 @@ const SignUpPage = () => {
 
     const handleSignup = (e) => {
         e.preventDefault();
-        if (!e.target.checkValidity()) {
-            e.target.reportValidity();
-            return;
-        }
+
+        // check terms first
         if (!termsAccepted) {
-            setTermsError("Please accept the Terms of Service and Privacy Policy.");
+            termsCheckboxRef.current?.setCustomValidity("Please accept the Terms of Service and Privacy Policy.");
+            termsCheckboxRef.current?.reportValidity();
             return;
         }
-        setTermsError("");
-        signupMutation({ email: formData.email, password: formData.password });
+
+        // validate email
+        if (!formData.email) {
+            emailRef.current?.setCustomValidity("Email is required");
+            emailRef.current?.reportValidity();
+            return;
+        }
+        if (!EMAIL_REGEX.test(formData.email)) {
+            emailRef.current?.setCustomValidity("Please enter a valid email address (e.g. name@example.com)");
+            emailRef.current?.reportValidity();
+            return;
+        }
+
+        // validate password
+        const pwMsg = getPasswordValidity(formData.password);
+        if (pwMsg) {
+            passwordRef.current?.setCustomValidity(pwMsg);
+            passwordRef.current?.reportValidity();
+            return;
+        }
+
+        signupMutation(
+            { email: formData.email, password: formData.password },
+            { onError: (err) => toast.error(err?.response?.data?.message || "Something went wrong.") }
+        );
     };
 
     const handleCodeChange = (index, value) => {
@@ -314,6 +345,7 @@ const SignUpPage = () => {
                                     <div className="form-control">
                                         <label className="label cursor-pointer justify-start gap-2">
                                             <input
+                                                ref={termsCheckboxRef}
                                                 type="checkbox"
                                                 className="checkbox checkbox-sm"
                                                 checked={termsAccepted}
@@ -338,16 +370,7 @@ const SignUpPage = () => {
                                                 </span>
                                             </span>
                                         </label>
-                                        {termsError && (
-                                            <p className="text-error text-xs ml-1">{termsError}</p>
-                                        )}
                                     </div>
-
-                                    {signupError && (
-                                        <div className="alert alert-error">
-                                            <span className="text-sm">{signupError?.response?.data?.message || "Something went wrong."}</span>
-                                        </div>
-                                    )}
 
                                     <button className="btn btn-primary w-full text-white" type="submit" disabled={isSigningUp}>
                                         {isSigningUp ? <><span className="loading loading-spinner loading-xs" />Loading...</> : "Create Account"}
@@ -383,9 +406,10 @@ const SignUpPage = () => {
                 <TermsPopup
                     onAccept={() => {
                         setTermsAccepted(true);
+                        termsCheckboxRef.current?.setCustomValidity("");
                         setShowTermsPopup(false);
-                        setTermsError("");
                     }}
+                    onClose={() => setShowTermsPopup(false)}
                 />
             )}
 

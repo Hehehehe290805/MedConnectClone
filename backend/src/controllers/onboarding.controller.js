@@ -121,7 +121,7 @@ export const onboardAsDoctor = asyncHandler(async (req, res) => {
             phoneNumber,
             phoneType,
             specialty,
-            subSpecialty: subSpecialty || [],
+            subSpecialty,
             licenseNumber,
             licenseExpiration,
             licenseImage,

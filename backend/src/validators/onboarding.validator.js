@@ -24,7 +24,7 @@ const personalFields = [
     body("sex")
         .notEmpty().withMessage("Sex is required")
         .isIn(["male", "female"]).withMessage("Sex must be male or female"),
-    body("bio").notEmpty().withMessage("Bio is required"),
+    body("bio").optional().isString().withMessage("Bio must be a string"),
     body("phoneNumber").notEmpty().withMessage("Phone number is required"),
     body("phoneType")
         .notEmpty().withMessage("Phone type is required")
@@ -66,7 +66,7 @@ export const onboardPharmacyValidator = [
     body("sex")
         .notEmpty().withMessage("Sex is required")
         .isIn(["male", "female"]).withMessage("Sex must be male or female"),
-    body("bio").notEmpty().withMessage("Bio is required"),
+    body("bio").optional().isString().withMessage("Bio must be a string"),
     body("phoneNumber").notEmpty().withMessage("Phone number is required"),
     body("phoneType")
         .notEmpty().withMessage("Phone type is required")

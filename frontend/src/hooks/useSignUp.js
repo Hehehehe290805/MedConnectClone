@@ -7,7 +7,7 @@ const useSignUp = () => {
   const { setEmail, setStep } = useSignupStore();
 
   // step 1 — send verification code
-  const { mutate: signupMutation, isPending: isSigningUp, error: signupError } = useMutation({
+  const { mutate: signupMutation, isPending: isSigningUp } = useMutation({
     mutationFn: signup,
     onSuccess: (_, variables) => {
       setEmail(variables.email);
@@ -24,20 +24,17 @@ const useSignUp = () => {
   });
 
   // resend code
-  const { mutate: resendMutation, isPending: isResending, error: resendError } = useMutation({
+  const { mutate: resendMutation, isPending: isResending } = useMutation({
     mutationFn: resendSignupCode,
   });
 
   return {
     signupMutation,
     isSigningUp,
-    signupError,
     verifyMutation,
     isVerifying,
-    verifyError,
     resendMutation,
     isResending,
-    resendError,
   };
 };
 

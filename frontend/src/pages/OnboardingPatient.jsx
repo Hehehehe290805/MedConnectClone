@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { completeOnboarding } from "../lib/api";
-import { StepProgress, StepHeader, ImageUploadField, LanguagesField, AddressFields, PhoneField } from "./OnboardingShared";
+import { StepProgress, StepHeader, ImageUploadField, LanguagesField, AddressFields, PhoneField, forwardGeocode } from "./OnboardingShared";
 
 const TOTAL_STEPS = 2;
 
@@ -36,6 +36,8 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
   const isAnyUploading = Object.values(uploadingFields).some(Boolean);
   const setUploading = (field, val) =>
     setUploadingFields((prev) => ({ ...prev, [field]: val }));
+  const dobRef = useRef(null);
+  const cityRef = useRef(null);
 
   const { mutate, isPending } = useMutation({
     mutationFn: completeOnboarding,
@@ -59,6 +61,7 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
   const update = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setErrors((prev) => ({ ...prev, [field]: undefined }));
+    if (field === "address") cityRef.current?.setCustomValidity("");
   };
 
   const today = new Date();
@@ -67,13 +70,14 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
   const minDate = new Date(today.getFullYear() - 120, today.getMonth(), today.getDate())
     .toISOString().split("T")[0];
 
-  // step 1 required: firstName, lastName, birthDate, sex
+  // step 1 required: profilePic, firstName, lastName, birthDate, sex
   const step1Complete = form.profilePic.url && form.firstName.trim() && form.lastName.trim() && form.birthDate && form.sex;
 
   // step 2 required: languages, phoneNumber(10 digits), street, barangay, city, province, postalCode(4 digits)
   const step2Complete =
     form.languages.length > 0 &&
     form.phoneNumber.length === 10 &&
+    form.address.buildingNumber.trim() &&
     form.address.street.trim() &&
     form.address.barangay.trim() &&
     form.address.city.trim() &&
@@ -85,11 +89,15 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
     if (!form.firstName.trim()) e.firstName = "First name is required";
     if (!form.lastName.trim()) e.lastName = "Last name is required";
     if (!form.birthDate) {
-      e.birthDate = "Date of birth is required";
-    } else if (form.birthDate > maxDate) {
-      e.birthDate = "Age must be between 18 and 120 years old";
-    } else if (form.birthDate < minDate) {
-      e.birthDate = "Age must be between 18 and 120 years old";
+      dobRef.current?.setCustomValidity("Date of birth is required");
+      dobRef.current?.reportValidity();
+      return false;
+    } else if (form.birthDate > maxDate || form.birthDate < minDate) {
+        dobRef.current?.setCustomValidity("Age must be between 18 and 120 years old");
+        dobRef.current?.reportValidity();
+        return false;
+      } else {
+      dobRef.current?.setCustomValidity("");
     }
     if (!form.sex) e.sex = "Sex is required";
     setErrors(e);
@@ -101,6 +109,7 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
     if (form.languages.length === 0) e.languages = "At least one language is required";
     if (!form.phoneNumber.trim()) e.phoneNumber = "Phone number is required";
     else if (form.phoneNumber.length !== 10) e.phoneNumber = "Phone number must be 10 digits";
+    if (!form.address.buildingNumber.trim()) e["address.buildingNumber"] = "Building / House No. is required";
     if (!form.address.street.trim()) e["address.street"] = "Street is required";
     if (!form.address.barangay.trim()) e["address.barangay"] = "Barangay is required";
     if (!form.address.city.trim()) e["address.city"] = "City is required";
@@ -161,14 +170,18 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
             <div className="form-control">
               <label className="label"><span className="label-text">Date of Birth <span className="text-error">*</span></span></label>
               <input
+                ref={dobRef}
                 type="date"
                 className={`input input-bordered w-full ${errors.birthDate ? "input-error" : ""}`}
                 value={form.birthDate}
-                min={minDate}
                 max={maxDate}
-                onChange={(e) => update("birthDate", e.target.value)}
+                min={minDate}
+                onChange={(e) => {
+                  const val = e.target.value;
+                    dobRef.current?.setCustomValidity("");
+                    update("birthDate", e.target.value);
+                }}
               />
-              {errors.birthDate && <p className="text-error text-xs mt-1">{errors.birthDate}</p>}
             </div>
             <div className="form-control">
               <label className="label"><span className="label-text">Sex <span className="text-error">*</span></span></label>
@@ -195,15 +208,39 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
             <button
               className="btn btn-primary w-full"
               type="submit"
-              disabled={!step1Complete}
+              disabled={!step1Complete || isAnyUploading}
             >
-              {isAnyUploading ? <><span className="loading loading-spinner loading-xs" />Uploading...</> : "Next →"}
+              Next →
             </button>
           </form>
         )}
 
         {step === 2 && (
-          <form onSubmit={(e) => { e.preventDefault(); if (validateStep2()) mutate({ ...form, role: "patient" }); }} className="space-y-4">
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            if (!validateStep2()) return;
+            // if coordinates are still [0,0] (user didn't use map pin), forward-geocode from typed address
+            const coords = form.address.coordinates?.coordinates;
+            const needsGeocode = !coords;
+            let finalForm = form;
+            if (needsGeocode) {
+              const result = await forwardGeocode(form.address);
+              if (result) {
+                finalForm = {
+                  ...form,
+                  address: {
+                    ...form.address,
+                    coordinates: { type: "Point", coordinates: [result.lng, result.lat] },
+                  },
+                };
+              } else {
+                cityRef.current?.setCustomValidity("City not found. Please check your address.");
+                cityRef.current?.reportValidity();
+                return;
+              }
+            }
+            mutate({ ...finalForm, role: "patient" });
+          }} className="space-y-4">
             <LanguagesField value={form.languages} onChange={(val) => update("languages", val)} error={errors.languages} />
             <PhoneField
               phoneNumber={form.phoneNumber}
@@ -216,6 +253,7 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
               value={form.address}
               onChange={(val) => update("address", val)}
               errors={errors}
+              cityRef={cityRef}
             />
             <button
               className="btn btn-primary w-full"
