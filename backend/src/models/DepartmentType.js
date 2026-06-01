@@ -1,16 +1,12 @@
 import mongoose from "mongoose";
 
-const ServiceSchema = new mongoose.Schema(
+const DepartmentTypeSchema = new mongoose.Schema(
     {
         name: {
             type: String,
             required: true,
+            unique: true,
             trim: true,
-        },
-        rootDepartmentType: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "DepartmentType",
-            required: true,
         },
         status: {
             type: String,
@@ -29,9 +25,5 @@ const ServiceSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
-// same name under different department types is allowed
-// same name under same department type is not
-ServiceSchema.index({ name: 1, rootDepartmentType: 1 }, { unique: true });
-
-const Service = mongoose.model("Service", ServiceSchema);
-export default Service;
+const DepartmentType = mongoose.model("DepartmentType", DepartmentTypeSchema);
+export default DepartmentType;

@@ -2,64 +2,46 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { completeOnboarding } from "../lib/api";
-import { StepHeader, ImageUploadField, PhoneField } from "./OnboardingShared";
+import { StepHeader, ImageUploadField, PhoneField, uploadPendingImages } from "./OnboardingShared";
 
 const OnboardingAdmin = ({ email, role, onBack, onSuccess }) => {
     const queryClient = useQueryClient();
     const [uploadingFields, setUploadingFields] = useState({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const [form, setForm] = useState({
-        profilePic: { url: "", key: "" },
-        firstName: "",
-        lastName: "",
-        phoneNumber: "",
-        phoneType: "mobile",
+        profilePic: {}, firstName: "", lastName: "", phoneNumber: "", phoneType: "mobile",
     });
 
     const isAnyUploading = Object.values(uploadingFields).some(Boolean);
-    const setUploading = (field, val) =>
-        setUploadingFields((prev) => ({ ...prev, [field]: val }));
+    const setUploading = (field, val) => setUploadingFields((prev) => ({ ...prev, [field]: val }));
 
     const { mutate, isPending } = useMutation({
         mutationFn: completeOnboarding,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["authUser"] });
-            onSuccess();
-        },
-        onError: (err) => {
-            const data = err?.response?.data;
-            toast.error(data?.message || "Onboarding failed.");
-        },
+        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["authUser"] }); onSuccess(); },
+        onError: (err) => { toast.error(err?.response?.data?.message || "Onboarding failed."); setIsSubmitting(false); },
     });
 
-    const update = (field, value) => {
-        setForm((prev) => ({ ...prev, [field]: value }));
-    };
+    const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
-    const formComplete =
-        form.firstName.trim() &&
-        form.lastName.trim() &&
-        form.phoneNumber.length === 10;
+    const formComplete = form.firstName.trim() && form.lastName.trim() && form.phoneNumber.length === 10;
 
     return (
         <div className="card bg-base-200 w-full max-w-2xl shadow-xl">
             <div className="card-body p-6 sm:p-8">
-                <StepHeader
-                    title="Admin Profile"
-                    subtitle="Complete your admin profile"
-                    role={role}
-                    email={email}
-                    onBack={onBack}
-                    isFirstStep={true}
-                />
-                <form onSubmit={(e) => { e.preventDefault(); mutate({ ...form, role: "admin" }); }} className="space-y-4">
-                    <ImageUploadField
-                        label="Profile Picture"
-                        field="profilePic"
-                        value={form.profilePic}
-                        onChange={(val) => update("profilePic", val)}
-                        onUploadingChange={(v) => setUploading("profilePic", v)}
-                    />
+                <StepHeader title="Admin Profile" subtitle="Complete your admin profile" role={role} email={email} onBack={onBack} isFirstStep={true} />
+                <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!formComplete) return;
+                    setIsSubmitting(true);
+                    let finalForm = form;
+                    if (form.profilePic.file) {
+                        try { finalForm = await uploadPendingImages(form, ["profilePic"]); }
+                        catch { setIsSubmitting(false); return; }
+                    }
+                    mutate({ ...finalForm, role: "admin" });
+                }} className="space-y-4">
+                    <ImageUploadField label="Profile Picture" field="profilePic" value={form.profilePic} onChange={(val) => update("profilePic", val)} onUploadingChange={(v) => setUploading("profilePic", v)} />
                     <div className="grid grid-cols-2 gap-4">
                         <div className="form-control">
                             <label className="label"><span className="label-text">First Name <span className="text-error">*</span></span></label>
@@ -70,14 +52,9 @@ const OnboardingAdmin = ({ email, role, onBack, onSuccess }) => {
                             <input type="text" className="input input-bordered w-full" placeholder="Gonzales" value={form.lastName} onChange={(e) => update("lastName", e.target.value)} />
                         </div>
                     </div>
-                    <PhoneField
-                        phoneNumber={form.phoneNumber}
-                        phoneType={form.phoneType}
-                        onNumberChange={(val) => update("phoneNumber", val)}
-                        onTypeChange={(val) => update("phoneType", val)}
-                    />
-                    <button className="btn btn-primary w-full" type="submit" disabled={isPending || isAnyUploading || !formComplete}>
-                        {isPending ? <><span className="loading loading-spinner loading-xs" />Submitting...</> : "Submit for Approval"}
+                    <PhoneField phoneNumber={form.phoneNumber} phoneType={form.phoneType} onNumberChange={(val) => update("phoneNumber", val)} onTypeChange={(val) => update("phoneType", val)} />
+                    <button className="btn btn-primary w-full" type="submit" disabled={isPending || isAnyUploading || !formComplete || isSubmitting}>
+                        {isPending || isSubmitting ? <><span className="loading loading-spinner loading-xs" />Submitting...</> : "Submit for Approval"}
                     </button>
                 </form>
             </div>

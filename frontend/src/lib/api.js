@@ -81,6 +81,7 @@ export const completeOnboarding = async (userData) => {
     patient: "/onboarding/patient",
     doctor: "/onboarding/doctor",
     pharmacy: "/onboarding/pharmacy",
+    institute: "/onboarding/institute",
     admin: "/onboarding/admin",
   };
   const endpoint = roleEndpointMap[userData.role];

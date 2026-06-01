@@ -16,8 +16,8 @@ import useLogout from "../hooks/useLogout";
 import OnboardingPatient from "./OnboardingPatient";
 import OnboardingDoctor from "./OnboardingDoctor";
 import OnboardingPharmacy from "./OnboardingPharmacy";
+import OnboardingInstitute from "./OnboardingInstitute";
 import OnboardingAdmin from "./OnboardingAdmin";
-
 const ROLES = [
     { key: "patient", label: "Patient", icon: UserIcon },
     { key: "doctor", label: "Doctor", icon: StethoscopeIcon },
@@ -42,10 +42,6 @@ const OnboardingPage = () => {
     const [adminCodeLoading, setAdminCodeLoading] = useState(false);
 
     const handleRoleSelect = (role) => {
-        if (role.key === "institute") {
-            navigate("/coming-soon");
-            return;
-        }
         if (role.key === "admin") {
             setShowAdminCode(true);
             return;
@@ -224,6 +220,7 @@ const OnboardingPage = () => {
             {selectedRole === "patient" && <OnboardingPatient {...onboardingProps} />}
             {selectedRole === "doctor" && <OnboardingDoctor {...onboardingProps} />}
             {selectedRole === "pharmacy" && <OnboardingPharmacy {...onboardingProps} />}
+            {selectedRole === "institute" && <OnboardingInstitute {...onboardingProps} />}
             {selectedRole === "admin" && <OnboardingAdmin {...onboardingProps} />}
         </div>
     );

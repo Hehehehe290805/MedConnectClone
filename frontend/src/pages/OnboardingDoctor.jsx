@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { completeOnboarding } from "../lib/api";
-import { StepProgress, StepHeader, ImageUploadField, LanguagesField, AddressFields, PhoneField, forwardGeocode } from "./OnboardingShared";
+import { StepProgress, StepHeader, ImageUploadField, LanguagesField, AddressFields, PhoneField, forwardGeocode, uploadPendingImages } from "./OnboardingShared";
 import { SpecialtyField, SubspecialtyField, suggestSpecialty, suggestSubspecialty } from "../components/SpecialtyField";
 
 const TOTAL_STEPS = 3;
@@ -11,12 +11,14 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
     const queryClient = useQueryClient();
     const [step, setStep] = useState(1);
     const [uploadingFields, setUploadingFields] = useState({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const dobRef = useRef(null);
     const cityRef = useRef(null);
+    const licenseExpirationRef = useRef(null);
 
     const [form, setForm] = useState({
-        profilePic: { url: "", key: "" },
+        profilePic: {},
         firstName: "",
         lastName: "",
         birthDate: "",
@@ -32,15 +34,14 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
             city: "",
             province: "",
             postalCode: "",
-            coordinates: { type: "Point", coordinates: [0, 0] },
+            coordinates: null,
         },
-        // specialty/subSpecialty store { _id, name, status, isNew? } objects locally
         specialty: [],
         subSpecialty: [],
         licenseNumber: "",
         licenseExpiration: "",
-        licenseImage: { url: "", key: "" },
-        legalIDImage: { url: "", key: "" },
+        licenseImage: {},
+        legalIDImage: {},
     });
 
     const isAnyUploading = Object.values(uploadingFields).some(Boolean);
@@ -54,8 +55,8 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
             onSuccess();
         },
         onError: (err) => {
-            const data = err?.response?.data;
-            toast.error(data?.message || "Onboarding failed.");
+            toast.error(err?.response?.data?.message || "Onboarding failed.");
+            setIsSubmitting(false);
         },
     });
 
@@ -65,15 +66,14 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
     };
 
     const today = new Date();
-    const maxDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate())
-        .toISOString().split("T")[0];
-    const minDate = new Date(today.getFullYear() - 120, today.getMonth(), today.getDate())
-        .toISOString().split("T")[0];
-    const minExpiration = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)
-        .toISOString().split("T")[0];
+    const maxDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate()).toISOString().split("T")[0];
+    const minDate = new Date(today.getFullYear() - 120, today.getMonth(), today.getDate()).toISOString().split("T")[0];
+    const minExpirationDate = new Date(today.getFullYear(), today.getMonth() + 3, 1);
+    const minExpiration = minExpirationDate.toISOString().split("T")[0];
+    const minExpirationLabel = minExpirationDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
     const step1Complete =
-        form.profilePic.url &&
+        form.profilePic.file &&
         form.firstName.trim() &&
         form.lastName.trim() &&
         form.birthDate &&
@@ -93,8 +93,8 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
         form.specialty.length > 0 &&
         form.licenseNumber.trim() &&
         form.licenseExpiration &&
-        form.licenseImage.key &&
-        form.legalIDImage.key;
+        (form.licenseImage.file || form.licenseImage.key) &&
+        (form.legalIDImage.file || form.legalIDImage.key);
 
     const validateStep1 = () => {
         if (!form.birthDate) {
@@ -111,39 +111,26 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
         return true;
     };
 
-    // resolve local specialty/subSpecialty objects to real ObjectIds
-    // suggests new ones to DB, returns arrays of ObjectIds
     const resolveSpecialties = async () => {
-        const specialtyIdMap = {}; // name -> _id (for linking new subspecialties to new specialties)
-
+        const specialtyIdMap = {};
         const resolvedSpecialties = await Promise.all(
             form.specialty.map(async (s) => {
-                if (!s.isNew) {
-                    specialtyIdMap[s.name] = s._id;
-                    return s._id;
-                }
+                if (!s.isNew) { specialtyIdMap[s.name] = s._id; return s._id; }
                 try {
                     const suggested = await suggestSpecialty(s.name);
                     specialtyIdMap[s.name] = suggested._id;
                     return suggested._id;
-                } catch (err) {
-                    // already exists — fetch its id from the error or re-fetch
-                    // for now toast and skip
+                } catch {
                     toast.error(`Specialty "${s.name}" already exists or could not be submitted.`);
                     return null;
                 }
             })
         );
-
         const resolvedSubSpecialties = await Promise.all(
             form.subSpecialty.map(async (s) => {
                 if (!s.isNew) return s._id;
-                // root specialty id — may have just been created above
                 const rootId = s.rootSpecialtyId || specialtyIdMap[s.rootSpecialtyName];
-                if (!rootId) {
-                    toast.error(`Could not determine root specialty for "${s.name}".`);
-                    return null;
-                }
+                if (!rootId) { toast.error(`Could not determine root specialty for "${s.name}".`); return null; }
                 try {
                     const suggested = await suggestSubspecialty(s.name, rootId);
                     return suggested._id;
@@ -153,7 +140,6 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
                 }
             })
         );
-
         return {
             specialty: resolvedSpecialties.filter(Boolean),
             subSpecialty: resolvedSubSpecialties.filter(Boolean),
@@ -201,11 +187,12 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
                                 type="date"
                                 className="input input-bordered w-full"
                                 value={form.birthDate}
-                                min={minDate}
-                                max={maxDate}
                                 onChange={(e) => {
+                                    const val = e.target.value;
+                                    const [year] = val.split("-");
+                                    if (year && year.length > 4) return;
                                     dobRef.current?.setCustomValidity("");
-                                    update("birthDate", e.target.value);
+                                    update("birthDate", val);
                                 }}
                             />
                         </div>
@@ -231,10 +218,9 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
                 {step === 2 && (
                     <form onSubmit={async (e) => {
                         e.preventDefault();
-                        const coords = form.address.coordinates?.coordinates;
-                        const needsGeocode = !coords;
+                        const coords = form.address.coordinates;
                         let finalForm = form;
-                        if (needsGeocode) {
+                        if (!coords) {
                             const result = await forwardGeocode(form.address);
                             if (result) {
                                 finalForm = {
@@ -270,26 +256,19 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
                     <form onSubmit={async (e) => {
                         e.preventDefault();
                         if (!step3Complete) return;
-
-                        // resolve new specialties/subspecialties to real ObjectIds
+                        setIsSubmitting(true);
+                        let finalForm;
+                        try {
+                            finalForm = await uploadPendingImages(form, ["profilePic", "licenseImage", "legalIDImage"]);
+                        } catch {
+                            setIsSubmitting(false);
+                            return;
+                        }
                         const { specialty, subSpecialty } = await resolveSpecialties();
-
-                        mutate({
-                            ...form,
-                            specialty,
-                            subSpecialty,
-                            role: "doctor",
-                        });
+                        mutate({ ...finalForm, specialty, subSpecialty, role: "doctor" });
                     }} className="space-y-4">
-                        <SpecialtyField
-                            value={form.specialty}
-                            onChange={(val) => update("specialty", val)}
-                        />
-                        <SubspecialtyField
-                            value={form.subSpecialty}
-                            onChange={(val) => update("subSpecialty", val)}
-                            selectedSpecialties={form.specialty}
-                        />
+                        <SpecialtyField value={form.specialty} onChange={(val) => update("specialty", val)} />
+                        <SubspecialtyField value={form.subSpecialty} onChange={(val) => update("subSpecialty", val)} selectedSpecialties={form.specialty} />
                         <div className="form-control">
                             <label className="label"><span className="label-text">License Number <span className="text-error">*</span></span></label>
                             <input type="text" className="input input-bordered w-full" placeholder="MD-12345" value={form.licenseNumber} onChange={(e) => update("licenseNumber", e.target.value)} />
@@ -297,35 +276,35 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
                         <div className="form-control">
                             <label className="label"><span className="label-text">License Expiration <span className="text-error">*</span></span></label>
                             <input
+                                ref={licenseExpirationRef}
                                 type="date"
                                 className="input input-bordered w-full"
                                 min={minExpiration}
                                 value={form.licenseExpiration}
-                                onChange={(e) => update("licenseExpiration", e.target.value)}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    const [year] = val.split("-");
+                                    if (year && year.length > 4) return;
+                                    licenseExpirationRef.current?.setCustomValidity("");
+                                    update("licenseExpiration", val);
+                                }}
+                                onBlur={(e) => {
+                                    if (e.target.value && e.target.value < minExpiration) {
+                                        licenseExpirationRef.current?.setCustomValidity(`Expiration must be ${minExpirationLabel} or later`);
+                                    } else {
+                                        licenseExpirationRef.current?.setCustomValidity("");
+                                    }
+                                }}
                             />
                         </div>
-                        <ImageUploadField
-                            label="License Image"
-                            field="licenseImage"
-                            value={form.licenseImage}
-                            onChange={(val) => update("licenseImage", val)}
-                            onUploadingChange={(v) => setUploading("licenseImage", v)}
-                            required
-                        />
-                        <ImageUploadField
-                            label="Legal ID Image"
-                            field="legalIDImage"
-                            value={form.legalIDImage}
-                            onChange={(val) => update("legalIDImage", val)}
-                            onUploadingChange={(v) => setUploading("legalIDImage", v)}
-                            required
-                        />
+                        <ImageUploadField label="License Image" field="licenseImage" value={form.licenseImage} onChange={(val) => update("licenseImage", val)} onUploadingChange={(v) => setUploading("licenseImage", v)} required />
+                        <ImageUploadField label="Legal ID Image" field="legalIDImage" value={form.legalIDImage} onChange={(val) => update("legalIDImage", val)} onUploadingChange={(v) => setUploading("legalIDImage", v)} required />
                         <button
                             className="btn btn-primary w-full"
                             type="submit"
-                            disabled={isPending || isAnyUploading || !step3Complete}
+                            disabled={isPending || isAnyUploading || !step3Complete || isSubmitting}
                         >
-                            {isPending ? <><span className="loading loading-spinner loading-xs" />Submitting...</> : "Submit Application"}
+                            {isPending || isSubmitting ? <><span className="loading loading-spinner loading-xs" />Submitting...</> : "Submit Application"}
                         </button>
                     </form>
                 )}

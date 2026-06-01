@@ -45,6 +45,7 @@ const App = () => {
       patient: <HomePageUser />,
       doctor: <HomePageDoctor />,
       pharmacy: <ComingSoonPage />,
+      institute: <ComingSoonPage />,
       admin: <HomePageAdmin />,
     };
     return roleComponents[userRole] || <ComingSoonPage />;

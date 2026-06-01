@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import User from "../models/User.js";
-import Doctor_Specialty from "../models/Doctor_Specialty.js";
+import Doctor_Specialty from "../models/DoctorSpecialty.js";
 import Subspecialty from "../models/Subspecialty.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";

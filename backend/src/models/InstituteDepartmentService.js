@@ -1,23 +1,24 @@
 import mongoose from "mongoose";
 
-const Doctor_SpecialtySchema = new mongoose.Schema(
+const InstituteDepartmentServiceSchema = new mongoose.Schema(
     {
-        doctorId: {
+        departmentId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
             required: true,
         },
-        specialtyId: {
+        serviceId: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "Specialty",
+            ref: "Service",
+            required: true,
         },
-        subspecialtyId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Subspecialty",
-        },
-        claimType: { // 🆕 ADD THIS FIELD
+        claimType: {
             type: String,
-            enum: ["specialty", "subspecialty"],
+            enum: ["service"],
+            required: true,
+        },
+        durationMinutes: {
+            type: Number,
             required: true,
         },
         status: {
@@ -27,12 +28,11 @@ const Doctor_SpecialtySchema = new mongoose.Schema(
         },
         approvedBy: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "User",
+            ref: "Admin",
         },
     },
     { timestamps: true }
 );
 
-const Doctor_Specialty = mongoose.model("Doctor_Specialty", Doctor_SpecialtySchema);
-
-export default Doctor_Specialty;
+const InstituteDepartmentService = mongoose.model("InstituteDepartmentService", InstituteDepartmentServiceSchema);
+export default InstituteDepartmentService;

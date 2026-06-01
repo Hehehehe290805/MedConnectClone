@@ -1,21 +1,18 @@
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { uploadToS3, getSignedFileUrl } from "../services/s3.js";
-import User from "../models/User.js";
 
-// folder mapping per image field
 const FOLDER_MAP = {
     profilePic: "public/profilepics",
     licenseImage: "private/licenses",
     legalIDImage: "private/legalids",
     businessPermit: "private/permits",
+    constructionPermit: "private/permits",
     fdaLicense: "private/permits",
     pharmacistLicenseImage: "private/licenses",
     pharmacistLegalIDImage: "private/legalids",
 };
 
-// POST /api/upload
-// body: multipart/form-data — file + field (which image field this is for)
 export const uploadFile = asyncHandler(async (req, res) => {
     if (!req.file) return sendError(res, 400, "No file provided.");
 
@@ -38,22 +35,16 @@ export const uploadFile = asyncHandler(async (req, res) => {
     return sendSuccess(res, 200, "File uploaded successfully.", { url, key });
 });
 
-// GET /api/upload/signed-url?key=private/licenses/xxx
-// generates a fresh signed URL for a private file
-// only accessible by the file owner or an admin
 export const getSignedUrlForFile = asyncHandler(async (req, res) => {
     const { key } = req.query;
     if (!key) return sendError(res, 400, "No key provided.");
 
-    // only private files need signed URLs
     if (!key.startsWith("private/")) {
         return sendError(res, 400, "Only private files require signed URLs.");
     }
 
     const user = req.user;
 
-    // admins can access any private file
-    // non-admins can only access their own files (key contains their userId)
     if (user.role !== "admin" && !key.includes(user._id.toString())) {
         return sendError(res, 403, "Access denied.");
     }

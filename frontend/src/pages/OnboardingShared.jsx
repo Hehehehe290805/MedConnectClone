@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { UploadCloudIcon, XIcon, PlusIcon, ArrowLeftIcon, MapPinIcon } from "lucide-react";
+import { UploadCloudIcon, XIcon, ArrowLeftIcon, MapPinIcon } from "lucide-react";
 import imageCompression from "browser-image-compression";
 import { uploadFile } from "../lib/api";
 import toast from "react-hot-toast";
@@ -13,8 +13,7 @@ export const StepProgress = ({ currentStep, totalSteps }) => (
         {Array.from({ length: totalSteps }).map((_, i) => (
             <div
                 key={i}
-                className={`h-1.5 flex-1 rounded-full transition-all ${i < currentStep ? "bg-primary" : "bg-base-300"
-                    }`}
+                className={`h-1.5 flex-1 rounded-full transition-all ${i < currentStep ? "bg-primary" : "bg-base-300"}`}
             />
         ))}
     </div>
@@ -66,13 +65,16 @@ export const StepHeader = ({ title, subtitle, role, email, onBack, isFirstStep }
 );
 
 // --- IMAGE UPLOAD FIELD ---
+// value: { file: File } before upload, { url, key } after upload (set by submit handler)
+// onChange: called with { file } on selection
+// onUploadingChange: not used for upload state anymore, kept for API compat
 export const ImageUploadField = ({ label, field, value, onChange, required = false, onUploadingChange }) => {
-    const [uploading, setUploading] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
     const inputRef = useRef(null);
 
     const handleFile = async (file) => {
         if (!file) return;
-        setUploading(true);
+        setIsProcessing(true);
         if (onUploadingChange) onUploadingChange(true);
         try {
             const compressed = await imageCompression(file, {
@@ -80,22 +82,22 @@ export const ImageUploadField = ({ label, field, value, onChange, required = fal
                 maxWidthOrHeight: 1920,
                 useWebWorker: true,
             });
-            const result = await uploadFile(compressed, field);
-            // sendSuccess wraps as { success, message, data: { url, key } }
-            const { url, key } = result.data;
-            if (!key) throw new Error("Upload response missing key");
-            onChange({ url, key });
-            toast.success(`${label} uploaded successfully`);
+            // store compressed file locally — S3 upload happens on form submit
+            onChange({ file: compressed });
         } catch (err) {
-            toast.error(`Failed to upload ${label}: ${err.message}`);
-            console.error(err);
+            toast.error(`Failed to process ${label}: ${err.message}`);
         } finally {
-            setUploading(false);
+            setIsProcessing(false);
             if (onUploadingChange) onUploadingChange(false);
         }
     };
 
-    const isUploaded = value?.url && value.url !== "";
+    // preview: use object URL for local file, or url for already-uploaded
+    const previewUrl = value?.file
+        ? URL.createObjectURL(value.file)
+        : value?.url || null;
+
+    const hasFile = !!(value?.file || value?.key);
 
     return (
         <div className="form-control">
@@ -106,47 +108,43 @@ export const ImageUploadField = ({ label, field, value, onChange, required = fal
                 </span>
             </label>
             <div
-                className={`border-2 border-dashed rounded-xl p-4 text-center transition-all ${uploading
-                        ? "opacity-60 pointer-events-none border-base-300"
-                        : isUploaded
-                            ? "border-success/50 bg-success/5 cursor-pointer hover:border-success"
-                            : "border-base-300 cursor-pointer hover:border-primary hover:bg-primary/5"
-                    }`}
-                onClick={() => !uploading && inputRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-4 text-center transition-all ${
+                        hasFile
+                        ? "border-success/50 bg-success/5 hover:border-success"
+                        : "border-base-300 hover:border-primary hover:bg-primary/5"
+                } ${isProcessing ? "opacity-60 pointer-events-none cursor-not-allowed" : "cursor-pointer"}`}
+                onClick={() => !isProcessing && inputRef.current?.click()}
             >
-                {isUploaded ? (
+                {isProcessing ? (
+                    <div className="py-4 flex flex-col items-center gap-2">
+                        <span className="loading loading-spinner loading-md text-primary" />
+                        <p className="text-sm opacity-60">Processing image...</p>
+                    </div>
+                ) : hasFile ? (
                     <div className="relative flex flex-col items-center">
-                        <img
-                            src={value.url}
-                            alt={label}
-                            className={`mx-auto object-cover rounded-lg transition-opacity ${
-                                field === "profilePic" ? "size-24 rounded-full" : "h-32 w-full"
-                            } ${uploading ? "opacity-40" : ""}`}
-                        />
-                        {uploading ? (
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <span className="loading loading-ring loading-lg text-primary" />
-                            </div>
+                        {previewUrl ? (
+                            <img
+                                src={previewUrl}
+                                alt={label}
+                                className={`mx-auto object-cover rounded-lg ${field === "profilePic" ? "size-24 rounded-full" : "h-32 w-full"
+                                    }`}
+                            />
                         ) : (
-                            <p className="text-xs opacity-60 mt-2">Click to replace</p>
+                            // private file — no preview URL available, show placeholder
+                            <div className={`flex items-center justify-center bg-base-200 rounded-lg ${field === "profilePic" ? "size-24 rounded-full" : "h-32 w-full"
+                                }`}>
+                                <UploadCloudIcon className="size-8 text-success" />
+                            </div>
                         )}
+                        <p className="text-xs opacity-60 mt-2">Click to replace</p>
                     </div>
                 ) : (
                     <div className="py-4">
-                        {uploading ? (
-                            <div className="flex flex-col items-center gap-2">
-                                <span className="loading loading-spinner loading-md text-primary" />
-                                <p className="text-sm opacity-60">Uploading...</p>
-                            </div>
-                        ) : (
-                            <>
-                                <UploadCloudIcon className="size-8 text-base-content/40 mx-auto mb-2" />
-                                <p className="text-sm opacity-60">Click to upload or drag and drop</p>
-                                <p className="text-xs opacity-40 mt-1">
-                                    PNG, JPG up to {field === "profilePic" ? "500KB" : "1MB"}
-                                </p>
-                            </>
-                        )}
+                        <UploadCloudIcon className="size-8 text-base-content/40 mx-auto mb-2" />
+                        <p className="text-sm opacity-60">Click to upload or drag and drop</p>
+                        <p className="text-xs opacity-40 mt-1">
+                            PNG, JPG up to {field === "profilePic" ? "500KB" : "1MB"}
+                        </p>
                     </div>
                 )}
             </div>
@@ -157,93 +155,116 @@ export const ImageUploadField = ({ label, field, value, onChange, required = fal
                 className="hidden"
                 onChange={(e) => handleFile(e.target.files[0])}
             />
-            {required && !isUploaded && !uploading && (
+            {required && !hasFile && (
                 <p className="text-xs text-error mt-1">{label} is required</p>
             )}
         </div>
     );
 };
 
-// --- LANGUAGES MULTI-SELECT ---
+// --- UPLOAD PENDING IMAGES HELPER ---
+// Call this in submit handler before completeOnboarding
+// imageFieldNames: array of field names that are image fields e.g. ["profilePic", "licenseImage"]
+// form: current form state
+// returns updated form with { url, key } replacing { file } for each image field
+export const uploadPendingImages = async (form, imageFieldNames) => {
+    const updated = { ...form };
+    for (const fieldName of imageFieldNames) {
+        const fieldValue = form[fieldName];
+        if (!fieldValue?.file) continue; // already uploaded or not set
+        try {
+            const result = await uploadFile(fieldValue.file, fieldName);
+            const { url, key } = result.data;
+            if (!key) throw new Error(`Upload response missing key for ${fieldName}`);
+            updated[fieldName] = { url: url || "", key };
+        } catch (err) {
+            toast.error(`Failed to upload ${fieldName}: ${err.message}`);
+            throw err; // abort submit
+        }
+    }
+    return updated;
+};
+
+// --- LANGUAGES FIELD ---
 export const LanguagesField = ({ value = [], onChange, error }) => {
+    const [query, setQuery] = useState("");
     const [isOpen, setIsOpen] = useState(false);
-    const [otherText, setOtherText] = useState("");
     const dropdownRef = useRef(null);
 
     useEffect(() => {
         const handleClickOutside = (e) => {
             if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
                 setIsOpen(false);
+                setQuery("");
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    const toggleLanguage = (lang) => {
-        const updated = value.includes(lang)
-            ? value.filter((l) => l !== lang)
-            : [...value, lang];
-        onChange(updated);
+    const selectedSet = new Set(value.map((l) => l.toLowerCase()));
+    const queryTrimmed = query.trim();
+
+    const filtered = LANGUAGES.filter(
+        (l) => !selectedSet.has(l.toLowerCase()) && l.toLowerCase().includes(query.toLowerCase())
+    );
+
+    const showAddNew = queryTrimmed &&
+        !selectedSet.has(queryTrimmed.toLowerCase()) &&
+        !LANGUAGES.some((l) => l.toLowerCase() === queryTrimmed.toLowerCase());
+
+    const add = (lang) => {
+        if (selectedSet.has(lang.toLowerCase())) return;
+        onChange([...value, lang]);
+        setQuery("");
     };
 
-    const addOther = () => {
-        const trimmed = otherText.trim();
-        if (!trimmed) return;
-        if (value.includes(trimmed)) { toast.error("Language already added"); return; }
-        onChange([...value, trimmed]);
-        setOtherText("");
-    };
+    const remove = (lang) => onChange(value.filter((l) => l !== lang));
 
     return (
         <div className="form-control" ref={dropdownRef}>
             <label className="label">
                 <span className="label-text">Languages <span className="text-error">*</span></span>
             </label>
-            <div
-                className={`select select-bordered w-full cursor-pointer flex items-center ${error ? "select-error" : ""}`}
-                onClick={() => setIsOpen(!isOpen)}
-            >
-                {value.length > 0 ? value.join(", ") : "Select languages"}
-            </div>
-
-            {isOpen && (
+            <input
+                type="text"
+                className={`input input-bordered w-full ${error ? "input-error" : ""}`}
+                placeholder="Search or type a language..."
+                value={query}
+                onChange={(e) => { setQuery(e.target.value); setIsOpen(true); }}
+                onFocus={() => setIsOpen(true)}
+            />
+            {isOpen && (filtered.length > 0 || showAddNew) && (
                 <div className="relative z-20">
                     <div className="absolute w-full bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-52 overflow-y-auto mt-1">
-                        {LANGUAGES.map((lang) => (
-                            <label key={lang} className="flex items-center gap-2 px-3 py-2 hover:bg-base-200 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    className="checkbox checkbox-sm checkbox-primary"
-                                    checked={value.includes(lang)}
-                                    onChange={() => toggleLanguage(lang)}
-                                />
-                                <span className="text-sm">{lang}</span>
-                            </label>
-                        ))}
-                        <div className="flex items-center gap-2 px-3 py-2 border-t border-base-300">
-                            <input
-                                type="text"
-                                placeholder="Other language..."
-                                className="input input-bordered input-xs flex-1"
-                                value={otherText}
-                                onChange={(e) => setOtherText(e.target.value)}
-                                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addOther())}
-                            />
-                            <button type="button" className="btn btn-primary btn-xs" onClick={addOther}>
-                                <PlusIcon className="size-3" />
+                        {filtered.map((lang) => (
+                            <button
+                                key={lang}
+                                type="button"
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-base-200"
+                                onClick={() => add(lang)}
+                            >
+                                {lang}
                             </button>
-                        </div>
+                        ))}
+                        {showAddNew && (
+                            <button
+                                type="button"
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-base-200 text-primary font-medium border-t border-base-300"
+                                onClick={() => add(queryTrimmed)}
+                            >
+                                + Add "{queryTrimmed}"
+                            </button>
+                        )}
                     </div>
                 </div>
             )}
-
             {value.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
                     {value.map((lang) => (
                         <span key={lang} className="badge badge-primary gap-1 py-3">
                             {lang}
-                            <button type="button" onClick={() => toggleLanguage(lang)}>
+                            <button type="button" onClick={() => remove(lang)}>
                                 <XIcon className="size-3" />
                             </button>
                         </span>
@@ -255,8 +276,9 @@ export const LanguagesField = ({ value = [], onChange, error }) => {
     );
 };
 
-// --- ADDRESS FIELD ITEM — defined outside to prevent remount on keystroke ---
-const AddressFieldItem = ({ label, fieldKey, placeholder, required, type = "text", maxLength, value, onChange, error, inputRef }) => (    <div className="form-control">
+// --- ADDRESS FIELD ITEM ---
+const AddressFieldItem = ({ label, fieldKey, placeholder, required, type = "text", maxLength, value, onChange, error, inputRef }) => (
+    <div className="form-control">
         <label className="label py-0">
             <span className="label-text text-xs">
                 {label}{required && <span className="text-error ml-1">*</span>}
@@ -281,8 +303,6 @@ export const AddressFields = ({ value = {}, onChange, errors = {}, cityRef }) =>
     const update = (field, val) => onChange({ ...value, [field]: val });
 
     const handleMapConfirm = useCallback((result) => {
-        // result: { street, barangay, city, province, postalCode, coordinates }
-        // Only overwrite fields that Nominatim returned a value for
         onChange({
             ...value,
             ...(result.street && { street: result.street }),
@@ -296,38 +316,38 @@ export const AddressFields = ({ value = {}, onChange, errors = {}, cityRef }) =>
 
     return (
         <>
-        <MapPinModal
-            isOpen={mapOpen}
-            onClose={() => setMapOpen(false)}
-            onConfirm={handleMapConfirm}
-        />
-        <div className="space-y-3">
-            <label className="label">
-                <span className="label-text font-medium">
-                    Address <span className="text-error">*</span>
-                </span>
-            </label>
+            <MapPinModal
+                isOpen={mapOpen}
+                onClose={() => setMapOpen(false)}
+                onConfirm={handleMapConfirm}
+            />
+            <div className="space-y-3">
+                <label className="label">
+                    <span className="label-text font-medium">
+                        Address <span className="text-error">*</span>
+                    </span>
+                </label>
                 <button
                     type="button"
                     className="btn btn-outline btn-primary btn-sm gap-2 w-full"
                     onClick={() => setMapOpen(true)}
-                >   
+                >
                     <MapPinIcon className="size-4" />
                     Pin Location on Map
                 </button>
-            <div className="grid grid-cols-2 gap-3">
-                <AddressFieldItem label="Building / House No." fieldKey="buildingNumber" placeholder="Unit 4B" required value={value.buildingNumber || ""} onChange={update} error={errors["address.buildingNumber"]} />
-                <AddressFieldItem label="Street" fieldKey="street" placeholder="Rizal Street" required value={value.street || ""} onChange={update} error={errors["address.street"]} />
+                <div className="grid grid-cols-2 gap-3">
+                    <AddressFieldItem label="Building / House No." fieldKey="buildingNumber" placeholder="Unit 4B" required value={value.buildingNumber || ""} onChange={update} error={errors["address.buildingNumber"]} />
+                    <AddressFieldItem label="Street" fieldKey="street" placeholder="Rizal Street" required value={value.street || ""} onChange={update} error={errors["address.street"]} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                    <AddressFieldItem label="Barangay" fieldKey="barangay" placeholder="Barangay 1" required value={value.barangay || ""} onChange={update} error={errors["address.barangay"]} />
+                    <AddressFieldItem label="City" fieldKey="city" placeholder="Manila" required value={value.city || ""} onChange={update} error={errors["address.city"]} inputRef={cityRef} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                    <AddressFieldItem label="Province" fieldKey="province" placeholder="Metro Manila" required value={value.province || ""} onChange={update} error={errors["address.province"]} />
+                    <AddressFieldItem label="Postal Code" fieldKey="postalCode" placeholder="1000" required value={value.postalCode || ""} onChange={update} error={errors["address.postalCode"]} maxLength={4} />
+                </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-                <AddressFieldItem label="Barangay" fieldKey="barangay" placeholder="Barangay 1" required value={value.barangay || ""} onChange={update} error={errors["address.barangay"]} />
-                <AddressFieldItem label="City" fieldKey="city" placeholder="Manila" required value={value.city || ""} onChange={update} error={errors["address.city"]} inputRef={cityRef} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-                <AddressFieldItem label="Province" fieldKey="province" placeholder="Metro Manila" required value={value.province || ""} onChange={update} error={errors["address.province"]} />
-                <AddressFieldItem label="Postal Code" fieldKey="postalCode" placeholder="1000" required value={value.postalCode || ""} onChange={update} error={errors["address.postalCode"]} maxLength={4} />
-            </div>
-        </div>
         </>
     );
 };

@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import User, { Patient, Doctor, Pharmacy } from "../models/User.js";
+import User, { Patient, Doctor, Pharmacy, Institute } from "../models/User.js";
 import Admin from "../models/Admin.js";
 import EmailRegistry from "../models/EmailRegistry.js";
 import { upsertStreamUser } from "../lib/stream.js";
@@ -182,6 +182,67 @@ export const onboardAsPharmacy = asyncHandler(async (req, res) => {
             pharmacistLicenseExpiration,
             pharmacistLicenseImage,
             pharmacistLegalIDImage,
+        }, session);
+
+        await session.commitTransaction();
+        await streamUpsert(promoted);
+
+        return sendSuccess(res, 200, "Onboarding submitted for approval", { user: promoted });
+    } catch (err) {
+        await session.abortTransaction();
+        throw err;
+    } finally {
+        session.endSession();
+    }
+});
+
+export const onboardAsInstitute = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const existing = await User.findById(userId).select("status role email password");
+    if (!existing) return sendError(res, 404, "User not found");
+    if (existing.status !== "notOnBoarded") return sendError(res, 400, "User is already onboarded or pending");
+    if (existing.role !== "user") return sendError(res, 400, "Account has already been assigned a role");
+
+    const {
+        instituteName, instituteType, bio, profilePic,
+        contactFirstName, contactLastName,
+        phoneNumber, phoneType, address,
+        businessPermit, businessPermitExpiration,
+        licensingAgency,
+        constructionPermit, constructionPermitExpiration,
+    } = req.body;
+
+    // constructionPermit required for hospitals
+    if (instituteType === "hospital") {
+        if (!constructionPermit?.key) return sendError(res, 400, "Construction permit is required for hospitals");
+        if (!constructionPermitExpiration) return sendError(res, 400, "Construction permit expiration is required for hospitals");
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const promoted = await promoteUser(userId, Institute, {
+            email: existing.email,
+            password: existing.password,
+            role: "institute",
+            status: "pending",
+            instituteName,
+            instituteType,
+            bio,
+            profilePic,
+            contactFirstName,
+            contactLastName,
+            phoneNumber,
+            phoneType,
+            address,
+            businessPermit,
+            businessPermitExpiration,
+            licensingAgency,
+            ...(instituteType === "hospital" && {
+                constructionPermit,
+                constructionPermitExpiration,
+            }),
         }, session);
 
         await session.commitTransaction();
