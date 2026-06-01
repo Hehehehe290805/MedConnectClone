@@ -71,7 +71,7 @@ export const SpecialtyField = ({ value = [], onChange }) => {
     const remove = (name) => onChange(value.filter((s) => s.name !== name));
 
     return (
-        <div className="form-control" ref={dropdownRef}>
+        <div className="form-control relative" ref={dropdownRef}>
             <label className="label">
                 <span className="label-text">Specialty <span className="text-error">*</span></span>
             </label>
@@ -84,8 +84,7 @@ export const SpecialtyField = ({ value = [], onChange }) => {
                 onFocus={() => setIsOpen(true)}
             />
             {isOpen && (filtered.length > 0 || showAddNew) && (
-                <div className="relative z-20">
-                    <div className="absolute w-full bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-52 overflow-y-auto mt-1">
+                <div className="absolute z-20 w-full bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-52 overflow-y-auto mt-1 top-full">
                         {filtered.map((s) => (
                             <button key={s._id} type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-base-200" onClick={() => selectExisting(s)}>
                                 {s.name}
@@ -96,7 +95,6 @@ export const SpecialtyField = ({ value = [], onChange }) => {
                                 + Add "{queryTrimmed}" as new specialty
                             </button>
                         )}
-                    </div>
                 </div>
             )}
             {value.length > 0 && (
@@ -176,7 +174,7 @@ export const SubspecialtyField = ({ value = [], onChange, selectedSpecialties = 
     const remove = (name) => onChange(value.filter((s) => s.name !== name));
 
     return (
-        <div className="form-control" ref={dropdownRef}>
+        <div className="form-control relative" ref={dropdownRef}>
             <label className="label">
                 <span className="label-text">Subspecialty <span className="opacity-50 text-xs">(optional)</span></span>
             </label>
@@ -189,8 +187,7 @@ export const SubspecialtyField = ({ value = [], onChange, selectedSpecialties = 
                 onFocus={() => setIsOpen(true)}
             />
             {isOpen && !pendingRootSpecialty && (filtered.length > 0 || showAddNew) && (
-                <div className="relative z-20">
-                    <div className="absolute w-full bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-52 overflow-y-auto mt-1">
+                <div className="absolute z-20 w-full bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-52 overflow-y-auto mt-1 top-full">
                         {filtered.map((s) => (
                             <button key={`${s._id}-${s.rootSpecialtyId}`} type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-base-200" onClick={() => selectExisting(s)}>
                                 <span>{s.name}</span>
@@ -202,12 +199,10 @@ export const SubspecialtyField = ({ value = [], onChange, selectedSpecialties = 
                                 + Add "{queryTrimmed}" as new subspecialty
                             </button>
                         )}
-                    </div>
                 </div>
             )}
             {pendingRootSpecialty === "selecting" && (
-                <div className="relative z-20">
-                    <div className="absolute w-full bg-base-100 border border-base-300 rounded-lg shadow-lg mt-1">
+                <div className="absolute z-20 w-full bg-base-100 border border-base-300 rounded-lg shadow-lg mt-1 top-full">
                         <p className="px-3 py-2 text-xs opacity-60 border-b border-base-300">Which specialty does "{queryTrimmed}" fall under?</p>
                         {selectedSpecialties.map((spec) => (
                             <button key={spec.name} type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-base-200 flex items-center gap-2" onClick={() => confirmNewSubspecialty(spec)}>
@@ -215,7 +210,6 @@ export const SubspecialtyField = ({ value = [], onChange, selectedSpecialties = 
                                 {spec.name}
                             </button>
                         ))}
-                    </div>
                 </div>
             )}
             {value.length > 0 && (

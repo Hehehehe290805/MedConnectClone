@@ -80,6 +80,7 @@ const OnboardingPage = () => {
                 },
             };
         });
+        queryClient.invalidateQueries({ queryKey: ["authUser"] });
         setShowSuccess(true);
     };
 

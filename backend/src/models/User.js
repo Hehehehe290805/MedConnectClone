@@ -260,7 +260,6 @@ const departmentSchema = new mongoose.Schema({
   sex: { type: String, enum: ["male", "female"], required: true },
   bio: { type: String },
   profilePic: { type: imageSchema },
-  languages: [{ type: String }],
   address: { type: addressSchema, default: () => ({}) },
   technologistLicenseNumber: {
     type: String,

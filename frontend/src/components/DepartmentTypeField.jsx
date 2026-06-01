@@ -13,9 +13,6 @@ export async function suggestDepartmentType(name) {
     return res.data?.data?.item;
 }
 
-// DepartmentTypeField
-// value: [{ _id, name, status, isNew? }]
-// isClinic: boolean — if true, limit to 1 selection
 export const DepartmentTypeField = ({ value = [], onChange, isClinic = false }) => {
     const [dbTypes, setDbTypes] = useState([]);
     const [query, setQuery] = useState("");
@@ -67,7 +64,7 @@ export const DepartmentTypeField = ({ value = [], onChange, isClinic = false }) 
     const remove = (name) => onChange(value.filter((s) => s.name !== name));
 
     return (
-        <div className="form-control" ref={dropdownRef}>
+        <div className="form-control relative" ref={dropdownRef}>
             <label className="label">
                 <span className="label-text">
                     Department Types <span className="text-error">*</span>
@@ -84,19 +81,17 @@ export const DepartmentTypeField = ({ value = [], onChange, isClinic = false }) 
                 onFocus={() => { if (!atLimit) setIsOpen(true); }}
             />
             {isOpen && !atLimit && (filtered.length > 0 || showAddNew) && (
-                <div className="relative z-20">
-                    <div className="absolute w-full bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-52 overflow-y-auto mt-1">
-                        {filtered.map((s) => (
-                            <button key={s._id} type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-base-200" onClick={() => selectExisting(s)}>
-                                {s.name}
-                            </button>
-                        ))}
-                        {showAddNew && (
-                            <button type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-base-200 text-primary font-medium border-t border-base-300" onClick={addNew}>
-                                + Add "{queryTrimmed}" as new department type
-                            </button>
-                        )}
-                    </div>
+                <div className="absolute z-20 w-full bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-52 overflow-y-auto mt-1 top-full">
+                    {filtered.map((s) => (
+                        <button key={s._id} type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-base-200" onClick={() => selectExisting(s)}>
+                            {s.name}
+                        </button>
+                    ))}
+                    {showAddNew && (
+                        <button type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-base-200 text-primary font-medium border-t border-base-300" onClick={addNew}>
+                            + Add "{queryTrimmed}" as new department type
+                        </button>
+                    )}
                 </div>
             )}
             {value.length > 0 && (
