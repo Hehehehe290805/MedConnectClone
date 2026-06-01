@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-import Specialty from "./Specialty.js";
 
 const SubspecialtySchema = new mongoose.Schema(
     {
@@ -12,28 +11,25 @@ const SubspecialtySchema = new mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             ref: "Specialty",
             required: true,
-            validate: {
-                validator: async function (specialtyId) {
-                    // Check if the specialty exists
-                    const specialty = await Specialty.findById(specialtyId);
-                    return specialty !== null;
-                },
-                message: "Root specialty does not exist"
-            }
         },
         status: {
             type: String,
             enum: ["pending", "verified"],
             default: "pending",
         },
+        suggestedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+        },
         approvedBy: {
               type: mongoose.Schema.Types.ObjectId,
-              ref: "User",
+              ref: "Admin",
         },
     },
     { timestamps: true }
 );
 
+SubspecialtySchema.index({ name: 1, rootSpecialty: 1 }, { unique: true });
 const Subspecialty = mongoose.model("Subspecialty", SubspecialtySchema);
 
 export default Subspecialty;

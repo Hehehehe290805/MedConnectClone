@@ -1,21 +1,24 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { PlusIcon, XIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import { completeOnboarding } from "../lib/api";
-import { StepProgress, StepHeader, ImageUploadField, LanguagesField, AddressFields, PhoneField } from "./OnboardingShared";
+import { StepProgress, StepHeader, ImageUploadField, LanguagesField, AddressFields, PhoneField, forwardGeocode, uploadPendingImages } from "./OnboardingShared";
+import { SpecialtyField, SubspecialtyField, suggestSpecialty, suggestSubspecialty } from "../components/SpecialtyField";
 
 const TOTAL_STEPS = 3;
 
 const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
     const queryClient = useQueryClient();
     const [step, setStep] = useState(1);
-    const [specialtyInput, setSpecialtyInput] = useState("");
-    const [subspecialtyInput, setSubspecialtyInput] = useState("");
     const [uploadingFields, setUploadingFields] = useState({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const dobRef = useRef(null);
+    const cityRef = useRef(null);
+    const licenseExpirationRef = useRef(null);
 
     const [form, setForm] = useState({
-        profilePic: { url: "", key: "" },
+        profilePic: {},
         firstName: "",
         lastName: "",
         birthDate: "",
@@ -31,20 +34,17 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
             city: "",
             province: "",
             postalCode: "",
-            coordinates: { type: "Point", coordinates: [0, 0] },
+            coordinates: null,
         },
         specialty: [],
         subSpecialty: [],
         licenseNumber: "",
         licenseExpiration: "",
-        licenseImage: { url: "", key: "" },
-        legalIDImage: { url: "", key: "" },
+        licenseImage: {},
+        legalIDImage: {},
     });
 
-    const [errors, setErrors] = useState({});
-
     const isAnyUploading = Object.values(uploadingFields).some(Boolean);
-
     const setUploading = (field, val) =>
         setUploadingFields((prev) => ({ ...prev, [field]: val }));
 
@@ -55,89 +55,95 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
             onSuccess();
         },
         onError: (err) => {
-            const data = err?.response?.data;
-            if (data?.errors && Array.isArray(data.errors)) {
-                const mapped = {};
-                data.errors.forEach((e) => { mapped[e.field] = e.message; });
-                setErrors(mapped);
-                toast.error("Please fix the errors below.");
-            } else {
-                toast.error(data?.message || "Onboarding failed.");
-            }
+            toast.error(err?.response?.data?.message || "Onboarding failed.");
+            setIsSubmitting(false);
         },
     });
 
     const update = (field, value) => {
         setForm((prev) => ({ ...prev, [field]: value }));
-        setErrors((prev) => ({ ...prev, [field]: undefined }));
+        if (field === "address") cityRef.current?.setCustomValidity("");
     };
 
     const today = new Date();
-    const maxDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate())
-        .toISOString().split("T")[0];
-    const minDate = new Date(today.getFullYear() - 120, today.getMonth(), today.getDate())
-        .toISOString().split("T")[0];
+    const maxDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate()).toISOString().split("T")[0];
+    const minDate = new Date(today.getFullYear() - 120, today.getMonth(), today.getDate()).toISOString().split("T")[0];
+    const minExpirationDate = new Date(today.getFullYear(), today.getMonth() + 3, 1);
+    const minExpiration = minExpirationDate.toISOString().split("T")[0];
+    const minExpirationLabel = minExpirationDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
-    const minExpiration = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)
-        .toISOString().split("T")[0];
+    const step1Complete =
+        form.profilePic.file &&
+        form.firstName.trim() &&
+        form.lastName.trim() &&
+        form.birthDate &&
+        form.sex;
+
+    const step2Complete =
+        form.languages.length > 0 &&
+        form.phoneNumber.length === 10 &&
+        form.address.buildingNumber.trim() &&
+        form.address.street.trim() &&
+        form.address.barangay.trim() &&
+        form.address.city.trim() &&
+        form.address.province.trim() &&
+        /^\d{4}$/.test(form.address.postalCode);
+
+    const step3Complete =
+        form.specialty.length > 0 &&
+        form.licenseNumber.trim() &&
+        form.licenseExpiration &&
+        (form.licenseImage.file || form.licenseImage.key) &&
+        (form.legalIDImage.file || form.legalIDImage.key);
 
     const validateStep1 = () => {
-        const e = {};
-        if (!form.firstName.trim()) e.firstName = "First name is required";
-        if (!form.lastName.trim()) e.lastName = "Last name is required";
-        if (!form.birthDate) e.birthDate = "Date of birth is required";
-        if (!form.sex) e.sex = "Sex is required";
-        setErrors(e);
-        return Object.keys(e).length === 0;
+        if (!form.birthDate) {
+            dobRef.current?.setCustomValidity("Date of birth is required");
+            dobRef.current?.reportValidity();
+            return false;
+        }
+        if (form.birthDate > maxDate || form.birthDate < minDate) {
+            dobRef.current?.setCustomValidity("Age must be between 18 and 120 years old");
+            dobRef.current?.reportValidity();
+            return false;
+        }
+        dobRef.current?.setCustomValidity("");
+        return true;
     };
 
-    const validateStep2 = () => {
-        const e = {};
-        if (form.languages.length === 0) e.languages = "At least one language is required";
-        if (!form.phoneNumber.trim()) e.phoneNumber = "Phone number is required";
-        if (form.phoneNumber.length !== 10) e.phoneNumber = "Phone number must be 10 digits";
-        if (!form.address.street.trim()) e["address.street"] = "Street is required";
-        if (!form.address.barangay.trim()) e["address.barangay"] = "Barangay is required";
-        if (!form.address.city.trim()) e["address.city"] = "City is required";
-        if (!form.address.province.trim()) e["address.province"] = "Province is required";
-        if (!form.address.postalCode.trim()) e["address.postalCode"] = "Postal code is required";
-        if (form.address.postalCode && !/^\d{4}$/.test(form.address.postalCode))
-            e["address.postalCode"] = "Postal code must be 4 digits";
-        setErrors(e);
-        return Object.keys(e).length === 0;
-    };
-
-    const validateStep3 = () => {
-        const e = {};
-        if (form.specialty.length === 0) e.specialty = "At least one specialty is required";
-        if (!form.licenseNumber.trim()) e.licenseNumber = "License number is required";
-        if (!form.licenseExpiration) e.licenseExpiration = "License expiration is required";
-        if (!form.licenseImage.url) e.licenseImage = "License image is required";
-        if (!form.legalIDImage.url) e.legalIDImage = "Legal ID image is required";
-        setErrors(e);
-        return Object.keys(e).length === 0;
-    };
-
-    const addSpecialty = () => {
-        const trimmed = specialtyInput.trim();
-        if (!trimmed) return;
-        if (form.specialty.includes(trimmed)) { toast.error("Specialty already added"); return; }
-        update("specialty", [...form.specialty, trimmed]);
-        setSpecialtyInput("");
-    };
-
-    const addSubspecialty = () => {
-        const trimmed = subspecialtyInput.trim();
-        if (!trimmed) return;
-        if (form.subSpecialty.includes(trimmed)) { toast.error("Subspecialty already added"); return; }
-        update("subSpecialty", [...form.subSpecialty, trimmed]);
-        setSubspecialtyInput("");
-    };
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        if (!validateStep3()) return;
-        mutate({ ...form, role: "doctor" });
+    const resolveSpecialties = async () => {
+        const specialtyIdMap = {};
+        const resolvedSpecialties = await Promise.all(
+            form.specialty.map(async (s) => {
+                if (!s.isNew) { specialtyIdMap[s.name] = s._id; return s._id; }
+                try {
+                    const suggested = await suggestSpecialty(s.name);
+                    specialtyIdMap[s.name] = suggested._id;
+                    return suggested._id;
+                } catch {
+                    toast.error(`Specialty "${s.name}" already exists or could not be submitted.`);
+                    return null;
+                }
+            })
+        );
+        const resolvedSubSpecialties = await Promise.all(
+            form.subSpecialty.map(async (s) => {
+                if (!s.isNew) return s._id;
+                const rootId = s.rootSpecialtyId || specialtyIdMap[s.rootSpecialtyName];
+                if (!rootId) { toast.error(`Could not determine root specialty for "${s.name}".`); return null; }
+                try {
+                    const suggested = await suggestSubspecialty(s.name, rootId);
+                    return suggested._id;
+                } catch {
+                    toast.error(`Subspecialty "${s.name}" already exists or could not be submitted.`);
+                    return null;
+                }
+            })
+        );
+        return {
+            specialty: resolvedSpecialties.filter(Boolean),
+            subSpecialty: resolvedSubSpecialties.filter(Boolean),
+        };
     };
 
     return (
@@ -162,140 +168,143 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
                             value={form.profilePic}
                             onChange={(val) => update("profilePic", val)}
                             onUploadingChange={(v) => setUploading("profilePic", v)}
+                            required
                         />
                         <div className="grid grid-cols-2 gap-4">
                             <div className="form-control">
                                 <label className="label"><span className="label-text">First Name <span className="text-error">*</span></span></label>
-                                <input type="text" className={`input input-bordered w-full ${errors.firstName ? "input-error" : ""}`} placeholder="Maria" value={form.firstName} onChange={(e) => update("firstName", e.target.value)} />
-                                {errors.firstName && <p className="text-error text-xs mt-1">{errors.firstName}</p>}
+                                <input type="text" className="input input-bordered w-full" placeholder="Maria" value={form.firstName} onChange={(e) => update("firstName", e.target.value)} />
                             </div>
                             <div className="form-control">
                                 <label className="label"><span className="label-text">Last Name <span className="text-error">*</span></span></label>
-                                <input type="text" className={`input input-bordered w-full ${errors.lastName ? "input-error" : ""}`} placeholder="Santos" value={form.lastName} onChange={(e) => update("lastName", e.target.value)} />
-                                {errors.lastName && <p className="text-error text-xs mt-1">{errors.lastName}</p>}
+                                <input type="text" className="input input-bordered w-full" placeholder="Santos" value={form.lastName} onChange={(e) => update("lastName", e.target.value)} />
                             </div>
                         </div>
                         <div className="form-control">
                             <label className="label"><span className="label-text">Date of Birth <span className="text-error">*</span></span></label>
-                            <input type="date" className={`input input-bordered w-full ${errors.birthDate ? "input-error" : ""}`} value={form.birthDate} min={minDate} max={maxDate} onChange={(e) => update("birthDate", e.target.value)} />
-                            {errors.birthDate && <p className="text-error text-xs mt-1">{errors.birthDate}</p>}
-                            <p className="text-xs opacity-50 mt-1">Must be 18–120 years old</p>
+                            <input
+                                ref={dobRef}
+                                type="date"
+                                className="input input-bordered w-full"
+                                value={form.birthDate}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    const [year] = val.split("-");
+                                    if (year && year.length > 4) return;
+                                    dobRef.current?.setCustomValidity("");
+                                    update("birthDate", val);
+                                }}
+                            />
                         </div>
                         <div className="form-control">
                             <label className="label"><span className="label-text">Sex <span className="text-error">*</span></span></label>
-                            <select className={`select select-bordered w-full ${errors.sex ? "select-error" : ""}`} value={form.sex} onChange={(e) => update("sex", e.target.value)}>
+                            <select className="select select-bordered w-full" value={form.sex} onChange={(e) => update("sex", e.target.value)}>
                                 <option value="">Select</option>
                                 <option value="male">Male</option>
                                 <option value="female">Female</option>
                             </select>
-                            {errors.sex && <p className="text-error text-xs mt-1">{errors.sex}</p>}
                         </div>
                         <div className="form-control">
                             <label className="label"><span className="label-text">Bio</span></label>
                             <textarea className="textarea textarea-bordered h-24 resize-none" placeholder="Tell us about yourself" value={form.bio} onChange={(e) => update("bio", e.target.value)} />
                         </div>
-                        <button className="btn btn-primary w-full" type="submit" disabled={isAnyUploading}>
-                            {isAnyUploading ? <><span className="loading loading-spinner loading-xs" />Uploading...</> : "Next →"}
+                        <button className="btn btn-primary w-full" type="submit" disabled={!step1Complete || isAnyUploading}>
+                            Next →
                         </button>
                     </form>
                 )}
 
                 {/* STEP 2 */}
                 {step === 2 && (
-                    <form onSubmit={(e) => { e.preventDefault(); if (validateStep2()) setStep(3); }} className="space-y-4">
-                        <LanguagesField value={form.languages} onChange={(val) => update("languages", val)} error={errors.languages} />
+                    <form onSubmit={async (e) => {
+                        e.preventDefault();
+                        const coords = form.address.coordinates;
+                        let finalForm = form;
+                        if (!coords) {
+                            const result = await forwardGeocode(form.address);
+                            if (result) {
+                                finalForm = {
+                                    ...form,
+                                    address: {
+                                        ...form.address,
+                                        coordinates: { type: "Point", coordinates: [result.lng, result.lat] },
+                                    },
+                                };
+                            } else {
+                                cityRef.current?.setCustomValidity("City not found. Please check your address.");
+                                cityRef.current?.reportValidity();
+                                return;
+                            }
+                        }
+                        setForm(finalForm);
+                        setStep(3);
+                    }} className="space-y-4">
+                        <LanguagesField value={form.languages} onChange={(val) => update("languages", val)} />
                         <PhoneField
                             phoneNumber={form.phoneNumber}
                             phoneType={form.phoneType}
                             onNumberChange={(val) => update("phoneNumber", val)}
                             onTypeChange={(val) => update("phoneType", val)}
-                            error={errors.phoneNumber}
                         />
-                        <AddressFields value={form.address} onChange={(val) => update("address", val)} errors={errors} />
-                        <button className="btn btn-primary w-full" type="submit">Next →</button>
+                        <AddressFields value={form.address} onChange={(val) => update("address", val)} errors={{}} cityRef={cityRef} />
+                        <button className="btn btn-primary w-full" type="submit" disabled={!step2Complete}>Next →</button>
                     </form>
                 )}
 
                 {/* STEP 3 */}
                 {step === 3 && (
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="form-control">
-                            <label className="label"><span className="label-text">Specialty <span className="text-error">*</span></span></label>
-                            <div className="flex gap-2">
-                                <input type="text" className="input input-bordered flex-1" placeholder="e.g. Cardiology" value={specialtyInput} onChange={(e) => setSpecialtyInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addSpecialty())} />
-                                <button type="button" className="btn btn-primary" onClick={addSpecialty}><PlusIcon className="size-4" /></button>
-                            </div>
-                            {/* FLAG: per-letter specialty recommendations from DB when populated */}
-                            {errors.specialty && <p className="text-error text-xs mt-1">{errors.specialty}</p>}
-                            {form.specialty.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-2">
-                                    {form.specialty.map((s) => (
-                                        <span key={s} className="badge badge-primary gap-1">{s}
-                                            <button type="button" onClick={() => update("specialty", form.specialty.filter(x => x !== s))}><XIcon className="size-3" /></button>
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="form-control">
-                            <label className="label"><span className="label-text">Subspecialty <span className="opacity-50 text-xs">(optional)</span></span></label>
-                            <div className="flex gap-2">
-                                <input type="text" className="input input-bordered flex-1" placeholder="e.g. Interventional Cardiology" value={subspecialtyInput} onChange={(e) => setSubspecialtyInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addSubspecialty())} />
-                                <button type="button" className="btn btn-outline" onClick={addSubspecialty}><PlusIcon className="size-4" /></button>
-                            </div>
-                            {form.subSpecialty.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-2">
-                                    {form.subSpecialty.map((s) => (
-                                        <span key={s} className="badge badge-outline gap-1">{s}
-                                            <button type="button" onClick={() => update("subSpecialty", form.subSpecialty.filter(x => x !== s))}><XIcon className="size-3" /></button>
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
+                    <form onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!step3Complete) return;
+                        setIsSubmitting(true);
+                        let finalForm;
+                        try {
+                            finalForm = await uploadPendingImages(form, ["profilePic", "licenseImage", "legalIDImage"]);
+                        } catch {
+                            setIsSubmitting(false);
+                            return;
+                        }
+                        const { specialty, subSpecialty } = await resolveSpecialties();
+                        mutate({ ...finalForm, specialty, subSpecialty, role: "doctor" });
+                    }} className="space-y-4">
+                        <SpecialtyField value={form.specialty} onChange={(val) => update("specialty", val)} />
+                        <SubspecialtyField value={form.subSpecialty} onChange={(val) => update("subSpecialty", val)} selectedSpecialties={form.specialty} />
                         <div className="form-control">
                             <label className="label"><span className="label-text">License Number <span className="text-error">*</span></span></label>
-                            <input type="text" className={`input input-bordered w-full ${errors.licenseNumber ? "input-error" : ""}`} placeholder="MD-12345" value={form.licenseNumber} onChange={(e) => update("licenseNumber", e.target.value)} />
-                            {errors.licenseNumber && <p className="text-error text-xs mt-1">{errors.licenseNumber}</p>}
+                            <input type="text" className="input input-bordered w-full" placeholder="MD-12345" value={form.licenseNumber} onChange={(e) => update("licenseNumber", e.target.value)} />
                         </div>
-
                         <div className="form-control">
                             <label className="label"><span className="label-text">License Expiration <span className="text-error">*</span></span></label>
-                            <input type="date" className={`input input-bordered w-full ${errors.licenseExpiration ? "input-error" : ""}`} min={minExpiration} value={form.licenseExpiration} onChange={(e) => update("licenseExpiration", e.target.value)} />
-                            {errors.licenseExpiration && <p className="text-error text-xs mt-1">{errors.licenseExpiration}</p>}
-                            <p className="text-xs opacity-50 mt-1">Must be a future date</p>
+                            <input
+                                ref={licenseExpirationRef}
+                                type="date"
+                                className="input input-bordered w-full"
+                                min={minExpiration}
+                                value={form.licenseExpiration}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    const [year] = val.split("-");
+                                    if (year && year.length > 4) return;
+                                    licenseExpirationRef.current?.setCustomValidity("");
+                                    update("licenseExpiration", val);
+                                }}
+                                onBlur={(e) => {
+                                    if (e.target.value && e.target.value < minExpiration) {
+                                        licenseExpirationRef.current?.setCustomValidity(`Expiration must be ${minExpirationLabel} or later`);
+                                    } else {
+                                        licenseExpirationRef.current?.setCustomValidity("");
+                                    }
+                                }}
+                            />
                         </div>
-
-                        <ImageUploadField
-                            label="License Image"
-                            field="licenseImage"
-                            value={form.licenseImage}
-                            onChange={(val) => update("licenseImage", val)}
-                            onUploadingChange={(v) => setUploading("licenseImage", v)}
-                            required
-                        />
-                        {errors.licenseImage && <p className="text-error text-xs">{errors.licenseImage}</p>}
-
-                        <ImageUploadField
-                            label="Legal ID Image"
-                            field="legalIDImage"
-                            value={form.legalIDImage}
-                            onChange={(val) => update("legalIDImage", val)}
-                            onUploadingChange={(v) => setUploading("legalIDImage", v)}
-                            required
-                        />
-                        {errors.legalIDImage && <p className="text-error text-xs">{errors.legalIDImage}</p>}
-
+                        <ImageUploadField label="License Image" field="licenseImage" value={form.licenseImage} onChange={(val) => update("licenseImage", val)} onUploadingChange={(v) => setUploading("licenseImage", v)} required />
+                        <ImageUploadField label="Legal ID Image" field="legalIDImage" value={form.legalIDImage} onChange={(val) => update("legalIDImage", val)} onUploadingChange={(v) => setUploading("legalIDImage", v)} required />
                         <button
                             className="btn btn-primary w-full"
                             type="submit"
-                            disabled={isPending || isAnyUploading || !form.licenseImage.url || !form.legalIDImage.url}
+                            disabled={isPending || isAnyUploading || !step3Complete || isSubmitting}
                         >
-                            {isPending ? <><span className="loading loading-spinner loading-xs" />Submitting...</>
-                                : isAnyUploading ? <><span className="loading loading-spinner loading-xs" />Uploading...</>
-                                    : "Submit Application"}
+                            {isPending || isSubmitting ? <><span className="loading loading-spinner loading-xs" />Submitting...</> : "Submit Application"}
                         </button>
                     </form>
                 )}

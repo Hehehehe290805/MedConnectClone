@@ -1,5 +1,5 @@
-import Doctor_Specialty from "../models/Doctor_Specialty.js";
-import Institute_Service from "../models/Institute_Service.js";
+import Doctor_Specialty from "../models/DoctorSpecialty.js";
+import Institute_Service from "../models/InstituteDepartmentService.js";
 import Pricing from "../models/Pricing.js";
 import Service from "../models/Service.js";
 import User from "../models/User.js";

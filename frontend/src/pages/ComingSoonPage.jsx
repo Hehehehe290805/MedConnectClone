@@ -1,12 +1,11 @@
 import { BriefcaseMedicalIcon, WrenchIcon, ArrowLeftIcon } from "lucide-react";
 import { useNavigate } from "react-router";
 
-
 const ComingSoonPage = () => {
     const navigate = useNavigate();
     return (
-        <div className="flex items-center justify-center min-h-[60vh] p-8">
-            <div className="text-center max-w-md">
+        <div className="min-h-screen flex items-center justify-center bg-base-100 p-4">
+            <div className="card bg-base-200 shadow-xl w-full max-w-md text-center p-8">
                 <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-primary hover:underline mb-6 mx-auto">
                     <ArrowLeftIcon className="size-4" /> Go Back
                 </button>

@@ -13,7 +13,8 @@ import onboardingRoutes from "./routes/onboarding.route.js";
 import pricingRoutes from "./routes/pricing.route.js";
 import permitsRoutes from "./routes/permits.route.js";
 import searchRoutes from "./routes/search.route.js";
-import specialtyAndServiceRoutes from "./routes/specialtyAndService.route.js";
+import specialtyRoutes from "./routes/specialty.route.js";
+import serviceRoutes from "./routes/service.route.js";
 import userRoutes from "./routes/user.route.js";
 import uploadRoutes from "./routes/upload.route.js";
 
@@ -44,7 +45,8 @@ app.use("/api/permits", permitsRoutes);
 app.use("/api/onboarding", onboardingRoutes);
 app.use("/api/pricing", pricingRoutes);
 app.use("/api/search", searchRoutes);
-app.use("/api/specialties-and-services", specialtyAndServiceRoutes);
+app.use("/api/specialties", specialtyRoutes);
+app.use("/api/services", serviceRoutes);
 app.use("/api/users", userRoutes);
 
 // Serve frontend in production

@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const SpecialtySchema = new mongoose.Schema(
+const DepartmentTypeSchema = new mongoose.Schema(
     {
         name: {
             type: String,
@@ -18,13 +18,12 @@ const SpecialtySchema = new mongoose.Schema(
             ref: "User",
         },
         approvedBy: {
-              type: mongoose.Schema.Types.ObjectId,
-              ref: "Admin",
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Admin",
         },
     },
     { timestamps: true }
 );
 
-const Specialty = mongoose.model("Specialty", SpecialtySchema);
-
-export default Specialty;
+const DepartmentType = mongoose.model("DepartmentType", DepartmentTypeSchema);
+export default DepartmentType;

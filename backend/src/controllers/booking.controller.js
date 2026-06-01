@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import Service from "../models/Service.js";
-import Institute_Service from "../models/Institute_Service.js";
+import Institute_Service from "../models/InstituteDepartmentService.js";
 import Appointment from "../models/Appointment.js";
 import Pricing from "../models/Pricing.js";
 import Report from "../models/Report.js";

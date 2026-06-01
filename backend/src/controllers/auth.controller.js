@@ -102,7 +102,7 @@ export const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
   const user = await User.findOne({ email });
-  if (!user) return sendError(res, 404, "User not found.");
+  if (!user) return sendError(res, 401, "Invalid email or password.");
 
   // restore account if it was pending deletion
   if (user.pendingDeletion) {
@@ -113,7 +113,7 @@ export const login = asyncHandler(async (req, res) => {
   }
 
   const isPasswordValid = await user.matchPassword(password);
-  if (!isPasswordValid) return sendError(res, 401, "Invalid credentials.");
+  if (!isPasswordValid) return sendError(res, 401, "Invalid email or password.");
 
   const token = generateToken(user._id);
   res.cookie("jwt", token, cookieOptions);

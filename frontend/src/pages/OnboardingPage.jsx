@@ -16,14 +16,14 @@ import useLogout from "../hooks/useLogout";
 import OnboardingPatient from "./OnboardingPatient";
 import OnboardingDoctor from "./OnboardingDoctor";
 import OnboardingPharmacy from "./OnboardingPharmacy";
+import OnboardingInstitute from "./OnboardingInstitute";
 import OnboardingAdmin from "./OnboardingAdmin";
-
 const ROLES = [
-    { key: "patient", label: "Patient", icon: UserIcon, enabled: true },
-    { key: "doctor", label: "Doctor", icon: StethoscopeIcon, enabled: true },
-    { key: "pharmacy", label: "Pharmacy", icon: PillIcon, enabled: true },
-    { key: "institute", label: "Institute", icon: BuildingIcon, enabled: false },
-    { key: "admin", label: "Admin", icon: ShieldIcon, enabled: true },
+    { key: "patient", label: "Patient", icon: UserIcon },
+    { key: "doctor", label: "Doctor", icon: StethoscopeIcon },
+    { key: "pharmacy", label: "Pharmacy", icon: PillIcon },
+    { key: "institute", label: "Institute", icon: BuildingIcon },
+    { key: "admin", label: "Admin", icon: ShieldIcon },
 ];
 
 const OnboardingPage = () => {
@@ -42,10 +42,6 @@ const OnboardingPage = () => {
     const [adminCodeLoading, setAdminCodeLoading] = useState(false);
 
     const handleRoleSelect = (role) => {
-        if (!role.enabled) {
-            navigate("/coming-soon");
-            return;
-        }
         if (role.key === "admin") {
             setShowAdminCode(true);
             return;
@@ -182,11 +178,10 @@ const OnboardingPage = () => {
                                         onClick={() => handleRoleSelect(role)}
                                         className="flex flex-col items-center justify-center gap-3 p-6 rounded-xl border-2 border-base-300 hover:border-primary hover:bg-primary/5 cursor-pointer transition-all"
                                     >
-                                        <Icon className={`size-8 ${role.enabled ? "text-primary" : "text-base-content/40"}`} />
-                                        <span className={`font-semibold ${role.enabled ? "text-base-content" : "text-base-content/40"}`}>
+                                        <Icon className="size-8 text-primary" />
+                                        <span className="font-semibold text-base-content">
                                             {role.label}
                                         </span>
-                                        {!role.enabled && <span className="text-xs opacity-50">Coming soon</span>}
                                     </button>
                                 );
                             })}
@@ -225,6 +220,7 @@ const OnboardingPage = () => {
             {selectedRole === "patient" && <OnboardingPatient {...onboardingProps} />}
             {selectedRole === "doctor" && <OnboardingDoctor {...onboardingProps} />}
             {selectedRole === "pharmacy" && <OnboardingPharmacy {...onboardingProps} />}
+            {selectedRole === "institute" && <OnboardingInstitute {...onboardingProps} />}
             {selectedRole === "admin" && <OnboardingAdmin {...onboardingProps} />}
         </div>
     );
