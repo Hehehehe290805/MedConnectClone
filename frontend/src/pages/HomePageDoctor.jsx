@@ -5,14 +5,18 @@ import ViewPendingAppointmentDoctorPopup from "./ViewPendingAppointmentDoctorPop
 import SetPricePopup from "./SetPricePopup.jsx";
 import SetSchedulePopup from "./SetSchedulePopup.jsx";
 import toast from "react-hot-toast";
+import { ClockIcon } from "lucide-react";
+import useAuthUser from "../hooks/useAuthUser";
 
 const HomePageDoctor = () => {
+    const { authUser } = useAuthUser();
+    const isPending = authUser?.status === "pending";
+
     const [appointments, setAppointments] = useState([]);
     const [selectedAppointment, setSelectedAppointment] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // Pricing and Schedule
     const [currentPrice, setCurrentPrice] = useState(null);
     const [priceLoading, setPriceLoading] = useState(false);
     const [workTime, setWorkTime] = useState(null);
@@ -22,17 +26,15 @@ const HomePageDoctor = () => {
 
     useEffect(() => {
         fetchAppointments();
-        fetchCurrentSchedule();    
+        fetchCurrentSchedule();
         fetchCurrentPrice();
     }, []);
 
-    // === Fetch functions ===
     const fetchAppointments = async () => {
         try {
             setLoading(true);
             setError(null);
             const res = await axiosInstance.get("/booking/user-appointments");
-
             if (res.data.success && Array.isArray(res.data.appointments)) {
                 const validStatuses = [
                     "pending_accept", "awaiting_deposit",
@@ -83,7 +85,6 @@ const HomePageDoctor = () => {
         }
     };
 
-    // === Formatting ===
     const formatTimeDisplay = (time) => {
         if (!time) return "";
         const [hours, minutes] = time.split(':');
@@ -102,16 +103,12 @@ const HomePageDoctor = () => {
         return `${startTime} - ${endTime} (${selectedDays})`;
     };
 
-    // === Handlers ===
     const handleSetNewPrice = () => setShowPricePopup(true);
     const handlePriceSet = async (newPrice) => {
         try {
             await axiosInstance.post("/pricing/set-pricing", { price: newPrice });
-
             const res = await axiosInstance.get("/pricing/appointment-price");
-
             const confirmedPrice = res.data.pricing?.[0]?.price;
-
             if (confirmedPrice !== undefined) {
                 setCurrentPrice(confirmedPrice);
                 toast.success(`Price updated to ₱${confirmedPrice}`);
@@ -119,16 +116,12 @@ const HomePageDoctor = () => {
                 setCurrentPrice(null);
                 toast.success("Price updated (no price found in DB)");
             }
-
             setShowPricePopup(false);
-
         } catch (err) {
             console.error("Error updating price:", err);
             toast.error("Failed to update price");
         }
     };
-
-
 
     const handleSetWorkTime = () => setShowSchedulePopup(true);
     const handleScheduleSet = async (schedule) => {
@@ -149,12 +142,9 @@ const HomePageDoctor = () => {
         setAppointments(prev => prev.map(a => a._id === appointmentId ? { ...a, status: newStatus } : a));
     };
 
-    const openAppointmentModal = (appointment ) => {
-        setSelectedAppointment({ ...appointment });
-    };
+    const openAppointmentModal = (appointment) => setSelectedAppointment({ ...appointment });
     const closeAppointmentModal = () => setSelectedAppointment(null);
 
-    // === Grouping ===rea
     const groups = {
         "Booking Level": ["pending_accept", "awaiting_deposit"],
         "Deposit Level": ["booked", "confirmed"],
@@ -172,7 +162,6 @@ const HomePageDoctor = () => {
                     <h2 className="text-xl font-bold">{title}</h2>
                     <span className={`badge ${badgeColor}`}>{groupAppointments.length}</span>
                 </div>
-
                 {groupAppointments.length === 0 ? (
                     <div className="text-center py-8 text-gray-500"><p>No appointments in this group.</p></div>
                 ) : (
@@ -193,13 +182,23 @@ const HomePageDoctor = () => {
 
     return (
         <div className="p-8 space-y-8">
-            {/* Header */}
+            {isPending && (
+                <div className="alert bg-warning/10 border border-warning/30">
+                    <ClockIcon className="size-5 text-warning" />
+                    <div>
+                        <p className="font-semibold">Your account is pending approval</p>
+                        <p className="text-sm opacity-70">
+                            You can set up your schedule and pricing while you wait. Patients will be able to book once your account is approved.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             <div>
                 <h1 className="text-2xl font-bold">Welcome to MedConnect</h1>
                 <p className="mt-2 text-gray-600">Doctor Dashboard</p>
             </div>
 
-            {/* Pricing & Work Schedule */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div className="card bg-base-100 shadow-sm border p-4">
                     <h3 className="font-bold text-lg mb-2">Consultation Pricing</h3>
@@ -208,7 +207,6 @@ const HomePageDoctor = () => {
                         <button className="btn btn-primary btn-sm" onClick={handleSetNewPrice} disabled={priceLoading}>{currentPrice ? "Update Price" : "Set Price"}</button>
                     </div>
                 </div>
-
                 <div className="card bg-base-100 shadow-sm border p-4">
                     <h3 className="font-bold text-lg mb-2">Work Schedule</h3>
                     <div className="flex items-center justify-between">
@@ -233,7 +231,6 @@ const HomePageDoctor = () => {
                 </>
             )}
 
-            {/* Popups */}
             {selectedAppointment && (
                 <ViewPendingAppointmentDoctorPopup
                     appointment={selectedAppointment}
@@ -241,7 +238,6 @@ const HomePageDoctor = () => {
                     onAppointmentUpdated={handleAppointmentUpdated}
                 />
             )}
-
             {showPricePopup && <SetPricePopup onClose={() => setShowPricePopup(false)} onPriceSet={handlePriceSet} currentPrice={currentPrice} />}
             {showSchedulePopup && <SetSchedulePopup onClose={() => setShowSchedulePopup(false)} onScheduleSet={handleScheduleSet} currentSchedule={currentSchedule} />}
         </div>

@@ -2,23 +2,24 @@ import { useEffect, useState } from "react";
 import { axiosInstance } from "../lib/axios.js";
 import PendingAppointment from "../components/PendingAppointment.jsx";
 import ViewPendingAppointmentPatientPopup from "./ViewPendingAppointmentPatientPopup.jsx";
+import { ClockIcon } from "lucide-react";
+import useAuthUser from "../hooks/useAuthUser";
 
 const HomePageUser = ({ currentUser }) => {
+  const { authUser } = useAuthUser();
+  const isPending = authUser?.status === "pending";
+
   const [appointments, setAppointments] = useState([]);
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Fetch appointments for the logged-in patient
   useEffect(() => {
     const fetchUserAppointments = async () => {
       try {
         setLoading(true);
         setError(null);
-
         const res = await axiosInstance.get("/booking/user-appointments");
-
-
         if (res.data.success && Array.isArray(res.data.appointments)) {
           const validStatuses = [
             "pending_accept", "awaiting_deposit",
@@ -28,11 +29,9 @@ const HomePageUser = ({ currentUser }) => {
             "no_show_patient", "no_show_doctor", "no_show_both",
             "cancelled_unpaid", "cancelled", "rejected", "freeze"
           ];
-
           const filteredAppointments = res.data.appointments
             .filter(a => validStatuses.includes(a.status))
             .sort((a, b) => new Date(a.start) - new Date(b.start));
-
           setAppointments(filteredAppointments);
         } else {
           setAppointments([]);
@@ -44,23 +43,18 @@ const HomePageUser = ({ currentUser }) => {
         setLoading(false);
       }
     };
-
     fetchUserAppointments();
   }, []);
 
-  // Update a single appointment in state
   const handleAppointmentUpdated = (appointmentId, newStatus, depositRef) => {
     setAppointments(prev =>
-      prev.map(a =>
-        a._id === appointmentId ? { ...a, status: newStatus, depositRef } : a
-      )
+      prev.map(a => a._id === appointmentId ? { ...a, status: newStatus, depositRef } : a)
     );
   };
 
   const openAppointmentModal = (appointment) => setSelectedAppointment(appointment);
   const closeAppointmentModal = () => setSelectedAppointment(null);
 
-  // Appointment groups for display
   const groups = {
     "Booking Level": ["pending_accept", "awaiting_deposit"],
     "Deposit Level": ["booked", "confirmed"],
@@ -74,21 +68,16 @@ const HomePageUser = ({ currentUser }) => {
     "Reported Appointments": ["freeze"],
   };
 
-  // Render each group of appointments
   const renderAppointmentGroup = (title, statuses, badgeColor) => {
     const groupAppointments = appointments.filter(a => statuses.includes(a.status));
-
     return (
       <section key={title} className="border rounded shadow-sm p-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">{title}</h2>
           <span className={`badge ${badgeColor}`}>{groupAppointments.length}</span>
         </div>
-
         {groupAppointments.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            <p>No appointments in this group.</p>
-          </div>
+          <div className="text-center py-8 text-gray-500"><p>No appointments in this group.</p></div>
         ) : (
           <div className="space-y-3 max-h-96 overflow-y-auto">
             {groupAppointments.map(appointment => (
@@ -105,21 +94,18 @@ const HomePageUser = ({ currentUser }) => {
     );
   };
 
-  // Patient-only popup component
-  const getPopupComponent = () => {
-    if (!selectedAppointment) return null;
-
-    return (
-      <ViewPendingAppointmentPatientPopup
-        appointment={selectedAppointment}
-        onClose={closeAppointmentModal}
-        onAppointmentUpdated={handleAppointmentUpdated}
-      />
-    );
-  };
-
   return (
     <div className="p-8 space-y-8">
+      {isPending && (
+        <div className="alert bg-warning/10 border border-warning/30">
+          <ClockIcon className="size-5 text-warning" />
+          <div>
+            <p className="font-semibold">Your account is pending approval</p>
+            <p className="text-sm opacity-70">Our team is reviewing your information.</p>
+          </div>
+        </div>
+      )}
+
       <div>
         <h1 className="text-2xl font-bold">Welcome to MedConnect</h1>
         <p className="mt-2 text-gray-600">User Dashboard</p>
@@ -142,7 +128,13 @@ const HomePageUser = ({ currentUser }) => {
         </>
       )}
 
-      {selectedAppointment && getPopupComponent()}
+      {selectedAppointment && (
+        <ViewPendingAppointmentPatientPopup
+          appointment={selectedAppointment}
+          onClose={closeAppointmentModal}
+          onAppointmentUpdated={handleAppointmentUpdated}
+        />
+      )}
     </div>
   );
 };
