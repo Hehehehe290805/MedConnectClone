@@ -1,16 +1,21 @@
 import express from "express";
-import { 
+import {
     signup, verifySignup, resendSignupCode,
-    login, adminLogin, logout, getMe, deleteMe, 
+    login, adminLogin, logout, getMe, deleteMe,
     requestEmailUpdate, verifyCurrentEmailUpdate, verifyNewEmailUpdate,
     requestPasswordUpdate, verifyPasswordUpdate,
     updateMeProfile,
-    } from "../controllers/auth.controller.js"; import { protectRoute } from "../middleware/auth.middleware.js";
+    forgotPassword, verifyForgotPasswordCode, resetForgotPassword,
+    verify2FA, toggle2FA,
+    } from "../controllers/auth.controller.js";
+import { protectRoute } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
-import { 
-    signupValidator, loginValidator, adminLoginValidator, 
-    updateMeProfileValidator
+import {
+    signupValidator, loginValidator, adminLoginValidator,
+    updateMeProfileValidator, verify2FAValidator,
+    forgotPasswordValidator, verifyForgotPasswordValidator, resetForgotPasswordValidator,
     } from "../validators/auth.validator.js";
+
 const router = express.Router();
 
 router.post("/signup", signupValidator, validate, signup);
@@ -27,5 +32,12 @@ router.post("/update-email/verify-current", protectRoute, validate, verifyCurren
 router.post("/update-email/verify-new", protectRoute, validate, verifyNewEmailUpdate);
 router.post("/update-password/request", protectRoute, validate, requestPasswordUpdate);
 router.post("/update-password/verify", protectRoute, validate, verifyPasswordUpdate);
+
+router.post("/verify-2fa", verify2FAValidator, validate, verify2FA);
+router.patch("/toggle-2fa", protectRoute, toggle2FA);
+
+router.post("/forgot-password", forgotPasswordValidator, validate, forgotPassword);
+router.post("/forgot-password/verify", verifyForgotPasswordValidator, validate, verifyForgotPasswordCode);
+router.post("/forgot-password/reset", resetForgotPasswordValidator, validate, resetForgotPassword);
 
 export default router;

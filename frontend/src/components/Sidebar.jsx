@@ -2,7 +2,8 @@ import { Link, useLocation } from "react-router";
 import useAuthUser from "../hooks/useAuthUser";
 import {
     BriefcaseMedicalIcon, HomeIcon, SearchIcon, SettingsIcon,
-    CalendarIcon, PillIcon, BuildingIcon, ClipboardListIcon, StarIcon
+    CalendarIcon, PillIcon, BuildingIcon, ClipboardListIcon, StarIcon,
+    ReceiptIcon, UsersIcon, BookOpenIcon, FlagIcon, BellIcon
 } from "lucide-react";
 
 const Sidebar = () => {
@@ -19,8 +20,21 @@ const Sidebar = () => {
                 ? `${authUser?.technologistFirstName || ""} ${authUser?.technologistLastName || ""}`.trim() || "Department"
                 : `${authUser?.firstName || ""} ${authUser?.lastName || ""}`.trim() || "User";
 
-    const navItem = (to, icon, label) => {
+    const isPending = authUser?.status === "pending";
+
+    const navItem = (to, icon, label, disabled = false) => {
         const Icon = icon;
+        if (disabled) {
+            return (
+                <div
+                    className="btn btn-ghost justify-start w-full gap-3 px-3 normal-case opacity-40 cursor-not-allowed"
+                    title="Available after your account is approved"
+                >
+                    <Icon className="size-5 text-base-content opacity-70" />
+                    <span>{label}</span>
+                </div>
+            );
+        }
         return (
             <Link
                 to={to}
@@ -38,8 +52,10 @@ const Sidebar = () => {
                 return (
                     <>
                         {navItem("/", HomeIcon, "Home")}
-                        {navItem("/search", SearchIcon, "Appointments")}
+                        {navItem("/appointments", CalendarIcon, "Appointments", isPending)}
+                        {navItem("/search", SearchIcon, "Search", isPending)}
                         {navItem("/pharmacy", PillIcon, "Pharmacy")}
+                        {navItem("/transactions", ReceiptIcon, "Transactions", isPending)}
                         {navItem("/settings", SettingsIcon, "Settings")}
                     </>
                 );
@@ -47,7 +63,8 @@ const Sidebar = () => {
                 return (
                     <>
                         {navItem("/", HomeIcon, "Home")}
-                        {navItem("/appointments", CalendarIcon, "Appointments")}
+                        {navItem("/appointments", CalendarIcon, "Appointments", isPending)}
+                        {navItem("/transactions", ReceiptIcon, "Transactions", isPending)}
                         {navItem("/specialty", StarIcon, "Specialties")}
                         {navItem("/settings", SettingsIcon, "Settings")}
                     </>
@@ -57,6 +74,7 @@ const Sidebar = () => {
                     <>
                         {navItem("/", HomeIcon, "Home")}
                         {navItem("/setup-departments", BuildingIcon, "Departments")}
+                        {navItem("/transactions", ReceiptIcon, "Transactions", isPending)}
                         {navItem("/settings", SettingsIcon, "Settings")}
                     </>
                 );
@@ -65,6 +83,7 @@ const Sidebar = () => {
                     <>
                         {navItem("/", HomeIcon, "Home")}
                         {navItem("/services", ClipboardListIcon, "Services")}
+                        {navItem("/transactions", ReceiptIcon, "Transactions", isPending)}
                         {navItem("/settings", SettingsIcon, "Settings")}
                     </>
                 );
@@ -72,6 +91,10 @@ const Sidebar = () => {
                 return (
                     <>
                         {navItem("/", HomeIcon, "Home")}
+                        {navItem("/notifications", BellIcon, "Notifications")}
+                        {navItem("/admin/users", UsersIcon, "User Management")}
+                        {navItem("/admin/specialties", BookOpenIcon, "Specialties & Services")}
+                        {navItem("/admin/reports", FlagIcon, "Reports")}
                         {navItem("/settings", SettingsIcon, "Settings")}
                     </>
                 );
@@ -79,6 +102,7 @@ const Sidebar = () => {
                 return (
                     <>
                         {navItem("/", HomeIcon, "Home")}
+                        {navItem("/transactions", ReceiptIcon, "Transactions")}
                         {navItem("/settings", SettingsIcon, "Settings")}
                     </>
                 );
@@ -91,7 +115,10 @@ const Sidebar = () => {
         <aside className="w-64 bg-base-200 border-r border-base-300 hidden lg:flex flex-col h-screen sticky top-0">
             <div className="p-5 border-b border-base-300">
                 <Link to="/" className="flex items-center gap-2.5">
-                    <BriefcaseMedicalIcon className="size-9 text-primary" />
+                    <BriefcaseMedicalIcon
+                        className="size-9 text-primary"
+                        style={{ filter: "drop-shadow(0 0 1px rgba(0,0,0,0.35))" }}
+                    />
                     <span className="text-primary text-3xl font-bold font-mono tracking-wider">MedConnect</span>
                 </Link>
             </div>

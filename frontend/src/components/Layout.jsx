@@ -1,6 +1,7 @@
 import { Outlet } from "react-router";
 import Sidebar from "./Sidebar";
 import Navbar from "./Navbar";
+import VirtualJoinPrompt from "./VirtualJoinPrompt";
 
 const Layout = ({ showSidebar = true }) => {
   return (
@@ -16,6 +17,9 @@ const Layout = ({ showSidebar = true }) => {
           </main>
         </div>
       </div>
+
+      {/* Global virtual call join prompt — appears when a virtual appointment starts */}
+      <VirtualJoinPrompt />
     </div>
   );
 };

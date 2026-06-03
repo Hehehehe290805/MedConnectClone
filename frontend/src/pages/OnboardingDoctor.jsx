@@ -246,7 +246,7 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
                             onNumberChange={(val) => update("phoneNumber", val)}
                             onTypeChange={(val) => update("phoneType", val)}
                         />
-                        <AddressFields value={form.address} onChange={(val) => update("address", val)} errors={{}} cityRef={cityRef} />
+                        <AddressFields value={form.address} onChange={(val) => update("address", val)} errors={{}} cityRef={cityRef} label="Business Address" />
                         <button className="btn btn-primary w-full" type="submit" disabled={!step2Complete}>Next →</button>
                     </form>
                 )}

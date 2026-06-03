@@ -5,6 +5,7 @@ import { Toaster } from "react-hot-toast";
 import HomePageUser from "./pages/HomePageUser.jsx";
 import HomePageDoctor from "./pages/HomePageDoctor.jsx";
 import HomePageAdmin from "./pages/HomePageAdmin.jsx";
+import HomePagePharmacy from "./pages/HomePagePharmacy.jsx";
 import HomePageInstitute from "./pages/HomePageInstitute.jsx";
 import HomePageDepartment from "./pages/HomePageDepartment.jsx";
 import SignUpPage from "./pages/SignUpPage.jsx";
@@ -16,11 +17,25 @@ import ProfilePage from "./pages/ProfilePage.jsx";
 import SearchPage from "./pages/SearchPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import SpecialtyPage from "./pages/SpecialtyPage.jsx";
+import DoctorAppointmentsPage from "./pages/DoctorAppointmentsPage.jsx";
+import PatientAppointmentsPage from "./pages/PatientAppointmentsPage.jsx";
+import TermsOfServicePage from "./pages/TermsOfServicePage.jsx";
+import PrivacyPolicyPage from "./pages/PrivacyPolicyPage.jsx";
 import ComingSoonPage from "./pages/ComingSoonPage.jsx";
+import MockGCashPage from "./pages/MockGCashPage.jsx";
+import TransactionPage from "./pages/TransactionPage.jsx";
+import ConsultationPage from "./pages/ConsultationPage.jsx";
+import UserManagementPage from "./pages/UserManagementPage.jsx";
+import AdminSpecialtiesPage from "./pages/AdminSpecialtiesPage.jsx";
+import AdminReportsPage from "./pages/AdminReportsPage.jsx";
 
 // Onboarding & Auth flow
 import OnboardingPage from "./pages/OnboardingPage.jsx";
+import OnboardingDepartment from "./pages/OnboardingDepartment.jsx";
 import Pending from "./pages/Pending.jsx";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage.jsx";
+import ForgotPasswordVerifyPage from "./pages/ForgotPasswordVerifyPage.jsx";
+import ForgotPasswordResetPage from "./pages/ForgotPasswordResetPage.jsx";
 
 // Components
 import PageLoader from "./components/PageLoader.jsx";
@@ -31,6 +46,11 @@ import OtherProfilePage from "./pages/OtherProfilePage.jsx";
 // Hooks & Stores
 import useAuthUser from "./hooks/useAuthUser.js";
 import { useThemeStore } from "./store/useThemeStore.js";
+
+const AppointmentsDispatch = () => {
+    const { authUser } = useAuthUser();
+    return authUser?.role === "doctor" ? <DoctorAppointmentsPage /> : <PatientAppointmentsPage />;
+};
 
 const App = () => {
     const { isLoading, authUser } = useAuthUser();
@@ -46,7 +66,7 @@ const App = () => {
         const roleComponents = {
             patient: <HomePageUser />,
             doctor: <HomePageDoctor />,
-            pharmacy: <ComingSoonPage />,
+            pharmacy: <HomePagePharmacy />,
             institute: <HomePageInstitute />,
             department: <HomePageDepartment />,
             admin: <HomePageAdmin />,
@@ -90,6 +110,9 @@ const App = () => {
                 {/* Public */}
                 <Route path="/signup" element={<PublicRoute element={<SignUpPage />} />} />
                 <Route path="/login" element={<PublicRoute element={<LoginPage />} />} />
+                <Route path="/forgot-password" element={<PublicRoute element={<ForgotPasswordPage />} />} />
+                <Route path="/forgot-password/verify" element={<PublicRoute element={<ForgotPasswordVerifyPage />} />} />
+                <Route path="/forgot-password/reset" element={<PublicRoute element={<ForgotPasswordResetPage />} />} />
 
                 {/* Onboarding & Pending */}
                 <Route path="/onboarding" element={<OnboardingRoute />} />
@@ -102,12 +125,26 @@ const App = () => {
                     <Route path="/profile/:id" element={<ProtectedRouteWithOnboarding element={<OtherProfilePage />} />} />
                     <Route path="/settings" element={<ProtectedRouteWithOnboarding element={<SettingsPage />} />} />
 
-                    {/* Patient */}
+                    {/* Shared — role dispatcher */}
+                    <Route path="/appointments" element={
+                        <ProtectedRoute allowedRoles={["patient", "doctor"]}>
+                            <AppointmentsDispatch />
+                        </ProtectedRoute>
+                    } />
+                    <Route path="/consultation" element={
+                        <ProtectedRoute allowedRoles={["patient"]}><ConsultationPage /></ProtectedRoute>
+                    } />
                     <Route path="/search" element={
                         <ProtectedRoute allowedRoles={["patient"]}><SearchPage /></ProtectedRoute>
                     } />
                     <Route path="/notifications" element={
-                        <ProtectedRoute allowedRoles={["patient"]}><NotificationsPage /></ProtectedRoute>
+                        <ProtectedRoute allowedRoles={["patient", "doctor", "pharmacy", "institute", "department", "admin"]}><NotificationsPage /></ProtectedRoute>
+                    } />
+                    <Route path="/transactions" element={
+                        <ProtectedRoute allowedRoles={["patient", "doctor", "pharmacy", "institute", "department"]}><TransactionPage /></ProtectedRoute>
+                    } />
+                    <Route path="/mock-payment" element={
+                        <ProtectedRoute allowedRoles={["patient"]}><MockGCashPage /></ProtectedRoute>
                     } />
                     <Route path="/pharmacy" element={<ProtectedRouteWithOnboarding element={<ComingSoonPage />} />} />
 
@@ -115,33 +152,44 @@ const App = () => {
                     <Route path="/specialty" element={
                         <ProtectedRoute allowedRoles={["doctor"]}><SpecialtyPage /></ProtectedRoute>
                     } />
-                    <Route path="/appointments" element={
-                        <ProtectedRoute allowedRoles={["doctor"]}><ComingSoonPage /></ProtectedRoute>
-                    } />
 
                     {/* Institute */}
                     <Route path="/setup-departments" element={
-                        <ProtectedRoute allowedRoles={["institute"]}><ComingSoonPage /></ProtectedRoute>
+                        <ProtectedRouteWithOnboarding element={
+                            userRole === "institute" ? <OnboardingDepartment /> : <Navigate to="/" replace />
+                        } />
                     } />
 
                     {/* Department */}
                     <Route path="/services" element={
                         <ProtectedRoute allowedRoles={["department"]}><ComingSoonPage /></ProtectedRoute>
                     } />
-                </Route>
 
-                {/* Minimal Layout Routes */}
-                <Route element={<Layout showSidebar={false} />}>
+                    {/* Chat */}
                     <Route path="/chat/:id" element={
                         <ProtectedRoute allowedRoles={["patient", "doctor"]}><ChatPage /></ProtectedRoute>
                     } />
+
+                    {/* Admin */}
+                    <Route path="/admin/users" element={
+                        <ProtectedRoute allowedRoles={["admin"]}><UserManagementPage /></ProtectedRoute>
+                    } />
+                    <Route path="/admin/specialties" element={
+                        <ProtectedRoute allowedRoles={["admin"]}><AdminSpecialtiesPage /></ProtectedRoute>
+                    } />
+                    <Route path="/admin/reports" element={
+                        <ProtectedRoute allowedRoles={["admin"]}><AdminReportsPage /></ProtectedRoute>
+                    } />
                 </Route>
+
 
                 {/* No Layout */}
                 <Route path="/call/:id" element={
                     <ProtectedRoute allowedRoles={["patient", "doctor"]}><CallPage /></ProtectedRoute>
                 } />
 
+                <Route path="/terms-of-service" element={<TermsOfServicePage />} />
+                <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
                 <Route path="/coming-soon" element={<ComingSoonPage />} />
 
                 {/* Catch-all */}

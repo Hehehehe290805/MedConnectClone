@@ -277,7 +277,7 @@ export const LanguagesField = ({ value = [], onChange, error }) => {
 };
 
 // --- ADDRESS FIELD ITEM ---
-const AddressFieldItem = ({ label, fieldKey, placeholder, required, type = "text", maxLength, value, onChange, error, inputRef }) => (
+const AddressFieldItem = ({ label, fieldKey, placeholder, required, type = "text", maxLength, value, onChange, error, inputRef, disabled = false }) => (
     <div className="form-control">
         <label className="label py-0">
             <span className="label-text text-xs">
@@ -287,7 +287,8 @@ const AddressFieldItem = ({ label, fieldKey, placeholder, required, type = "text
         <input
             ref={inputRef}
             type={type}
-            className={`input input-bordered w-full input-sm ${error ? "input-error" : ""}`}
+            disabled={disabled}
+            className={`input input-bordered w-full input-sm ${error ? "input-error" : ""} ${disabled ? "cursor-not-allowed" : ""}`}
             placeholder={placeholder}
             value={value}
             maxLength={maxLength}
@@ -298,9 +299,11 @@ const AddressFieldItem = ({ label, fieldKey, placeholder, required, type = "text
 );
 
 // --- ADDRESS FIELDS ---
-export const AddressFields = ({ value = {}, onChange, errors = {}, cityRef }) => {
+// label: heading shown above the fields (default "Address", use "Business Address" for non-patient roles)
+// disabled: when true all fields are read-only and the map pin button is hidden (used for clinic dept address)
+export const AddressFields = ({ value = {}, onChange, errors = {}, cityRef, label = "Address", disabled = false }) => {
     const [mapOpen, setMapOpen] = useState(false);
-    const update = (field, val) => onChange({ ...value, [field]: val });
+    const update = (field, val) => { if (!disabled) onChange({ ...value, [field]: val }); };
 
     const handleMapConfirm = useCallback((result) => {
         onChange({
@@ -316,36 +319,41 @@ export const AddressFields = ({ value = {}, onChange, errors = {}, cityRef }) =>
 
     return (
         <>
-            <MapPinModal
-                isOpen={mapOpen}
-                onClose={() => setMapOpen(false)}
-                onConfirm={handleMapConfirm}
-            />
+            {!disabled && (
+                <MapPinModal
+                    isOpen={mapOpen}
+                    onClose={() => setMapOpen(false)}
+                    onConfirm={handleMapConfirm}
+                />
+            )}
             <div className="space-y-3">
                 <label className="label">
                     <span className="label-text font-medium">
-                        Address <span className="text-error">*</span>
+                        {label}{!disabled && <span className="text-error"> *</span>}
                     </span>
+                    {disabled && <span className="label-text-alt opacity-50 text-xs">Auto-filled from institute</span>}
                 </label>
-                <button
-                    type="button"
-                    className="btn btn-outline btn-primary btn-sm gap-2 w-full"
-                    onClick={() => setMapOpen(true)}
-                >
-                    <MapPinIcon className="size-4" />
-                    Pin Location on Map
-                </button>
-                <div className="grid grid-cols-2 gap-3">
-                    <AddressFieldItem label="Building / House No." fieldKey="buildingNumber" placeholder="Unit 4B" required value={value.buildingNumber || ""} onChange={update} error={errors["address.buildingNumber"]} />
-                    <AddressFieldItem label="Street" fieldKey="street" placeholder="Rizal Street" required value={value.street || ""} onChange={update} error={errors["address.street"]} />
+                {!disabled && (
+                    <button
+                        type="button"
+                        className="btn btn-outline btn-primary btn-sm gap-2 w-full"
+                        onClick={() => setMapOpen(true)}
+                    >
+                        <MapPinIcon className="size-4" />
+                        Pin Location on Map
+                    </button>
+                )}
+                <div className={`grid grid-cols-2 gap-3 ${disabled ? "opacity-60" : ""}`}>
+                    <AddressFieldItem label="Building / House No." fieldKey="buildingNumber" placeholder="Unit 4B" required={!disabled} value={value.buildingNumber || ""} onChange={update} error={errors["address.buildingNumber"]} disabled={disabled} />
+                    <AddressFieldItem label="Street" fieldKey="street" placeholder="Rizal Street" required={!disabled} value={value.street || ""} onChange={update} error={errors["address.street"]} disabled={disabled} />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                    <AddressFieldItem label="Barangay" fieldKey="barangay" placeholder="Barangay 1" required value={value.barangay || ""} onChange={update} error={errors["address.barangay"]} />
-                    <AddressFieldItem label="City" fieldKey="city" placeholder="Manila" required value={value.city || ""} onChange={update} error={errors["address.city"]} inputRef={cityRef} />
+                <div className={`grid grid-cols-2 gap-3 ${disabled ? "opacity-60" : ""}`}>
+                    <AddressFieldItem label="Barangay" fieldKey="barangay" placeholder="Barangay 1" required={!disabled} value={value.barangay || ""} onChange={update} error={errors["address.barangay"]} disabled={disabled} />
+                    <AddressFieldItem label="City" fieldKey="city" placeholder="Manila" required={!disabled} value={value.city || ""} onChange={update} error={errors["address.city"]} inputRef={cityRef} disabled={disabled} />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                    <AddressFieldItem label="Province" fieldKey="province" placeholder="Metro Manila" required value={value.province || ""} onChange={update} error={errors["address.province"]} />
-                    <AddressFieldItem label="Postal Code" fieldKey="postalCode" placeholder="1000" required value={value.postalCode || ""} onChange={update} error={errors["address.postalCode"]} maxLength={4} />
+                <div className={`grid grid-cols-2 gap-3 ${disabled ? "opacity-60" : ""}`}>
+                    <AddressFieldItem label="Province" fieldKey="province" placeholder="Metro Manila" required={!disabled} value={value.province || ""} onChange={update} error={errors["address.province"]} disabled={disabled} />
+                    <AddressFieldItem label="Postal Code" fieldKey="postalCode" placeholder="1000" required={!disabled} value={value.postalCode || ""} onChange={update} error={errors["address.postalCode"]} maxLength={4} disabled={disabled} />
                 </div>
             </div>
         </>

@@ -17,8 +17,14 @@ import specialtyRoutes from "./routes/specialty.route.js";
 import serviceRoutes from "./routes/service.route.js";
 import userRoutes from "./routes/user.route.js";
 import uploadRoutes from "./routes/upload.route.js";
+import notificationRoutes from "./routes/notification.route.js";
+import gcashRoutes from "./routes/gcashSetup.route.js";
+import appReportRoutes from "./routes/appReport.route.js";
+import appointmentFileRoutes from "./routes/appointmentFile.route.js";
+
 
 import { errorMiddleware } from "./middleware/error.middleware.js";
+import { sanitizeBody } from "./middleware/sanitize.middleware.js";
 import { connectDB } from "./lib/db.js";
 
 const app = express();
@@ -33,6 +39,7 @@ app.use(
 
 app.use(express.json());
 app.use(cookieParser());
+app.use(sanitizeBody);
 
 // Routes
 app.use("/api/admin", adminRoutes);
@@ -48,6 +55,10 @@ app.use("/api/search", searchRoutes);
 app.use("/api/specialties", specialtyRoutes);
 app.use("/api/services", serviceRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/gcash", gcashRoutes);
+app.use("/api/app-reports", appReportRoutes);
+app.use("/api/appointment-files", appointmentFileRoutes);
 
 // Serve frontend in production
 if (process.env.NODE_ENV === "production") {

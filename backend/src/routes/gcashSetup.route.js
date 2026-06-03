@@ -1,17 +1,9 @@
 import express from "express";
-import { protectRoute } from "../middleware/auth.middleware.js";
-import {
-    upload,
-    uploadGCashQR, getGCashInfo, getGCashQR
-} from "../controllers/gcash.controller.js";
+import { getMockPaymentInfo } from "../controllers/gcash.controller.js";
 
 const router = express.Router();
 
-// 📥 Upload & extract GCash QR — only authenticated users
-router.post("/gcash/upload", protectRoute, upload.single("file"), uploadGCashQR);
-router.get("/gcash/qr/:userId", getGCashQR);
-
-// 📤 Get user GCash info
-router.get("/gcash", protectRoute, getGCashInfo);
+// Public — the frontend needs the platform GCash number before the user logs in
+router.get("/info", getMockPaymentInfo);
 
 export default router;

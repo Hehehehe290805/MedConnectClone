@@ -9,8 +9,6 @@ import {
     ShieldIcon,
     PillIcon,
 } from "lucide-react";
-import toast from "react-hot-toast";
-import { axiosInstance } from "../lib/axios";
 import useAuthUser from "../hooks/useAuthUser";
 import useLogout from "../hooks/useLogout";
 import OnboardingPatient from "./OnboardingPatient";
@@ -35,36 +33,8 @@ const OnboardingPage = () => {
     const [selectedRole, setSelectedRole] = useState(null);
     const [showSuccess, setShowSuccess] = useState(false);
 
-    // admin code conversion state
-    const [showAdminCode, setShowAdminCode] = useState(false);
-    const [adminCode, setAdminCode] = useState("");
-    const [adminCodeError, setAdminCodeError] = useState("");
-    const [adminCodeLoading, setAdminCodeLoading] = useState(false);
-
     const handleRoleSelect = (role) => {
-        if (role.key === "admin") {
-            setShowAdminCode(true);
-            return;
-        }
         setSelectedRole(role.key);
-    };
-
-    const handleAdminCodeSubmit = async (e) => {
-        e.preventDefault();
-        if (!adminCode.trim()) { setAdminCodeError("Admin code is required."); return; }
-        setAdminCodeLoading(true);
-        setAdminCodeError("");
-        try {
-            await axiosInstance.post("/onboarding/admin/convert", { adminCode });
-            // refetch authUser so protectRoute sees Admin doc
-            await queryClient.invalidateQueries({ queryKey: ["authUser"] });
-            setShowAdminCode(false);
-            setSelectedRole("admin");
-        } catch (err) {
-            setAdminCodeError(err?.response?.data?.message || "Invalid admin code.");
-        } finally {
-            setAdminCodeLoading(false);
-        }
     };
 
     const handleOnboardingSuccess = () => {
@@ -89,51 +59,6 @@ const OnboardingPage = () => {
             onSuccess: () => navigate("/login"),
         });
     };
-
-    // --- ADMIN CODE POPUP ---
-    if (showAdminCode) {
-        return (
-            <div className="min-h-screen bg-base-100 flex items-center justify-center p-4" data-theme="light">
-                <div className="card bg-base-200 w-full max-w-md shadow-xl">
-                    <div className="card-body p-8">
-                        <div className="flex items-center gap-2 mb-2">
-                            <ShieldIcon className="size-6 text-primary" />
-                            <h2 className="text-xl font-bold">Admin Verification</h2>
-                        </div>
-                        <p className="text-sm opacity-70 mb-4">
-                            Enter your admin code to register as an administrator.
-                        </p>
-                        <form onSubmit={handleAdminCodeSubmit} className="space-y-4">
-                            <div className="form-control">
-                                <label className="label"><span className="label-text">Admin Code <span className="text-error">*</span></span></label>
-                                <input
-                                    type="password"
-                                    className={`input input-bordered w-full ${adminCodeError ? "input-error" : ""}`}
-                                    placeholder="Enter admin code"
-                                    value={adminCode}
-                                    onChange={(e) => { setAdminCode(e.target.value); setAdminCodeError(""); }}
-                                    autoFocus
-                                />
-                                {adminCodeError && <p className="text-error text-xs mt-1">{adminCodeError}</p>}
-                            </div>
-                            <div className="flex gap-2">
-                                <button
-                                    type="button"
-                                    className="btn btn-outline flex-1"
-                                    onClick={() => { setShowAdminCode(false); setAdminCode(""); setAdminCodeError(""); }}
-                                >
-                                    Back
-                                </button>
-                                <button className="btn btn-primary flex-1" type="submit" disabled={adminCodeLoading}>
-                                    {adminCodeLoading ? <><span className="loading loading-spinner loading-xs" />Verifying...</> : "Continue"}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        );
-    }
 
     // --- SUCCESS POPUP ---
     if (showSuccess) {

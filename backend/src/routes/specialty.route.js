@@ -4,8 +4,10 @@ import {
     getSubspecialtiesBySpecialty,
     getSpecialtyBySubspecialty,
     getDoctorSpecialties,
+    getDoctorSpecialtiesById,
     suggestSpecialty,
     claimSpecialty,
+    deleteSpecialtyClaim,
 } from "../controllers/specialty.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
@@ -25,9 +27,11 @@ const claimValidator = [
 
 router.get("/", protectRoute, getSpecialties);
 router.get("/doctor-specialties", protectRoute, getDoctorSpecialties);
+router.get("/doctor/:doctorId", protectRoute, getDoctorSpecialtiesById);
 router.get("/subspecialty-root/:subspecialtyId", protectRoute, getSpecialtyBySubspecialty);
 router.get("/:specialtyId/subspecialties", protectRoute, getSubspecialtiesBySpecialty);
 router.post("/suggest", protectRoute, suggestValidator, validate, suggestSpecialty);
 router.post("/claim", protectRoute, claimValidator, validate, claimSpecialty);
+router.delete("/claim/:claimId", protectRoute, deleteSpecialtyClaim);
 
 export default router;

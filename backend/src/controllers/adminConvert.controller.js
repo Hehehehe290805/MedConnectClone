@@ -1,6 +1,7 @@
 // POST /api/onboarding/admin/convert
 // Called when user selects Admin role during onboarding
-// Verifies adminCode, converts base User doc to Admin doc (delete + recreate pattern — same as promoteUser)import mongoose from "mongoose";
+// Verifies adminCode, converts base User doc to Admin doc (delete + recreate pattern — same as promoteUser)
+import mongoose from "mongoose";
 import User from "../models/User.js";
 import Admin from "../models/Admin.js";
 import EmailRegistry from "../models/EmailRegistry.js";

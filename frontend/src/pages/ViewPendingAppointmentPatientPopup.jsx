@@ -1,392 +1,369 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useNavigate } from "react-router";
+import { Link } from "react-router";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { XIcon, StarIcon, UserIcon, MessageCircleIcon, FlagIcon } from "lucide-react";
+import AppointmentFilesPanel from "../components/AppointmentFilesPanel.jsx";
+import ChatAttachmentsSection from "../components/ChatAttachmentsSection.jsx";
+import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios";
-import toast from "react-hot-toast"; 
 import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 const PH_TZ = "Asia/Manila";
 
-const ViewPendingAppointmentPatientPopup = ({ appointment, onClose }) => {
-  const [doctor, setDoctor] = useState(null);
-  const [gcashRef, setGcashRef] = useState("");
-  const [balanceRef, setBalanceRef] = useState("");
-  const [qrUrl, setQrUrl] = useState(null);
-  const [rating, setRating] = useState(0);
-  const [review, setReview] = useState("");
-  const [loading, setLoading] = useState(false);
+const fmt = (d) => dayjs(d).tz(PH_TZ).format("ddd, MMM D, YYYY");
+const fmtTime = (d) => dayjs(d).tz(PH_TZ).format("h:mm A");
 
-  const handleBalanceRefChange = (e) => setBalanceRef(e.target.value);
+const STATUS_LABEL = {
+    pending_payment:  "Pending Payment",
+    deposit_paid:     "Deposit Paid",
+    accepted:         "Confirmed",
+    ongoing:          "Ongoing",
+    completed:        "Completed",
+    awaiting_balance: "Awaiting Balance",
+    fully_paid:       "Fully Paid",
+    cancelled:        "Cancelled",
+    rejected:         "Rejected",
+    disputed:         "Disputed",
+    resolved:         "Resolved",
+};
 
-  useEffect(() => {
-    const fetchDoctor = async () => {
-      if (!appointment.doctorId) return;
+const CHAT_STATUSES = ["accepted", "ongoing", "awaiting_balance", "completed", "fully_paid", "disputed"];
 
-      try {
-        const doctorIdStr = typeof appointment.doctorId === "string"
-          ? appointment.doctorId
-          : appointment.doctorId._id || appointment.doctorId.toString();
+const ViewPendingAppointmentPatientPopup = ({ appointment: appt, onClose, onUpdated }) => {
+    const navigate = useNavigate();
+    const queryClient = useQueryClient();
+    const [reviewRating, setReviewRating] = useState(0);
+    const [reviewText, setReviewText] = useState("");
+    const [disputeText, setDisputeText] = useState("");
+    const [showDisputeInput, setShowDisputeInput] = useState(false);
 
-        const res = await axiosInstance.get(`/users/${doctorIdStr}`);
-
-
-        setDoctor(res.data.data);
-
-        // Fetch GCash QR if available
-        if (res.data.data.gcash?.qrData) {
-          setQrUrl(`${import.meta.env.VITE_API_URL}/api/gcash-setup/gcash/qr/${doctorIdStr}`);
-        }
-
-      } catch (err) {
-        console.error("Failed to fetch doctor info:", err);
-        toast.error("Failed to load doctor information"); // ✅ TOAST
-      }
+    const invalidate = () => {
+        queryClient.invalidateQueries({ queryKey: ["myAppointments"] });
+        onUpdated?.();
     };
 
-    fetchDoctor();
-  }, [appointment.doctorId]);
+    const { mutate: cancel, isPending: isCancelling } = useMutation({
+        mutationFn: () => axiosInstance.post("/booking/cancel", { appointmentId: appt._id }),
+        onSuccess: () => { toast.success("Appointment cancelled."); invalidate(); onClose(); },
+        onError: (err) => toast.error(err?.response?.data?.message || "Failed to cancel."),
+    });
 
-  const formatDateTime = (dateString) => {
-    const d = dayjs(dateString).tz(PH_TZ);
-    return {
-      date: d.format("MMMM D, YYYY"),
-      time: d.format("h:mm A"),
-      day: d.format("dddd"),
-    };
-  };
+    const { mutate: complete, isPending: isCompleting } = useMutation({
+        mutationFn: () => axiosInstance.post("/booking/complete", { appointmentId: appt._id }),
+        onSuccess: () => { toast.success("Marked as complete."); invalidate(); onClose(); },
+        onError: (err) => toast.error(err?.response?.data?.message || "Failed."),
+    });
 
-  const getDuration = () => {
-    const start = new Date(appointment.start);
-    const end = new Date(appointment.end);
-    return Math.round((end - start) / (1000 * 60));
-  };
+    const { mutate: submitReview, isPending: isReviewing } = useMutation({
+        mutationFn: () => axiosInstance.post("/booking/review", { appointmentId: appt._id, rating: reviewRating, review: reviewText }),
+        onSuccess: () => { toast.success("Review submitted!"); invalidate(); onClose(); },
+        onError: (err) => toast.error(err?.response?.data?.message || "Failed to submit review."),
+    });
 
-  const handleAttend = async () => {
-    try {
-      setLoading(true);
+    const { mutate: dispute, isPending: isDisputing } = useMutation({
+        mutationFn: () => axiosInstance.post("/booking/dispute", { appointmentId: appt._id, complaint: disputeText }),
+        onSuccess: () => { toast.success("Dispute filed."); invalidate(); onClose(); },
+        onError: (err) => toast.error(err?.response?.data?.message || "Failed to file dispute."),
+    });
 
-      const res = await axiosInstance.post(`/booking/attend/${appointment._id}`, {});
+    if (!appt) return null;
 
-      toast.success("Attendance marked successfully!"); 
-      onAppointmentUpdated(res.data.appointment);
+    const durationMin = Math.round((new Date(appt.end) - new Date(appt.start)) / 60000);
+    const canDispute = ["ongoing", "completed", "awaiting_balance", "fully_paid"].includes(appt.status);
+    const providerId = appt.doctorId?._id || appt.doctorId || appt.instituteId?._id || appt.instituteId;
+    const canChat = CHAT_STATUSES.includes(appt.status) && providerId;
 
-      // small delay so user can see toast before closing
-      setTimeout(() => {
+    const goToPayment = (type) => {
+        const amount = type === "deposit" ? appt.depositAmount : appt.balanceAmount;
+        navigate(`/mock-payment?appointmentId=${appt._id}&type=${type}&amount=${amount}`);
         onClose();
-      }, 500);
-    } catch (err) {
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
-  const handlePayDeposit = async () => {
-    if (!gcashRef.trim()) {
-      toast.error("Please enter your GCash reference number"); // ✅ TOAST
-      return;
-    }
+    const renderActions = () => {
+        switch (appt.status) {
+            case "pending_payment":
+                return (
+                    <div className="space-y-2">
+                        <button className="btn btn-primary w-full" onClick={() => goToPayment("deposit")}>
+                            Pay Deposit — ₱{appt.depositAmount?.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                        </button>
+                        <button className="btn btn-ghost btn-sm w-full opacity-60" disabled={isCancelling} onClick={() => cancel()}>
+                            Cancel Appointment
+                        </button>
+                    </div>
+                );
+            case "deposit_paid":
+                return (
+                    <div className="space-y-2">
+                        <p className="text-sm opacity-60">Deposit received. Waiting for the provider to confirm.</p>
+                        <button className="btn btn-ghost btn-sm w-full opacity-60" disabled={isCancelling} onClick={() => cancel()}>
+                            Cancel Appointment
+                        </button>
+                    </div>
+                );
+            case "accepted":
+                return (
+                    <div className="space-y-2">
+                        <p className="text-sm font-semibold">Confirmed — see you on {fmt(appt.start)} at {fmtTime(appt.start)}.</p>
+                        {canChat && (
+                            <button className="btn btn-primary w-full gap-2" onClick={() => { navigate(`/chat/${providerId}`); onClose(); }}>
+                                <MessageCircleIcon className="size-4" />Message Provider
+                            </button>
+                        )}
+                        <button className="btn btn-ghost btn-sm w-full opacity-60" disabled={isCancelling} onClick={() => cancel()}>
+                            Cancel (deposit non-refundable)
+                        </button>
+                    </div>
+                );
+            case "ongoing":
+                return (
+                    <div className="space-y-2">
+                        <p className="text-sm opacity-60">Appointment is in progress.</p>
+                        {canChat && (
+                            <button className="btn btn-ghost btn-sm w-full gap-2" onClick={() => { navigate(`/chat/${providerId}`); onClose(); }}>
+                                <MessageCircleIcon className="size-4" />Open Chat
+                            </button>
+                        )}
+                        <button className="btn btn-primary w-full" disabled={isCompleting} onClick={() => complete()}>
+                            Mark as Complete
+                        </button>
+                    </div>
+                );
+            case "completed":
+                return appt.virtual
+                    ? (
+                        <div className="space-y-2">
+                            {canChat && (
+                                <button className="btn btn-ghost btn-sm w-full gap-2" onClick={() => { navigate(`/chat/${providerId}`); onClose(); }}>
+                                    <MessageCircleIcon className="size-4" />Open Chat
+                                </button>
+                            )}
+                            <button className="btn btn-primary w-full" onClick={() => goToPayment("balance")}>
+                                Pay Balance — ₱{appt.balanceAmount?.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                            </button>
+                        </div>
+                    )
+                    : (
+                        <div className="space-y-2">
+                            <p className="text-sm opacity-60">Appointment completed.</p>
+                            {canChat && (
+                                <button className="btn btn-ghost btn-sm w-full gap-2" onClick={() => { navigate(`/chat/${providerId}`); onClose(); }}>
+                                    <MessageCircleIcon className="size-4" />Open Chat
+                                </button>
+                            )}
+                        </div>
+                    );
+            case "awaiting_balance":
+                return (
+                    <div className="space-y-2">
+                        {canChat && (
+                            <button className="btn btn-ghost btn-sm w-full gap-2" onClick={() => { navigate(`/chat/${providerId}`); onClose(); }}>
+                                <MessageCircleIcon className="size-4" />Open Chat
+                            </button>
+                        )}
+                        <button className="btn btn-primary w-full" onClick={() => goToPayment("balance")}>
+                            Pay Balance — ₱{appt.balanceAmount?.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                        </button>
+                    </div>
+                );
+            case "fully_paid":
+                if (appt.rating) {
+                    return (
+                        <div className="space-y-2">
+                            <p className="text-sm opacity-60">Review submitted. Thank you!</p>
+                            {canChat && (
+                                <button className="btn btn-ghost btn-sm w-full gap-2" onClick={() => { navigate(`/chat/${providerId}`); onClose(); }}>
+                                    <MessageCircleIcon className="size-4" />Open Chat
+                                </button>
+                            )}
+                        </div>
+                    );
+                }
+                return (
+                    <div className="space-y-3">
+                        {canChat && (
+                            <button className="btn btn-ghost btn-sm w-full gap-2" onClick={() => { navigate(`/chat/${providerId}`); onClose(); }}>
+                                <MessageCircleIcon className="size-4" />Open Chat
+                            </button>
+                        )}
+                        <p className="text-sm font-semibold">Leave a review:</p>
+                        <div className="flex gap-1">
+                            {[1, 2, 3, 4, 5].map((n) => (
+                                <button key={n} onClick={() => setReviewRating(n)}>
+                                    <StarIcon className={`w-7 h-7 ${n <= reviewRating ? "text-yellow-400 fill-yellow-400" : "text-base-content/30"}`} />
+                                </button>
+                            ))}
+                        </div>
+                        <textarea
+                            className="textarea textarea-bordered w-full text-sm resize-none"
+                            rows={3}
+                            placeholder="Share your experience..."
+                            value={reviewText}
+                            onChange={(e) => setReviewText(e.target.value)}
+                        />
+                        <button
+                            className="btn btn-primary w-full"
+                            disabled={!reviewRating || isReviewing}
+                            onClick={() => submitReview()}
+                        >
+                            Submit Review
+                        </button>
+                    </div>
+                );
+            case "cancelled":
+                return <p className="text-sm opacity-60">This appointment was cancelled.</p>;
+            case "rejected":
+                return (
+                    <p className="text-sm opacity-60">
+                        Appointment rejected.{appt.rejectionReason ? ` Reason: ${appt.rejectionReason}` : ""} Your deposit will be refunded.
+                    </p>
+                );
+            case "disputed":
+                return (
+                    <div className="space-y-2">
+                        <p className="text-sm opacity-60">Dispute filed. Awaiting admin resolution.</p>
+                        {canChat && (
+                            <button className="btn btn-ghost btn-sm w-full gap-2" onClick={() => { navigate(`/chat/${providerId}`); onClose(); }}>
+                                <MessageCircleIcon className="size-4" />Open Chat
+                            </button>
+                        )}
+                    </div>
+                );
+            case "resolved":
+                return <p className="text-sm opacity-60">Dispute resolved by admin.</p>;
+            default:
+                return null;
+        }
+    };
 
-    try {
-      setLoading(true);
-      const res = await axiosInstance.post("/booking/pay-deposit", {
-        appointmentId: appointment._id,
-        referenceNumber: gcashRef,
-      });
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-base-100 rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
+                <div className="flex items-center justify-between p-5 border-b border-base-300">
+                    <h2 className="text-lg font-bold">Appointment Details</h2>
+                    <div className="flex items-center gap-1">
+                        {(appt.doctorId?._id || appt.doctorId) && (
+                            <Link
+                                to={`/profile/${appt.doctorId?._id || appt.doctorId}`}
+                                className="btn btn-ghost btn-xs gap-1 opacity-60"
+                                onClick={onClose}
+                            >
+                                <UserIcon className="size-3" />Doctor Profile
+                            </Link>
+                        )}
+                        <button className="btn btn-ghost btn-sm btn-circle" onClick={onClose}>
+                            <XIcon className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
 
+                <div className="p-5 space-y-4">
+                    {/* Status */}
+                    <div className="flex items-center justify-between">
+                        <span className="text-sm opacity-60">Status</span>
+                        <span className="text-sm font-semibold">{STATUS_LABEL[appt.status] || appt.status}</span>
+                    </div>
 
-      if (res.data.success) {
-        toast.success(res.data.message || "Deposit payment submitted successfully"); // ✅ TOAST
-        appointment.status = "booked";
-        setTimeout(() => onClose(), 1500);
-      }
-    } catch (err) {
-      console.error("Error paying deposit:", err);
-      toast.error(err.response?.data?.message || "Failed to pay deposit"); // ✅ TOAST
-    } finally {
-      setLoading(false);
-    }
-  };
+                    {/* Schedule */}
+                    <div className="bg-base-200 rounded-xl p-4 space-y-1 text-sm">
+                        <p className="font-semibold">{fmt(appt.start)}</p>
+                        <p className="opacity-70">{fmtTime(appt.start)} – {fmtTime(appt.end)} ({durationMin} min)</p>
+                        <p className="opacity-70">{appt.virtual ? "Virtual / Online" : "In-Person"}</p>
+                    </div>
 
-  const handlePayBalance = async () => {
-    if (!balanceRef.trim()) {
-      toast.error("Please enter your GCash reference number for balance payment"); // ✅ TOAST
-      return;
-    }
+                    {/* Payment */}
+                    <div className="bg-base-200 rounded-xl p-4 space-y-2 text-sm">
+                        <div className="flex justify-between font-semibold">
+                            <span>Total</span>
+                            <span>₱{appt.amount?.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between opacity-60 text-xs">
+                            <span>Platform Fee (10%)</span>
+                            <span>₱{appt.platformFee?.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="divider my-1" />
+                        <div className="flex justify-between">
+                            <span className="opacity-70">Deposit (50%)</span>
+                            <span className={appt.depositPaid ? "text-success font-medium" : ""}>
+                                ₱{appt.depositAmount?.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                                {appt.depositPaid ? " ✓" : ""}
+                            </span>
+                        </div>
+                        {appt.virtual && (
+                            <div className="flex justify-between">
+                                <span className="opacity-70">Balance (50%)</span>
+                                <span className={appt.balancePaid ? "text-success font-medium" : ""}>
+                                    ₱{appt.balanceAmount?.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                                    {appt.balancePaid ? " ✓" : ""}
+                                </span>
+                            </div>
+                        )}
+                        {appt.depositRef && (
+                            <p className="text-xs opacity-50">Deposit ref: <span className="font-mono">{appt.depositRef}</span></p>
+                        )}
+                        {appt.balanceRef && (
+                            <p className="text-xs opacity-50">Balance ref: <span className="font-mono">{appt.balanceRef}</span></p>
+                        )}
+                    </div>
 
-    try {
-      setLoading(true);
-      const res = await axiosInstance.post("/booking/pay-remaining", {
-        appointmentId: appointment._id,
-        referenceNumber: balanceRef,
-      });
+                    {/* Main action area */}
+                    {renderActions()}
 
+                    {/* Appointment Files */}
+                    {appt._id && (
+                        <div className="pt-2 border-t border-base-300">
+                            <AppointmentFilesPanel
+                                appointmentId={appt._id}
+                                participantRole="patient"
+                                readOnly={["cancelled", "rejected"].includes(appt.status)}
+                            />
+                        </div>
+                    )}
 
-      if (res.data.success) {
-        toast.success(res.data.message || "Balance payment submitted successfully"); // ✅ TOAST
-        appointment.status = "fully_paid";
-        setTimeout(() => onClose(), 1500);
-      }
-    } catch (err) {
-      console.error("Error paying balance:", err);
-      toast.error(err.response?.data?.message || "Failed to pay balance"); // ✅ TOAST
-    } finally {
-      setLoading(false);
-    }
-  };
+                    {/* Files shared in chat */}
+                    {appt._id && appt.doctorId && (
+                        <ChatAttachmentsSection appointmentId={appt._id} />
+                    )}
 
-  const handleComplete = async () => {
-    try {
-      setLoading(true);
-      const res = await axiosInstance.post("/booking/complete-appointment", {
-        appointmentId: appointment._id,
-      });
-
-
-      // Update parent state or refresh data
-      if (onAppointmentUpdated) {
-        onAppointmentUpdated(res.data.appointment);
-      }
-    } catch (err) {
-      
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSubmitReview = async () => {
-    if (!rating) {
-      toast.error("Please select a rating"); // ✅ TOAST
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const res = await axiosInstance.post("/booking/submit-review", {
-        appointmentId: appointment._id,
-        rating,
-        review: review.trim() || "",
-      });
-
-
-      if (res.data.success) {
-        toast.success("Review submitted successfully"); // ✅ TOAST
-        setTimeout(() => onClose(), 1500);
-      }
-    } catch (err) {
-      console.error("Error submitting review:", err);
-      toast.error(err.response?.data?.message || "Failed to submit review"); // ✅ TOAST
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const renderActions = () => {
-    const { day, date, time } = formatDateTime(appointment.start);
-
-    switch (appointment.status) {
-      case "awaiting_deposit":
-        return (
-          <>
-            <div className="alert alert-info mb-4">
-              <span>Scan the QRCode and provide the reference number</span>
+                    {/* Dispute section */}
+                    {canDispute && !["disputed", "resolved"].includes(appt.status) && (
+                        <div className="pt-2 border-t border-base-300">
+                            {!showDisputeInput ? (
+                                <button className="btn btn-ghost btn-sm w-full gap-2 opacity-60" onClick={() => setShowDisputeInput(true)}>
+                                    <FlagIcon className="size-3.5" />File a Dispute
+                                </button>
+                            ) : (
+                                <div className="space-y-2">
+                                    <p className="text-xs opacity-60">Disputes must be filed within 8 hours of appointment start time.</p>
+                                    <textarea
+                                        className="textarea textarea-bordered w-full text-sm resize-none"
+                                        rows={3}
+                                        placeholder="Describe your complaint..."
+                                        value={disputeText}
+                                        onChange={(e) => setDisputeText(e.target.value)}
+                                    />
+                                    <div className="flex gap-2">
+                                        <button className="btn btn-ghost btn-sm flex-1" onClick={() => setShowDisputeInput(false)}>Back</button>
+                                        <button
+                                            className="btn btn-error btn-sm flex-1"
+                                            disabled={!disputeText.trim() || isDisputing}
+                                            onClick={() => dispute()}
+                                        >
+                                            Submit Dispute
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
-
-            {qrUrl && (
-              <div className="flex justify-center mb-4">
-                <img src={qrUrl} alt="GCash QR" className="w-48 h-48" />
-              </div>
-            )}
-
-            <input
-              type="text"
-              placeholder="Enter GCash Reference Number"
-              className="input input-bordered w-full mb-4"
-              value={gcashRef}
-              onChange={(e) => setGcashRef(e.target.value)}
-              disabled={loading}
-            />
-
-            <button
-              className="btn btn-primary btn-block"
-              onClick={handlePayDeposit}
-              disabled={loading || !gcashRef.trim()}
-            >
-              {loading ? "Processing..." : "Submit Deposit Payment"}
-            </button>
-          </>
-        );
-
-      case "confirmed":
-        return (
-          <div className="alert alert-success">
-            <span>Appointment confirmed! Waiting for appointment time...</span>
-          </div>
-        );
-
-      case "ongoing":
-        return (
-          <>
-            <div className="alert alert-info mb-4">
-              <span>Appointment is ongoing. Mark as complete when finished.</span>
-            </div>
-            <div className="flex gap-2">
-              <button
-                className="btn btn-primary flex-1"
-                onClick={handleAttend}
-                disabled={loading}
-              >
-                {loading ? "Processing..." : "Mark Attendance"}
-              </button>
-            </div>
-          </>
-        );
-
-      case "marked_complete":
-        return (
-          <>
-            <div className="alert alert-info mb-4">
-              <span>Appointment is ongoing. Mark as complete when finished.</span>
-            </div>
-            <button
-              className="btn btn-primary btn-block"
-              onClick={handleComplete}
-              disabled={loading}
-            >
-              {loading ? "Processing..." : "Mark as Complete"}
-            </button>
-          </>
-        );
-
-      case "completed":
-        return (
-          <>
-            <div className="alert alert-info mb-4">
-              <span>Please pay your remaining balance to fully complete this appointment.</span>
-            </div>
-
-            {qrUrl && (
-              <div className="flex justify-center mb-4">
-                <img src={qrUrl} alt="GCash QR" className="w-48 h-48" />
-              </div>
-            )}
-
-            <input
-              type="text"
-              placeholder="Enter GCash Reference Number for balance"
-              className="input input-bordered w-full mb-4"
-              value={balanceRef}
-              onChange={handleBalanceRefChange}
-              disabled={loading}
-            />
-
-            <button
-              className="btn btn-primary btn-block"
-              onClick={handlePayBalance}
-              disabled={loading || !balanceRef.trim()}
-            >
-              {loading ? "Processing..." : "Pay Balance"}
-            </button>
-          </>
-        );
-
-
-      case "confirm_fully_paid":
-        return (
-          <>
-            <div className="alert alert-success mb-4">
-              <span>Submit your review for this appointment:</span>
-            </div>
-
-            <div className="form-control mb-4">
-              <label className="label">
-                <span className="label-text">Rating (1-5)</span>
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="5"
-                className="input input-bordered"
-                value={rating}
-                onChange={(e) => setRating(Number(e.target.value))}
-                disabled={loading}
-              />
-            </div>
-
-            <div className="form-control mb-4">
-              <label className="label">
-                <span className="label-text">Review (optional)</span>
-              </label>
-              <textarea
-                className="textarea textarea-bordered"
-                placeholder="Write your review..."
-                value={review}
-                onChange={(e) => setReview(e.target.value)}
-                disabled={loading}
-                rows={4}
-              />
-            </div>
-
-            <button
-              className="btn btn-primary btn-block"
-              onClick={handleSubmitReview}
-              disabled={loading || !rating}
-            >
-              {loading ? "Submitting..." : "Submit Review"}
-            </button>
-          </>
-        );
-
-      default:
-        return (
-          <div className="alert alert-info">
-            <span>Status: {appointment.status}</span>
-          </div>
-        );
-    }
-  };
-
-  const { day, date, time } = formatDateTime(appointment.start);
-
-  return (
-    <div className="modal modal-open">
-      <div className="modal-box max-w-2xl">
-        <h2 className="text-lg font-bold mb-4">Appointment Details</h2>
-
-        {/* Doctor Info */}
-        <div className="mb-4">
-          {doctor ? (
-            <>
-              <h3 className="font-semibold">Dr. {doctor.firstName} {doctor.lastName}</h3>
-              {doctor.specialization && <p>Specialization: {doctor.specialization}</p>}
-            </>
-          ) : (
-            <p>Loading doctor information...</p>
-          )}
         </div>
-
-        {/* Appointment Info */}
-        <div className="space-y-2 mb-4 text-sm">
-          <p><strong>Day:</strong> {day}</p>
-          <p><strong>Date:</strong> {date}</p>
-          <p><strong>Time:</strong> {time}</p>
-          <p><strong>Duration:</strong> {getDuration()} minutes</p>
-          <p><strong>Deposit Price:</strong> ₱{appointment.paymentDeposit}</p>
-          <p><strong>Remaining Price:</strong> ₱{appointment.balanceAmount}</p>
-        </div>
-
-        {/* Actions */}
-        {renderActions()}
-
-        {/* Close Button */}
-        <div className="modal-action">
-          <button className="btn" onClick={onClose} disabled={loading}>
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default ViewPendingAppointmentPatientPopup;

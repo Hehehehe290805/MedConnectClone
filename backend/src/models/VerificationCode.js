@@ -26,6 +26,7 @@ const verificationCodeSchema = new mongoose.Schema({
             "update-email-new",
             "update-password",
             "permit-renewal",
+            "two_factor",
         ],
     },
     payload: {

@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router";
+import { useQuery } from "@tanstack/react-query";
 import useAuthUser from "../hooks/useAuthUser";
 import { BellIcon, BriefcaseMedicalIcon, LogOutIcon, UserIcon } from "lucide-react";
 import ThemeSelector from "./ThemeSelector";
 import useLogout from "../hooks/useLogout";
+import { getUnreadNotificationCount } from "../lib/api";
 
 const Navbar = () => {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -18,6 +20,14 @@ const Navbar = () => {
   // });
 
   const { logoutMutation } = useLogout();
+
+  const { data: unreadData } = useQuery({
+    queryKey: ["notificationUnreadCount"],
+    queryFn: getUnreadNotificationCount,
+    refetchInterval: 30_000,
+    enabled: Boolean(authUser),
+  });
+  const unreadCount = unreadData?.data?.count ?? 0;
 
   return (
     <nav className="bg-base-200 border-b border-base-300 sticky top-0 z-30 h-16 flex items-center">
@@ -37,8 +47,13 @@ const Navbar = () => {
 
           <div className="flex items-center gap-3 sm:gap-4 ml-auto">
             <Link to={"/notifications"}>
-              <button className="btn btn-ghost btn-circle">
+              <button className="btn btn-ghost btn-circle relative">
                 <BellIcon className="h-6 w-6 text-base-content opacity-70" />
+                {unreadCount > 0 && (
+                  <span className="badge badge-info badge-xs absolute top-1 right-1 pointer-events-none">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
               </button>
             </Link>
           </div>

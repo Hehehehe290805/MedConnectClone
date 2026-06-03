@@ -1,16 +1,12 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import useAuthUser from "../hooks/useAuthUser.js";
 import {
-  MapPinIcon,
-  UserIcon,
-  CalendarIcon,
-  GlobeIcon,
-  CreditCardIcon,
-  PhoneIcon,
-  AlertCircleIcon,
-  ArrowLeftIcon,
+  MapPinIcon, UserIcon, CalendarIcon, GlobeIcon, ArrowLeftIcon, StarIcon, XIcon,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
+import { useQuery } from "@tanstack/react-query";
+import ReviewsSection from "../components/ReviewsSection.jsx";
+import LinkifiedText from "../components/LinkifiedText.jsx";
 import { axiosInstance } from "../lib/axios.js";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -23,61 +19,40 @@ const PH_TZ = "Asia/Manila";
 const ProfilePage = () => {
   const { authUser } = useAuthUser();
   const navigate = useNavigate();
+  const [doctorSpecialties, setDoctorSpecialties] = useState([]);
+  const [showReviewsModal, setShowReviewsModal] = useState(false);
 
-  const [qrImageUrl, setQrImageUrl] = useState(null);
-  const [qrLoading, setQrLoading] = useState(false);
-  const [qrError, setQrError] = useState(false);
+  const isReviewable = ["doctor", "institute"].includes(authUser?.role);
+  const { data: reviewSummary } = useQuery({
+    queryKey: ["providerReviews", authUser?._id],
+    queryFn: () => axiosInstance.get(`/booking/reviews/${authUser._id}`).then(r => r.data?.data),
+    enabled: Boolean(authUser?._id && isReviewable),
+    staleTime: 2 * 60 * 1000,
+  });
 
-  // Fetch QR code when component mounts
   useEffect(() => {
-    const fetchQRCode = async () => {
-      if (!authUser?._id || !authUser?.gcash?.qrData) return;
+    if (authUser?.role === "doctor" && authUser?._id) {
+      axiosInstance.get(`/specialties/doctor/${authUser._id}`)
+        .then(res => setDoctorSpecialties(res.data.data?.specialties || []))
+        .catch(() => setDoctorSpecialties([]));
+    }
+  }, [authUser?._id, authUser?.role]);
 
-      try {
-        setQrLoading(true);
-        setQrError(false);
 
-        // Tell Axios you want a blob
-        const response = await axiosInstance.get(`/gcash-setup/gcash/qr/${authUser._id}`, {
-          responseType: "blob",
-        });
-
-        const imageUrl = URL.createObjectURL(response.data);
-        setQrImageUrl(imageUrl);
-      } catch (error) {
-        console.error("Error fetching QR code:", error);
-        setQrError(true);
-      } finally {
-        setQrLoading(false);
-      }
-    };
-
-    fetchQRCode();
-
-    // Cleanup function to revoke object URL
-    return () => {
-      if (qrImageUrl) {
-        URL.revokeObjectURL(qrImageUrl);
-      }
-    };
-  }, [authUser?._id]);
-
-  // Format date for display
   const formatDate = (dateString) => {
     if (!dateString) return "Not provided";
     return dayjs(dateString).tz(PH_TZ).format("MMMM D, YYYY");
   };
 
-  // Format phone number
-  const formatPhoneNumber = (number) => {
-    if (!number) return "Not provided";
-    return `+63 ${number}`;
-  };
-
-  // Capitalize first letter
   const capitalize = (str) => {
     if (!str) return "";
     return str.charAt(0).toUpperCase() + str.slice(1);
+  };
+
+  const formatAddress = (addr) => {
+    if (!addr) return "Not provided";
+    const parts = [addr.barangay, addr.city, addr.province].filter(Boolean);
+    return parts.length ? parts.join(", ") : "Not provided";
   };
 
   return (
@@ -110,61 +85,210 @@ const ProfilePage = () => {
               </div>
             </div>
             <h1 className="text-3xl font-bold mt-4">
-              {authUser?.firstName || "First"} {authUser?.lastName || "Last"}
+              {authUser?.role === "institute"
+                ? (authUser?.instituteName || "Institute")
+                : authUser?.role === "department"
+                  ? `${authUser?.technologistFirstName || ""} ${authUser?.technologistLastName || ""}`.trim() || "Department"
+                  : authUser?.role === "pharmacy"
+                    ? `${authUser?.pharmacistFirstName || ""} ${authUser?.pharmacistLastName || ""}`.trim() || "Pharmacy"
+                    : `${authUser?.firstName || "First"} ${authUser?.lastName || "Last"}`}
             </h1>
             <div className="badge badge-primary badge-lg mt-2">
               {capitalize(authUser?.role || "User")}
             </div>
+            {isReviewable && reviewSummary?.reviewCount > 0 && (
+              <button
+                onClick={() => setShowReviewsModal(true)}
+                className="flex items-center gap-1 mt-2 opacity-70 hover:opacity-100 transition-opacity"
+              >
+                <StarIcon className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+                <span className="text-sm font-medium">{reviewSummary.averageRating?.toFixed(1)}</span>
+                <span className="text-xs opacity-60">({reviewSummary.reviewCount} review{reviewSummary.reviewCount !== 1 ? "s" : ""})</span>
+              </button>
+            )}
+            {isReviewable && (
+              <button
+                onClick={() => setShowReviewsModal(true)}
+                className="btn btn-ghost btn-sm mt-2 gap-2"
+              >
+                <StarIcon className="size-4" />Check Reviews
+              </button>
+            )}
           </div>
         </div>
 
-        {/* PERSONAL INFORMATION CARD */}
-        <div className="card bg-base-200 shadow-xl">
-          <div className="card-body">
-            <h2 className="card-title text-2xl mb-4">Personal Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Date of Birth */}
-              <div className="flex items-start gap-3">
-                <CalendarIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
-                <div>
-                  <p className="text-sm opacity-70">Date of Birth</p>
-                  <p className="font-semibold">
-                    {formatDate(authUser?.birthDate)}
-                  </p>
+        {/* ROLE-SPECIFIC INFORMATION CARD */}
+        {authUser?.role === "institute" ? (
+          <div className="card bg-base-200 shadow-xl">
+            <div className="card-body">
+              <h2 className="card-title text-2xl mb-4">Institute Information</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex items-start gap-3">
+                  <UserIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm opacity-70">Institute Name</p>
+                    <p className="font-semibold">{authUser?.instituteName || "Not provided"}</p>
+                  </div>
                 </div>
-              </div>
-
-              {/* Gender */}
-              <div className="flex items-start gap-3">
-                <UserIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
-                <div>
-                  <p className="text-sm opacity-70">Gender</p>
-                  <p className="font-semibold">
-                    {capitalize(authUser?.sex) || "Not specified"}
-                  </p>
+                <div className="flex items-start gap-3">
+                  <UserIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm opacity-70">Type</p>
+                    <span className="badge badge-primary capitalize">{authUser?.instituteType || "—"}</span>
+                  </div>
                 </div>
-              </div>
-
-              {/* Location */}
-              <div className="flex items-start gap-3 md:col-span-2">
-                <MapPinIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
-                <div>
-                  <p className="text-sm opacity-70">Location</p>
-                  <p className="font-semibold">
-                    {authUser?.location || "Not provided"}
-                  </p>
+                <div className="flex items-start gap-3">
+                  <UserIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm opacity-70">Contact Person</p>
+                    <p className="font-semibold">{[authUser?.contactFirstName, authUser?.contactLastName].filter(Boolean).join(" ") || "Not provided"}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <UserIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm opacity-70">Licensing Agency</p>
+                    <p className="font-semibold">{authUser?.licensingAgency || "Not provided"}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 md:col-span-2">
+                  <MapPinIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm opacity-70">Location</p>
+                    <p className="font-semibold">{formatAddress(authUser?.address)}</p>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        ) : authUser?.role === "department" ? (
+          <div className="card bg-base-200 shadow-xl">
+            <div className="card-body">
+              <h2 className="card-title text-2xl mb-4">Technologist Information</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex items-start gap-3">
+                  <CalendarIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm opacity-70">Date of Birth</p>
+                    <p className="font-semibold">{formatDate(authUser?.birthDate)}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <UserIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm opacity-70">Sex</p>
+                    <p className="font-semibold">{capitalize(authUser?.sex) || "Not specified"}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <UserIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm opacity-70">Institute</p>
+                    <p className="font-semibold">{authUser?.rootInstitute?.instituteName || "Unknown"}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <MapPinIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm opacity-70">Location</p>
+                    <p className="font-semibold">{formatAddress(authUser?.address)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : authUser?.role === "pharmacy" ? (
+          <div className="card bg-base-200 shadow-xl">
+            <div className="card-body">
+              <h2 className="card-title text-2xl mb-4">Pharmacist Information</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex items-start gap-3">
+                  <CalendarIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm opacity-70">Date of Birth</p>
+                    <p className="font-semibold">{formatDate(authUser?.birthDate)}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <UserIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm opacity-70">Sex</p>
+                    <p className="font-semibold">{capitalize(authUser?.sex) || "Not specified"}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 md:col-span-2">
+                  <MapPinIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm opacity-70">Location</p>
+                    <p className="font-semibold">{formatAddress(authUser?.address)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Patient / Doctor — original personal info */
+          <div className="card bg-base-200 shadow-xl">
+            <div className="card-body">
+              <h2 className="card-title text-2xl mb-4">Personal Information</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex items-start gap-3">
+                  <CalendarIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm opacity-70">Date of Birth</p>
+                    <p className="font-semibold">{formatDate(authUser?.birthDate)}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <UserIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm opacity-70">Sex</p>
+                    <p className="font-semibold">{capitalize(authUser?.sex) || "Not specified"}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <CalendarIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm opacity-70">Joined</p>
+                    <p className="font-semibold">{formatDate(authUser?.createdAt)}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 md:col-span-2">
+                  <MapPinIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm opacity-70">Location</p>
+                    <p className="font-semibold">{formatAddress(authUser?.address)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SPECIALTIES — doctors only */}
+        {authUser?.role === "doctor" && doctorSpecialties.length > 0 && (
+          <div className="card bg-base-200 shadow-xl">
+            <div className="card-body">
+              <h2 className="card-title text-2xl mb-4">
+                <StarIcon className="w-6 h-6" />Specialties
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                {doctorSpecialties.map(s => (
+                  <span key={s._id} className={`badge badge-lg ${s.type === "subspecialty" ? "badge-secondary" : "badge-primary"}`}>
+                    {s.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* BIO CARD */}
         {authUser?.bio && (
           <div className="card bg-base-200 shadow-xl">
             <div className="card-body">
               <h2 className="card-title text-2xl mb-2">About Me</h2>
-              <p className="text-base leading-relaxed">{authUser.bio}</p>
+              <p className="text-base leading-relaxed"><LinkifiedText text={authUser.bio} /></p>
             </div>
           </div>
         )}
@@ -188,80 +312,24 @@ const ProfilePage = () => {
           </div>
         )}
 
-        {/* GCASH PAYMENT INFORMATION CARD */}
-        {authUser?.gcash &&
-          (authUser.gcash.accountName ||
-            authUser.gcash.accountNumber ||
-            authUser.gcash.qrData) && (
-            <div className="card bg-base-200 shadow-xl">
-              <div className="card-body">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="card-title text-2xl">
-                    <CreditCardIcon className="w-6 h-6" />
-                    GCash Payment Information
-                  </h2>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Account Name */}
-                  <div className="flex items-start gap-3">
-                    <UserIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm opacity-70">Account Name</p>
-                      <p className="font-semibold">
-                        {authUser.gcash.accountName || "Not provided"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Phone Number */}
-                  <div className="flex items-start gap-3">
-                    <PhoneIcon className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm opacity-70">Phone Number</p>
-                      <p className="font-semibold">
-                        {formatPhoneNumber(authUser.gcash.accountNumber)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* QR Code */}
-                  {authUser.gcash.qrData && (
-                    <div className="md:col-span-2">
-                      <p className="text-sm opacity-70 mb-3">QR Code</p>
-                      <div className="flex justify-center md:justify-start">
-                        <div className="border-4 border-base-300 rounded-lg p-2 bg-white inline-block">
-                          {qrLoading ? (
-                            <div className="w-48 h-48 flex items-center justify-center">
-                              <span className="loading loading-spinner loading-lg text-primary"></span>
-                            </div>
-                          ) : qrError ? (
-                            <div className="w-48 h-48 flex flex-col items-center justify-center gap-2 text-error">
-                              <AlertCircleIcon className="w-8 h-8" />
-                              <span className="text-sm text-center px-4">
-                                Unable to load QR code
-                              </span>
-                            </div>
-                          ) : qrImageUrl ? (
-                            <img
-                              src={qrImageUrl}
-                              alt="GCash QR Code"
-                              className="w-48 h-48 object-contain"
-                            />
-                          ) : (
-                            <div className="w-48 h-48 flex items-center justify-center">
-                              <span className="loading loading-spinner loading-lg text-primary"></span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
       </div>
+
+      {/* Reviews Modal */}
+      {showReviewsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowReviewsModal(false)}>
+          <div className="bg-base-100 rounded-xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-base-300">
+              <h3 className="font-semibold">Reviews</h3>
+              <button className="btn btn-ghost btn-sm btn-circle" onClick={() => setShowReviewsModal(false)}>
+                <XIcon className="size-4" />
+              </button>
+            </div>
+            <div className="overflow-y-auto">
+              <ReviewsSection providerId={authUser._id} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

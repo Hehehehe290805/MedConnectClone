@@ -187,7 +187,7 @@ const OnboardingInstitute = ({ email, role, onBack, onSuccess }) => {
                         setStep(3);
                     }} className="space-y-4">
                         <PhoneField phoneNumber={form.phoneNumber} phoneType={form.phoneType} onNumberChange={(val) => update("phoneNumber", val)} onTypeChange={(val) => update("phoneType", val)} />
-                        <AddressFields value={form.address} onChange={(val) => update("address", val)} errors={{}} cityRef={cityRef} />
+                        <AddressFields value={form.address} onChange={(val) => update("address", val)} errors={{}} cityRef={cityRef} label="Business Address" />
                         {form.instituteType && (
                             <DepartmentTypeField
                                 value={form.departments}

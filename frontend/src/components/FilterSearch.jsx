@@ -1,337 +1,278 @@
 import { useState, useRef, useEffect } from "react";
 import { FilterIcon, XIcon, ChevronDownIcon } from "lucide-react";
-import {
-  SEX,
-  LANGUAGES,
-} from "../constants/index.js";
+import { useQuery } from "@tanstack/react-query";
+import { axiosInstance } from "../lib/axios";
+import { LANGUAGES } from "../constants/index.js";
 
-const FilterSearch = ({ onFilterChange }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef(null);
-  const [matchMode, setMatchMode] = useState("any"); // "any" or "all"
+const fetchSpecialties = () => axiosInstance.get("/specialties").then(r => r.data?.items || []);
+const fetchSubspecialties = (specialtyId) =>
+    axiosInstance.get(`/specialties/${specialtyId}/subspecialties`).then(r => r.data?.items || []);
+const fetchDeptTypes = () => axiosInstance.get("/services/department-types").then(r => r.data?.items || []);
+const fetchServices = (deptTypeId) =>
+    axiosInstance.get(`/services/${deptTypeId}/services`).then(r => r.data?.items || []);
 
-  // Checkbox filters
-  const [selectedRoles, setSelectedRoles] = useState([]);
-  const [selectedGenders, setSelectedGenders] = useState([]);
-  const [selectedLanguages, setSelectedLanguages] = useState([]);
-  const [selectedLocations, setSelectedLocations] = useState([]);
+const FilterSearch = ({ mode = "doctor", onFilterChange }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef(null);
 
-  // Text input filters
-  const [profession, setProfession] = useState("");
-  const [minPrice, setMinPrice] = useState("");
-  const [maxPrice, setMaxPrice] = useState("");
-  const [service, setService] = useState("");
-  const [specialty, setSpecialty] = useState("");
-  const [subspecialty, setSubspecialty] = useState("");
+    // ── Doctor filters ─────────────────────────────────────────────────────
+    const [sex, setSex] = useState("");
+    const [specialtyId, setSpecialtyId] = useState("");
+    const [subspecialtyId, setSubspecialtyId] = useState("");
+    const [selectedLanguages, setSelectedLanguages] = useState([]);
+    const [minPrice, setMinPrice] = useState("");
+    const [maxPrice, setMaxPrice] = useState("");
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
+    // ── Institute filters ──────────────────────────────────────────────────
+    const [instituteType, setInstituteType] = useState("");
+    const [departmentTypeId, setDepartmentTypeId] = useState("");
+    const [serviceId, setServiceId] = useState("");
+
+    // Specialty data (doctor mode)
+    const { data: specialties = [] } = useQuery({
+        queryKey: ["specialties-search"],
+        queryFn: fetchSpecialties,
+        enabled: mode === "doctor",
+        staleTime: 5 * 60 * 1000,
+    });
+
+    const { data: subspecialties = [] } = useQuery({
+        queryKey: ["subspecialties-search", specialtyId],
+        queryFn: () => fetchSubspecialties(specialtyId),
+        enabled: mode === "doctor" && Boolean(specialtyId),
+    });
+
+    // Department type data (institute mode)
+    const { data: deptTypes = [] } = useQuery({
+        queryKey: ["dept-types-search"],
+        queryFn: fetchDeptTypes,
+        enabled: mode === "institute",
+        staleTime: 5 * 60 * 1000,
+    });
+
+    const { data: services = [] } = useQuery({
+        queryKey: ["services-search", departmentTypeId],
+        queryFn: () => fetchServices(departmentTypeId),
+        enabled: mode === "institute" && Boolean(departmentTypeId),
+    });
+
+    // Close on outside click
+    useEffect(() => {
+        const handler = (e) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setIsOpen(false);
+        };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, []);
+
+    // Notify parent
+    useEffect(() => {
+        if (mode === "doctor") {
+            onFilterChange({ sex, specialtyId, subspecialtyId, languages: selectedLanguages, minPrice, maxPrice });
+        } else {
+            onFilterChange({ type: instituteType, departmentTypeId, serviceId, minPrice, maxPrice });
+        }
+    }, [mode, sex, specialtyId, subspecialtyId, selectedLanguages, minPrice, maxPrice, instituteType, departmentTypeId, serviceId]);
+
+    const clearAll = () => {
+        setSex(""); setSpecialtyId(""); setSubspecialtyId(""); setSelectedLanguages([]);
+        setMinPrice(""); setMaxPrice("");
+        setInstituteType(""); setDepartmentTypeId(""); setServiceId("");
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
-  // Apply filters
-  useEffect(() => {
-    const filters = {
-      matchMode, // Include match mode in filters
-      roles: selectedRoles,
-      genders: selectedGenders,
-      languages: selectedLanguages,
-      locations: selectedLocations,
-      profession: profession.trim(),
-      minPrice: minPrice ? parseFloat(minPrice) : null,
-      maxPrice: maxPrice ? parseFloat(maxPrice) : null,
-      service: service.trim(),
-      specialty: specialty.trim(),
-      subspecialty: subspecialty.trim(),
-    };
-    onFilterChange(filters);
-  }, [
-    matchMode,
-    selectedRoles,
-    selectedGenders,
-    selectedLanguages,
-    selectedLocations,
-    profession,
-    minPrice,
-    maxPrice,
-    service,
-    specialty,
-    subspecialty,
-    onFilterChange,
-  ]);
+    const toggleLanguage = (lang) =>
+        setSelectedLanguages((prev) =>
+            prev.includes(lang) ? prev.filter((l) => l !== lang) : [...prev, lang]
+        );
 
-  // Toggle checkbox selection
-  const toggleSelection = (item, selected, setSelected) => {
-    if (selected.includes(item)) {
-      setSelected(selected.filter((i) => i !== item));
-    } else {
-      setSelected([...selected, item]);
-    }
-  };
+    const activeCount = mode === "doctor"
+        ? (sex ? 1 : 0) + (specialtyId ? 1 : 0) + (subspecialtyId ? 1 : 0) + selectedLanguages.length + (minPrice || maxPrice ? 1 : 0)
+        : (instituteType ? 1 : 0) + (departmentTypeId ? 1 : 0) + (serviceId ? 1 : 0) + (minPrice || maxPrice ? 1 : 0);
 
-  // Clear all filters
-  const clearFilters = () => {
-    setSelectedRoles([]);
-    setSelectedGenders([]);
-    setSelectedLanguages([]);
-    setSelectedLocations([]);
-    setProfession("");
-    setMinPrice("");
-    setMaxPrice("");
-    setService("");
-    setSpecialty("");
-    setSubspecialty("");
-  };
+    return (
+        <div className="relative" ref={dropdownRef}>
+            <button className="btn btn-outline gap-2" onClick={() => setIsOpen(!isOpen)}>
+                <FilterIcon className="w-5 h-5" />
+                Filters
+                {activeCount > 0 && <div className="badge badge-primary badge-sm">{activeCount}</div>}
+                <ChevronDownIcon className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+            </button>
 
-  // Count active filters
-  const activeFilterCount =
-    selectedRoles.length +
-    selectedGenders.length +
-    selectedLanguages.length +
-    selectedLocations.length +
-    (profession ? 1 : 0) +
-    (minPrice || maxPrice ? 1 : 0) +
-    (service ? 1 : 0) +
-    (specialty ? 1 : 0) +
-    (subspecialty ? 1 : 0);
+            {isOpen && (
+                <div className="absolute right-0 mt-2 w-80 bg-base-200 rounded-lg shadow-xl z-50 max-h-[600px] overflow-y-auto">
+                    <div className="p-4 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h3 className="font-bold text-lg">Filters</h3>
+                            <div className="flex gap-2">
+                                <button className="btn btn-ghost btn-xs" disabled={activeCount === 0} onClick={clearAll}>
+                                    Clear All
+                                </button>
+                                <button className="btn btn-ghost btn-sm btn-circle" onClick={() => setIsOpen(false)}>
+                                    <XIcon className="w-4 h-4" />
+                                </button>
+                            </div>
+                        </div>
 
-  return (
-    <div className="relative" ref={dropdownRef}>
-      {/* Filter Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="btn btn-outline gap-2"
-      >
-        <FilterIcon className="w-5 h-5" />
-        Filters
-        {activeFilterCount > 0 && (
-          <div className="badge badge-primary badge-sm">{activeFilterCount}</div>
-        )}
-        <ChevronDownIcon
-          className={`w-4 h-4 transition-transform ${
-            isOpen ? "rotate-180" : ""
-          }`}
-        />
-      </button>
+                        {/* ── DOCTOR FILTERS ─────────────────────────────── */}
+                        {mode === "doctor" && (
+                            <>
+                                {/* Sex */}
+                                <div>
+                                    <p className="font-semibold mb-2 text-sm">Sex</p>
+                                    <div className="flex gap-2">
+                                        {["", "male", "female"].map((v) => (
+                                            <button
+                                                key={v}
+                                                className={`btn btn-xs flex-1 ${sex === v ? "btn-primary" : "btn-ghost"}`}
+                                                onClick={() => setSex(v)}
+                                            >
+                                                {v === "" ? "Any" : v.charAt(0).toUpperCase() + v.slice(1)}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
 
-      {/* Filter Dropdown */}
-      {isOpen && (
-        <div className="absolute right-0 mt-2 w-96 bg-base-200 rounded-lg shadow-xl z-50 max-h-[600px] overflow-y-auto">
-          <div className="p-4 space-y-4">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-bold text-lg">Filters</h3>
-              <div className="flex gap-2">
-                <button
-                  onClick={clearFilters}
-                  className="btn btn-ghost btn-xs"
-                  disabled={activeFilterCount === 0}
-                >
-                  Clear All
-                </button>
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="btn btn-ghost btn-sm btn-circle"
-                >
-                  <XIcon className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
+                                <div className="divider my-1" />
 
-            {/* Match Mode Toggle */}
-            <div className="bg-base-300 p-3 rounded-lg">
-              <p className="text-sm font-semibold mb-2">Filter Mode</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setMatchMode("any")}
-                  className={`btn btn-sm flex-1 ${
-                    matchMode === "any" ? "btn-primary" : "btn-ghost"
-                  }`}
-                >
-                  Match Any
-                </button>
-                <button
-                  onClick={() => setMatchMode("all")}
-                  className={`btn btn-sm flex-1 ${
-                    matchMode === "all" ? "btn-primary" : "btn-ghost"
-                  }`}
-                >
-                  Match All
-                </button>
-              </div>
-              <p className="text-xs opacity-70 mt-2">
-                {matchMode === "any"
-                  ? "Show results that match at least one selected filter"
-                  : "Show only results that match all selected filters"}
-              </p>
-            </div>
+                                {/* Specialty */}
+                                <div>
+                                    <p className="font-semibold mb-2 text-sm">Specialty</p>
+                                    <select
+                                        className="select select-bordered select-sm w-full"
+                                        value={specialtyId}
+                                        onChange={(e) => { setSpecialtyId(e.target.value); setSubspecialtyId(""); }}
+                                    >
+                                        <option value="">Any specialty</option>
+                                        {specialties.map((s) => (
+                                            <option key={s._id} value={s._id}>{s.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
 
-            <div className="divider my-2"></div>
+                                {/* Subspecialty */}
+                                {specialtyId && (
+                                    <div>
+                                        <p className="font-semibold mb-2 text-sm">Subspecialty</p>
+                                        <select
+                                            className="select select-bordered select-sm w-full"
+                                            value={subspecialtyId}
+                                            onChange={(e) => setSubspecialtyId(e.target.value)}
+                                        >
+                                            <option value="">Any subspecialty</option>
+                                            {subspecialties.map((s) => (
+                                                <option key={s._id} value={s._id}>{s.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
 
-            {/* Role Filter */}
-            <div>
-              <p className="font-semibold mb-2">Role</p>
-              <div className="space-y-2">
-                {ROLES.map((role) => (
-                  <label key={role} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="checkbox checkbox-primary checkbox-sm"
-                      checked={selectedRoles.includes(role)}
-                      onChange={() =>
-                        toggleSelection(role, selectedRoles, setSelectedRoles)
-                      }
-                    />
-                    <span className="text-sm">{role}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+                                <div className="divider my-1" />
 
-            <div className="divider my-2"></div>
+                                {/* Languages */}
+                                <div>
+                                    <p className="font-semibold mb-2 text-sm">Languages</p>
+                                    <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                                        {LANGUAGES.map((lang) => (
+                                            <label key={lang} className="flex items-center gap-2 cursor-pointer text-sm">
+                                                <input
+                                                    type="checkbox"
+                                                    className="checkbox checkbox-primary checkbox-xs"
+                                                    checked={selectedLanguages.includes(lang)}
+                                                    onChange={() => toggleLanguage(lang)}
+                                                />
+                                                {lang}
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                            </>
+                        )}
 
-            {/* Gender Filter */}
-            <div>
-              <p className="font-semibold mb-2">Gender</p>
-              <div className="space-y-2">
-                {SEX.map((gender) => (
-                  <label key={gender} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="checkbox checkbox-primary checkbox-sm"
-                      checked={selectedGenders.includes(gender)}
-                      onChange={() =>
-                        toggleSelection(gender, selectedGenders, setSelectedGenders)
-                      }
-                    />
-                    <span className="text-sm">{gender}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+                        {/* ── INSTITUTE FILTERS ──────────────────────────── */}
+                        {mode === "institute" && (
+                            <>
+                                {/* Type */}
+                                <div>
+                                    <p className="font-semibold mb-2 text-sm">Type</p>
+                                    <div className="flex gap-2">
+                                        {["", "clinic", "hospital"].map((v) => (
+                                            <button
+                                                key={v}
+                                                className={`btn btn-xs flex-1 ${instituteType === v ? "btn-primary" : "btn-ghost"}`}
+                                                onClick={() => setInstituteType(v)}
+                                            >
+                                                {v === "" ? "All" : v.charAt(0).toUpperCase() + v.slice(1)}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
 
-            <div className="divider my-2"></div>
+                                <div className="divider my-1" />
 
-            {/* Languages Filter */}
-            <div>
-              <p className="font-semibold mb-2">Languages</p>
-              <div className="space-y-2 max-h-40 overflow-y-auto">
-                {LANGUAGES.map((language) => (
-                  <label key={language} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="checkbox checkbox-primary checkbox-sm"
-                      checked={selectedLanguages.includes(language)}
-                      onChange={() =>
-                        toggleSelection(
-                          language,
-                          selectedLanguages,
-                          setSelectedLanguages
-                        )
-                      }
-                    />
-                    <span className="text-sm">{language}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+                                {/* Department Type */}
+                                <div>
+                                    <p className="font-semibold mb-2 text-sm">Department Type</p>
+                                    <select
+                                        className="select select-bordered select-sm w-full"
+                                        value={departmentTypeId}
+                                        onChange={(e) => { setDepartmentTypeId(e.target.value); setServiceId(""); }}
+                                    >
+                                        <option value="">Any department</option>
+                                        {deptTypes.map((d) => (
+                                            <option key={d._id} value={d._id}>{d.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
 
-            <div className="divider my-2"></div>
+                                {/* Service */}
+                                {departmentTypeId && (
+                                    <div>
+                                        <p className="font-semibold mb-2 text-sm">Service</p>
+                                        <select
+                                            className="select select-bordered select-sm w-full"
+                                            value={serviceId}
+                                            onChange={(e) => setServiceId(e.target.value)}
+                                        >
+                                            <option value="">Any service</option>
+                                            {services.map((s) => (
+                                                <option key={s._id} value={s._id}>{s.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+                            </>
+                        )}
 
-            {/* Location Filter */}
-            <div>
-              <p className="font-semibold mb-2">Location</p>
-              <input
-                type="text"
-                placeholder="e.g., Manila, Quezon City"
-                value={selectedLocations[0] || ""}
-                onChange={(e) => setSelectedLocations(e.target.value ? [e.target.value] : [])}
-                className="input input-bordered input-sm w-full"
-              />
-            </div>
+                        <div className="divider my-1" />
 
-            <div className="divider my-2"></div>
-
-            {/* Profession Filter */}
-            <div>
-              <p className="font-semibold mb-2">Profession</p>
-              <input
-                type="text"
-                placeholder="e.g., Cardiologist"
-                value={profession}
-                onChange={(e) => setProfession(e.target.value)}
-                className="input input-bordered input-sm w-full"
-              />
-            </div>
-
-            {/* Price Range Filter */}
-            <div>
-              <p className="font-semibold mb-2">Price Range</p>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  placeholder="Min"
-                  value={minPrice}
-                  onChange={(e) => setMinPrice(e.target.value)}
-                  className="input input-bordered input-sm w-full"
-                />
-                <span className="self-center">-</span>
-                <input
-                  type="number"
-                  placeholder="Max"
-                  value={maxPrice}
-                  onChange={(e) => setMaxPrice(e.target.value)}
-                  className="input input-bordered input-sm w-full"
-                />
-              </div>
-            </div>
-
-            {/* Service Filter */}
-            <div>
-              <p className="font-semibold mb-2">Service</p>
-              <input
-                type="text"
-                placeholder="e.g., Consultation"
-                value={service}
-                onChange={(e) => setService(e.target.value)}
-                className="input input-bordered input-sm w-full"
-              />
-            </div>
-
-            {/* Specialty Filter */}
-            <div>
-              <p className="font-semibold mb-2">Specialty</p>
-              <input
-                type="text"
-                placeholder="e.g., Cardiology"
-                value={specialty}
-                onChange={(e) => setSpecialty(e.target.value)}
-                className="input input-bordered input-sm w-full"
-              />
-            </div>
-
-            {/* Subspecialty Filter */}
-            <div>
-              <p className="font-semibold mb-2">Subspecialty</p>
-              <input
-                type="text"
-                placeholder="e.g., Interventional Cardiology"
-                value={subspecialty}
-                onChange={(e) => setSubspecialty(e.target.value)}
-                className="input input-bordered input-sm w-full"
-              />
-            </div>
-          </div>
+                        {/* Price range (both modes) */}
+                        <div>
+                            <p className="font-semibold mb-2 text-sm">Price Range (₱)</p>
+                            <div className="flex gap-2 items-center">
+                                <input
+                                    type="number"
+                                    placeholder="Min"
+                                    value={minPrice}
+                                    onChange={(e) => setMinPrice(e.target.value)}
+                                    className="input input-bordered input-sm w-full"
+                                    min={0}
+                                />
+                                <span className="text-sm opacity-60">–</span>
+                                <input
+                                    type="number"
+                                    placeholder="Max"
+                                    value={maxPrice}
+                                    onChange={(e) => setMaxPrice(e.target.value)}
+                                    className="input input-bordered input-sm w-full"
+                                    min={0}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
-      )}
-    </div>
-  );
+    );
 };
 
 export default FilterSearch;

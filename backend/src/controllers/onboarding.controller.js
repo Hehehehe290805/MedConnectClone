@@ -1,10 +1,14 @@
 import mongoose from "mongoose";
-import User, { Patient, Doctor, Pharmacy, Institute } from "../models/User.js";
+import User, { Patient, Doctor, Pharmacy, Institute, Department } from "../models/User.js";
 import Admin from "../models/Admin.js";
 import EmailRegistry from "../models/EmailRegistry.js";
+import DepartmentType from "../models/DepartmentType.js";
 import { upsertStreamUser } from "../lib/stream.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
+import { notify, notifyAllAdmins } from "../services/notification.service.js";
+
+const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
 // Promotes a base User doc to a discriminator model by deleting and recreating
 // with the same _id. EmailRegistry is untouched — ref stays valid.
@@ -131,6 +135,11 @@ export const onboardAsDoctor = asyncHandler(async (req, res) => {
         await session.commitTransaction();
         await streamUpsert(promoted);
 
+        // Alert admins that a new doctor account needs review
+        notifyAllAdmins("new_account_pending", "New Doctor Account Pending",
+            `Dr. ${promoted.firstName} ${promoted.lastName} has submitted their account for review.`
+        );
+
         return sendSuccess(res, 200, "Onboarding submitted for approval", { user: promoted });
     } catch (err) {
         await session.abortTransaction();
@@ -187,6 +196,11 @@ export const onboardAsPharmacy = asyncHandler(async (req, res) => {
         await session.commitTransaction();
         await streamUpsert(promoted);
 
+        // Alert admins that a new pharmacy account needs review
+        notifyAllAdmins("new_account_pending", "New Pharmacy Account Pending",
+            `${promoted.pharmacyName} has submitted their account for review.`
+        );
+
         return sendSuccess(res, 200, "Onboarding submitted for approval", { user: promoted });
     } catch (err) {
         await session.abortTransaction();
@@ -207,6 +221,7 @@ export const onboardAsInstitute = asyncHandler(async (req, res) => {
         instituteName, instituteType, bio, profilePic,
         contactFirstName, contactLastName,
         phoneNumber, phoneType, address,
+        departments,
         businessPermit, businessPermitExpiration,
         licensingAgency,
         constructionPermit, constructionPermitExpiration,
@@ -236,6 +251,7 @@ export const onboardAsInstitute = asyncHandler(async (req, res) => {
             phoneNumber,
             phoneType,
             address,
+            departments,
             businessPermit,
             businessPermitExpiration,
             licensingAgency,
@@ -248,7 +264,112 @@ export const onboardAsInstitute = asyncHandler(async (req, res) => {
         await session.commitTransaction();
         await streamUpsert(promoted);
 
+        // Alert admins that a new institute account needs review
+        notifyAllAdmins("new_account_pending", "New Institute Account Pending",
+            `${promoted.instituteName} has submitted their account for review.`
+        );
+
         return sendSuccess(res, 200, "Onboarding submitted for approval", { user: promoted });
+    } catch (err) {
+        await session.abortTransaction();
+        throw err;
+    } finally {
+        session.endSession();
+    }
+});
+
+export const onboardAsDepartment = asyncHandler(async (req, res) => {
+    const instituteUser = req.user;
+    if (instituteUser.role !== "institute") return sendError(res, 403, "Only institutes can create department accounts");
+    if (instituteUser.status === "notOnBoarded") return sendError(res, 400, "Complete institute onboarding before creating departments");
+
+    const {
+        deptEmail, deptPassword, confirmPassword,
+        technologistFirstName, technologistLastName, sex, birthDate, bio,
+        profilePic, phoneNumber, phoneType, address,
+        departmentTypeId,
+        technologistLicenseNumber, technologistLicenseExpiration,
+        technologistLicenseImage, technologistLegalIDImage,
+    } = req.body;
+
+    if (deptPassword !== confirmPassword) return sendError(res, 400, "Passwords do not match");
+    if (!passwordRegex.test(deptPassword)) return sendError(res, 400, "Password must be at least 8 characters and include 1 uppercase, 1 lowercase, 1 number, and 1 symbol (@$!%*?&)");
+
+    const hasDeptType = instituteUser.departments.some((d) => d.toString() === departmentTypeId);
+    if (!hasDeptType) return sendError(res, 400, "Department type is not in this institute's registered departments");
+
+    const existingEmail = await EmailRegistry.findOne({ email: deptEmail });
+    if (existingEmail) return sendError(res, 400, "Email already registered");
+
+    const deptType = await DepartmentType.findById(departmentTypeId);
+    if (!deptType) return sendError(res, 404, "Department type not found");
+
+    const count = await User.countDocuments({ __t: "Department", departmentType: departmentTypeId });
+    const seq = String(count + 1).padStart(3, "0");
+    const departmentId = `${seq}-${deptType.name}`;
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const deptUser = new Department({
+            email: deptEmail,
+            password: deptPassword,
+            role: "department",
+            status: "onBoarded",
+            rootInstitute: instituteUser._id,
+            departmentType: departmentTypeId,
+            departmentId,
+            technologistFirstName,
+            technologistLastName,
+            sex,
+            birthDate,
+            bio,
+            profilePic,
+            phoneNumber,
+            phoneType,
+            address,
+            technologistLicenseNumber,
+            technologistLicenseExpiration,
+            technologistLicenseImage,
+            technologistLegalIDImage,
+        });
+        await deptUser.save({ session });
+
+        await EmailRegistry.create([{
+            email: deptEmail,
+            registrant: deptUser._id,
+            registrantModel: "User",
+        }], { session });
+
+        await Institute.findByIdAndUpdate(
+            instituteUser._id,
+            { $push: { departmentAccounts: deptUser._id } },
+            { session }
+        );
+
+        await session.commitTransaction();
+
+        try {
+            await upsertStreamUser({
+                id: deptUser._id.toString(),
+                name: `${technologistFirstName} ${technologistLastName}`.trim(),
+                image: profilePic?.url || "",
+            });
+        } catch (err) {
+            console.error("Stream upsert error:", err.message);
+        }
+
+        // Notify the institute owner that their new department sub-account is under review
+        notify(instituteUser._id, "new_account_pending", "Department Account Submitted",
+            `Your department account for ${technologistFirstName} ${technologistLastName} has been created and is pending admin approval.`
+        );
+        // Alert admins about the new department account
+        notifyAllAdmins("new_account_pending", "New Department Account Pending",
+            `A new department sub-account (${technologistFirstName} ${technologistLastName}) has been created and needs review.`
+        );
+
+        return sendSuccess(res, 201, "Department account created successfully", { department: deptUser });
     } catch (err) {
         await session.abortTransaction();
         throw err;
@@ -272,6 +393,11 @@ export const onboardAsAdmin = asyncHandler(async (req, res) => {
         { firstName, lastName, phoneNumber, phoneType, profilePic, status: "pending" },
         { new: true, runValidators: true }
     ).select("-password");
+
+    // Alert existing admins that a new admin account needs peer approval
+    notifyAllAdmins("new_account_pending", "New Admin Account Pending",
+        `${updated.firstName} ${updated.lastName} has submitted an admin account for review.`
+    );
 
     return sendSuccess(res, 200, "Admin onboarding submitted for approval", { user: updated });
 });

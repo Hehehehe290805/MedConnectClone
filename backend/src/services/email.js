@@ -33,4 +33,34 @@ export async function sendVerificationCode(email, code) {
         console.error("[Brevo] Send error:", err);
         throw err;
     }
-}``
+}
+
+export async function sendNotificationEmail(to, subject, bodyText) {
+    try {
+        if (!process.env.BREVO_API_KEY) throw new Error("BREVO_API_KEY environment variable is not set");
+
+        const client = new BrevoClient({
+            apiKey: process.env.BREVO_API_KEY,
+            environment: BrevoEnvironment.Production,
+        });
+
+        await client.transactionalEmails.sendTransacEmail({
+            sender: { email: getFromAddress() },
+            to: [{ email: to }],
+            subject,
+            htmlContent: `
+                <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+                    <h2 style="color: #2563eb;">MedConnect</h2>
+                    <p>${bodyText}</p>
+                    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+                    <p style="font-size: 12px; color: #9ca3af;">
+                        This is an automated notification from MedConnect. Please do not reply to this email.
+                    </p>
+                </div>
+            `,
+        });
+    } catch (err) {
+        // intentionally swallowed — notification email failure must never block the caller
+        console.error("[Brevo] Notification email error:", err);
+    }
+}

@@ -110,6 +110,34 @@ export const onboardAdminValidator = [
     ...publicImageFields("profilePic"),
 ];
 
+export const onboardDepartmentValidator = [
+    body("deptEmail").notEmpty().withMessage("Department email is required").isEmail().withMessage("Must be a valid email"),
+    body("deptPassword").notEmpty().withMessage("Password is required"),
+    body("confirmPassword").notEmpty().withMessage("Confirm password is required"),
+    body("departmentTypeId").notEmpty().withMessage("Department type is required"),
+    body("technologistFirstName").notEmpty().withMessage("First name is required"),
+    body("technologistLastName").notEmpty().withMessage("Last name is required"),
+    body("birthDate")
+        .notEmpty().withMessage("Birth date is required")
+        .isISO8601().withMessage("Invalid date format"),
+    body("sex")
+        .notEmpty().withMessage("Sex is required")
+        .isIn(["male", "female"]).withMessage("Sex must be male or female"),
+    body("bio").optional().isString().withMessage("Bio must be a string"),
+    body("phoneNumber").notEmpty().withMessage("Phone number is required"),
+    body("phoneType")
+        .notEmpty().withMessage("Phone type is required")
+        .isIn(["mobile", "telephone"]).withMessage("Phone type must be mobile or telephone"),
+    ...addressFields,
+    ...publicImageFields("profilePic"),
+    ...privateImageFields("technologistLicenseImage"),
+    ...privateImageFields("technologistLegalIDImage"),
+    body("technologistLicenseNumber").notEmpty().withMessage("License number is required"),
+    body("technologistLicenseExpiration")
+        .notEmpty().withMessage("License expiration is required")
+        .isISO8601().withMessage("Invalid date format"),
+];
+
 export const onboardInstituteValidator = [
     body("instituteName").notEmpty().withMessage("Institute name is required"),
     body("instituteType")
