@@ -1,0 +1,428 @@
+[
+  {
+    "disease": "Hypertension",
+    "symptoms": ["Sharp chest pain", "Headache", "Dizziness or fainting", "Shortness of breath", "Irregular heartbeat", "Leg swelling", "Blurred vision", "Fatigue"],
+    "specialty": "Cardiology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Coronary Artery Disease",
+    "symptoms": ["Sharp chest pain", "Chest tightness", "Shortness of breath", "Palpitations / racing heart", "Fatigue", "Dizziness or fainting", "Poor circulation"],
+    "specialty": "Cardiology",
+    "urgency": "high"
+  },
+  {
+    "disease": "Heart Failure",
+    "symptoms": ["Shortness of breath", "Leg swelling", "Fatigue", "Irregular heartbeat", "Poor circulation", "Chest tightness", "Dizziness or fainting"],
+    "specialty": "Cardiology",
+    "urgency": "high"
+  },
+  {
+    "disease": "Arrhythmia",
+    "symptoms": ["Palpitations / racing heart", "Irregular heartbeat", "Dizziness or fainting", "Shortness of breath", "Chest tightness", "Fatigue"],
+    "specialty": "Cardiology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Peripheral Artery Disease",
+    "symptoms": ["Poor circulation", "Leg swelling", "Sharp chest pain", "Dizziness or fainting"],
+    "specialty": "Cardiology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Asthma",
+    "symptoms": ["Wheezing", "Shortness of breath", "Chest tightness", "Cough", "Breathing fast", "Difficulty breathing"],
+    "specialty": "Pulmonology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Pneumonia",
+    "symptoms": ["Cough", "Shortness of breath", "Breathing fast", "Fever", "Chest tightness", "Fatigue or tiredness", "Difficulty breathing", "Congestion in chest"],
+    "specialty": "Pulmonology",
+    "urgency": "high"
+  },
+  {
+    "disease": "Tuberculosis",
+    "symptoms": ["Cough", "Coughing up blood", "Fever", "Unexplained weight loss", "Fatigue or tiredness", "Shortness of breath", "Chills", "Aching all over"],
+    "specialty": "Pulmonology",
+    "urgency": "high"
+  },
+  {
+    "disease": "COPD",
+    "symptoms": ["Cough", "Shortness of breath", "Wheezing", "Difficulty breathing", "Fatigue", "Congestion in chest"],
+    "specialty": "Pulmonology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Pleural Effusion",
+    "symptoms": ["Shortness of breath", "Chest tightness", "Cough", "Difficulty breathing", "Fever"],
+    "specialty": "Pulmonology",
+    "urgency": "high"
+  },
+  {
+    "disease": "GERD / Acid Reflux",
+    "symptoms": ["Heartburn or acid reflux", "Chest tightness", "Difficulty swallowing", "Nausea or vomiting", "Hoarse voice"],
+    "specialty": "Gastroenterology",
+    "urgency": "low"
+  },
+  {
+    "disease": "Peptic Ulcer Disease",
+    "symptoms": ["Sharp abdominal pain", "Nausea or vomiting", "Blood in stool", "Loss of appetite", "Heartburn or acid reflux"],
+    "specialty": "Gastroenterology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Acute Gastroenteritis",
+    "symptoms": ["Nausea or vomiting", "Diarrhea", "Sharp abdominal pain", "Fever", "Stomach bloating", "Fatigue or tiredness"],
+    "specialty": "Gastroenterology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Appendicitis",
+    "symptoms": ["Sharp abdominal pain", "Nausea or vomiting", "Fever", "Loss of appetite"],
+    "specialty": "Gastroenterology",
+    "urgency": "high"
+  },
+  {
+    "disease": "Irritable Bowel Syndrome",
+    "symptoms": ["Stomach bloating", "Diarrhea", "Constipation", "Sharp abdominal pain", "Nausea or vomiting"],
+    "specialty": "Gastroenterology",
+    "urgency": "low"
+  },
+  {
+    "disease": "Liver Cirrhosis",
+    "symptoms": ["Stomach bloating", "Loss of appetite", "Fatigue or tiredness", "Nausea or vomiting", "Unexplained weight loss"],
+    "specialty": "Gastroenterology",
+    "urgency": "high"
+  },
+  {
+    "disease": "Migraine",
+    "symptoms": ["Headache", "Nausea or vomiting", "Dizziness", "Blurred vision", "Sensitivity to heat or cold"],
+    "specialty": "Neurology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Stroke",
+    "symptoms": ["Weakness on one side", "Slurring words", "Headache", "Dizziness or fainting", "Double vision", "Tingling or numbness"],
+    "specialty": "Neurology",
+    "urgency": "high"
+  },
+  {
+    "disease": "Epilepsy",
+    "symptoms": ["Seizures or convulsions", "Memory problems", "Dizziness", "Tingling or numbness", "Insomnia"],
+    "specialty": "Neurology",
+    "urgency": "high"
+  },
+  {
+    "disease": "Peripheral Neuropathy",
+    "symptoms": ["Tingling or numbness", "Weakness on one side", "Muscle stiffness or weakness", "Pain in eye"],
+    "specialty": "Neurology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Parkinson's Disease",
+    "symptoms": ["Muscle stiffness or weakness", "Tingling or numbness", "Memory problems", "Weakness on one side", "Slurring words", "Insomnia"],
+    "specialty": "Neurology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Osteoarthritis",
+    "symptoms": ["Joint pain", "Knee pain", "Hip pain", "Muscle stiffness or weakness", "Bones are painful"],
+    "specialty": "Orthopedic Surgery",
+    "urgency": "low"
+  },
+  {
+    "disease": "Rheumatoid Arthritis",
+    "symptoms": ["Joint pain", "Muscle stiffness or weakness", "Fatigue or tiredness", "Aching all over", "Swollen lymph nodes", "Fever"],
+    "specialty": "Orthopedic Surgery",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Gout",
+    "symptoms": ["Joint pain", "Knee pain", "Bones are painful", "Fever", "Fatigue or tiredness"],
+    "specialty": "Orthopedic Surgery",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Herniated Disc",
+    "symptoms": ["Back pain", "Low back pain", "Tingling or numbness", "Muscle stiffness or weakness", "Leg swelling"],
+    "specialty": "Orthopedic Surgery",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Fibromyalgia",
+    "symptoms": ["Muscle pain", "Fatigue or tiredness", "Insomnia", "Aching all over", "Memory problems", "Anxiety and nervousness"],
+    "specialty": "Orthopedic Surgery",
+    "urgency": "low"
+  },
+  {
+    "disease": "Eczema",
+    "symptoms": ["Skin rash", "Itching of skin", "Dry or peeling skin", "Skin infection"],
+    "specialty": "Dermatology",
+    "urgency": "low"
+  },
+  {
+    "disease": "Psoriasis",
+    "symptoms": ["Skin rash", "Itching of skin", "Dry or peeling skin", "Skin lesion or growth", "Joint pain"],
+    "specialty": "Dermatology",
+    "urgency": "low"
+  },
+  {
+    "disease": "Fungal Skin Infection",
+    "symptoms": ["Skin rash", "Itching of skin", "Skin infection", "Dry or peeling skin"],
+    "specialty": "Dermatology",
+    "urgency": "low"
+  },
+  {
+    "disease": "Acne Vulgaris",
+    "symptoms": ["Acne or pimples", "Skin lesion or growth", "Skin infection"],
+    "specialty": "Dermatology",
+    "urgency": "low"
+  },
+  {
+    "disease": "Skin Cancer (Melanoma)",
+    "symptoms": ["Skin moles (changing)", "Skin lesion or growth", "Itching of skin"],
+    "specialty": "Dermatology",
+    "urgency": "high"
+  },
+  {
+    "disease": "Alopecia",
+    "symptoms": ["Hair loss", "Skin rash", "Itching of skin"],
+    "specialty": "Dermatology",
+    "urgency": "low"
+  },
+  {
+    "disease": "Sinusitis",
+    "symptoms": ["Nasal congestion", "Sore throat", "Headache", "Fever", "Nosebleed", "Difficulty swallowing"],
+    "specialty": "Otolaryngology",
+    "urgency": "low"
+  },
+  {
+    "disease": "Otitis Media (Ear Infection)",
+    "symptoms": ["Ear pain", "Ringing in ear", "Diminished hearing", "Fever", "Nasal congestion"],
+    "specialty": "Otolaryngology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Tonsillitis / Pharyngitis",
+    "symptoms": ["Sore throat", "Fever", "Difficulty swallowing", "Throat swelling or tightness", "Nasal congestion"],
+    "specialty": "Otolaryngology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Benign Paroxysmal Positional Vertigo",
+    "symptoms": ["Dizziness", "Ringing in ear", "Nausea or vomiting", "Diminished hearing"],
+    "specialty": "Otolaryngology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Glaucoma",
+    "symptoms": ["Diminished vision", "Pain in eye", "Eye redness", "Spots in vision", "Headache"],
+    "specialty": "Ophthalmology",
+    "urgency": "high"
+  },
+  {
+    "disease": "Cataracts",
+    "symptoms": ["Diminished vision", "Blurred vision", "Double vision", "Spots in vision"],
+    "specialty": "Ophthalmology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Conjunctivitis",
+    "symptoms": ["Eye redness", "Itchy or watery eyes", "Eye burns or stings", "Diminished vision"],
+    "specialty": "Ophthalmology",
+    "urgency": "low"
+  },
+  {
+    "disease": "Macular Degeneration",
+    "symptoms": ["Diminished vision", "Blurred vision", "Spots in vision", "Double vision"],
+    "specialty": "Ophthalmology",
+    "urgency": "high"
+  },
+  {
+    "disease": "Depression",
+    "symptoms": ["Depression or low mood", "Insomnia", "Fatigue or tiredness", "Low self-esteem", "Loss of appetite", "Emotional instability", "Feeling disconnected from reality"],
+    "specialty": "Psychiatry",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Generalized Anxiety Disorder",
+    "symptoms": ["Anxiety and nervousness", "Insomnia", "Fatigue or tiredness", "Emotional instability", "Fears and phobias", "Excessive sweating"],
+    "specialty": "Psychiatry",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Bipolar Disorder",
+    "symptoms": ["Emotional instability", "Insomnia", "Depression or low mood", "Anxiety and nervousness", "Obsessive thoughts", "Feeling disconnected from reality"],
+    "specialty": "Psychiatry",
+    "urgency": "medium"
+  },
+  {
+    "disease": "OCD",
+    "symptoms": ["Obsessive thoughts", "Anxiety and nervousness", "Fears and phobias", "Emotional instability", "Insomnia"],
+    "specialty": "Psychiatry",
+    "urgency": "medium"
+  },
+  {
+    "disease": "PTSD",
+    "symptoms": ["Anxiety and nervousness", "Insomnia", "Emotional instability", "Feeling disconnected from reality", "Fears and phobias", "Depression or low mood"],
+    "specialty": "Psychiatry",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Type 2 Diabetes Mellitus",
+    "symptoms": ["Excessive urination", "Excessive thirst", "Unexplained weight loss", "Fatigue or tiredness", "Blurred vision", "Tingling or numbness", "Excessive appetite"],
+    "specialty": "Endocrinology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Hypothyroidism",
+    "symptoms": ["Unexplained weight gain", "Fatigue or tiredness", "Sensitivity to heat or cold", "Muscle stiffness or weakness", "Depression or low mood", "Hair loss", "Dry or peeling skin"],
+    "specialty": "Endocrinology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Hyperthyroidism",
+    "symptoms": ["Unexplained weight loss", "Palpitations / racing heart", "Excessive sweating", "Sensitivity to heat or cold", "Anxiety and nervousness", "Excessive appetite", "Fatigue"],
+    "specialty": "Endocrinology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Metabolic Syndrome",
+    "symptoms": ["Unexplained weight gain", "Fatigue or tiredness", "Excessive urination", "Excessive thirst", "Poor circulation"],
+    "specialty": "Endocrinology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Urinary Tract Infection",
+    "symptoms": ["Painful urination", "Frequent urination", "Blood in urine", "Pelvic pain", "Fever"],
+    "specialty": "Urology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Kidney Stones",
+    "symptoms": ["Painful urination", "Blood in urine", "Sharp abdominal pain", "Nausea or vomiting", "Frequent urination"],
+    "specialty": "Urology",
+    "urgency": "high"
+  },
+  {
+    "disease": "Benign Prostatic Hyperplasia",
+    "symptoms": ["Frequent urination", "Painful urination", "Blood in urine"],
+    "specialty": "Urology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Polycystic Ovary Syndrome (PCOS)",
+    "symptoms": ["Irregular menstruation", "Unexplained weight gain", "Acne or pimples", "Hair loss", "Pelvic pain", "Excessive appetite"],
+    "specialty": "Obstetrics and Gynecology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Endometriosis",
+    "symptoms": ["Painful menstruation", "Pelvic pain", "Vaginal discharge", "Irregular menstruation"],
+    "specialty": "Obstetrics and Gynecology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Vaginitis",
+    "symptoms": ["Vaginal itching", "Vaginal discharge", "Painful urination", "Pelvic pain"],
+    "specialty": "Obstetrics and Gynecology",
+    "urgency": "low"
+  },
+  {
+    "disease": "Dengue Fever",
+    "symptoms": ["Fever", "Aching all over", "Skin rash", "Fatigue or tiredness", "Nausea or vomiting", "Headache", "Chills"],
+    "specialty": "Internal Medicine",
+    "urgency": "high"
+  },
+  {
+    "disease": "Typhoid Fever",
+    "symptoms": ["Fever", "Fatigue or tiredness", "Loss of appetite", "Nausea or vomiting", "Aching all over", "Diarrhea", "Chills"],
+    "specialty": "Internal Medicine",
+    "urgency": "high"
+  },
+  {
+    "disease": "Anemia",
+    "symptoms": ["Fatigue or tiredness", "Weakness", "Dizziness or fainting", "Shortness of breath", "Palpitations / racing heart", "Poor circulation"],
+    "specialty": "Internal Medicine",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Malaria",
+    "symptoms": ["Fever", "Chills", "Aching all over", "Fatigue or tiredness", "Nausea or vomiting", "Headache"],
+    "specialty": "Internal Medicine",
+    "urgency": "high"
+  },
+  {
+    "disease": "COVID-19",
+    "symptoms": ["Fever", "Cough", "Shortness of breath", "Fatigue or tiredness", "Aching all over", "Breathing fast", "Difficulty breathing", "Chills"],
+    "specialty": "Internal Medicine",
+    "urgency": "high"
+  },
+  {
+    "disease": "Lymphoma",
+    "symptoms": ["Swollen lymph nodes", "Fever", "Unexplained weight loss", "Fatigue or tiredness", "Chills", "Itching of skin"],
+    "specialty": "Internal Medicine",
+    "urgency": "high"
+  },
+  {
+    "disease": "Leptospirosis",
+    "symptoms": ["Fever", "Aching all over", "Headache", "Chills", "Fatigue or tiredness", "Weakness", "Nausea or vomiting", "Blood in urine"],
+    "specialty": "Internal Medicine",
+    "urgency": "high"
+  },
+  {
+    "disease": "Schistosomiasis",
+    "symptoms": ["Fever", "Fatigue or tiredness", "Stomach bloating", "Diarrhea", "Blood in stool", "Swollen lymph nodes", "Unexplained weight loss", "Aching all over"],
+    "specialty": "Internal Medicine",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Rheumatic Fever",
+    "symptoms": ["Fever", "Joint pain", "Chest tightness", "Fatigue or tiredness", "Aching all over", "Skin rash", "Sore throat"],
+    "specialty": "Internal Medicine",
+    "urgency": "high"
+  },
+  {
+    "disease": "Pancreatitis",
+    "symptoms": ["Sharp abdominal pain", "Nausea or vomiting", "Fever", "Loss of appetite", "Diarrhea", "Fatigue or tiredness"],
+    "specialty": "Gastroenterology",
+    "urgency": "high"
+  },
+  {
+    "disease": "Acute Cholecystitis",
+    "symptoms": ["Sharp abdominal pain", "Nausea or vomiting", "Fever", "Loss of appetite", "Back pain", "Constipation"],
+    "specialty": "Gastroenterology",
+    "urgency": "high"
+  },
+  {
+    "disease": "Chronic Kidney Disease",
+    "symptoms": ["Fatigue or tiredness", "Weakness", "Leg swelling", "Nausea or vomiting", "Blood in urine", "Frequent urination", "Shortness of breath", "Unexplained weight gain"],
+    "specialty": "Urology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Nephrotic Syndrome",
+    "symptoms": ["Leg swelling", "Fatigue or tiredness", "Unexplained weight gain", "Stomach bloating", "Blood in urine"],
+    "specialty": "Urology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Uterine Fibroids",
+    "symptoms": ["Painful menstruation", "Irregular menstruation", "Pelvic pain", "Frequent urination", "Stomach bloating"],
+    "specialty": "Obstetrics and Gynecology",
+    "urgency": "medium"
+  },
+  {
+    "disease": "Preeclampsia",
+    "symptoms": ["Headache", "Blurred vision", "Leg swelling", "Shortness of breath", "Nausea or vomiting"],
+    "specialty": "Obstetrics and Gynecology",
+    "urgency": "high"
+  },
+  {
+    "disease": "Schizophrenia",
+    "symptoms": ["Feeling disconnected from reality", "Insomnia", "Emotional instability", "Fears and phobias", "Depression or low mood", "Anxiety and nervousness"],
+    "specialty": "Psychiatry",
+    "urgency": "high"
+  }
+]

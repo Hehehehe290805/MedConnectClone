@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { axiosInstance } from "../lib/axios";
+import toast from "react-hot-toast";
 
 const ViewPendingReportPopup = ({ report, onClose, onReportResolved }) => {
     const [loading, setLoading] = useState(false);
@@ -29,13 +30,9 @@ const ViewPendingReportPopup = ({ report, onClose, onReportResolved }) => {
 
 
             if (res.data.success) {
-                setSuccess(true);
-                setTimeout(() => {
-                    if (onReportResolved) {
-                        onReportResolved(report._id);
-                    }
-                    onClose();
-                }, 1500);
+                toast.success("Report resolved.");
+                onReportResolved?.(report._id);
+                onClose();
             }
         } catch (err) {
             console.error("Error resolving report:", err);
@@ -96,23 +93,7 @@ const ViewPendingReportPopup = ({ report, onClose, onReportResolved }) => {
             <div className="bg-base-100 p-6 rounded-lg w-96 max-h-[80vh] overflow-y-auto">
                 <h2 className="text-xl font-bold mb-4">Report Details</h2>
 
-                {success && (
-                    <div className="alert alert-success mb-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span>Report resolved successfully!</span>
-                    </div>
-                )}
-
-                {error && (
-                    <div className="alert alert-error mb-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span>{error}</span>
-                    </div>
-                )}
+                {error && <p className="text-error text-sm mb-3">{error}</p>}
 
                 {!success && (
                     <div className="space-y-4">

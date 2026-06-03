@@ -11,6 +11,8 @@ const FOLDER_MAP = {
     fdaLicense: "private/permits",
     pharmacistLicenseImage: "private/licenses",
     pharmacistLegalIDImage: "private/legalids",
+    technologistLicenseImage: "private/licenses",
+    technologistLegalIDImage: "private/legalids",
 };
 
 export const uploadFile = asyncHandler(async (req, res) => {

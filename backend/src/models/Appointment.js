@@ -1,70 +1,56 @@
 import mongoose from "mongoose";
 
 const AppointmentSchema = new mongoose.Schema({
-  // Appointment participants
-  doctorId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  doctorId:    { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   instituteId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-  patientId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  serviceId: { type: mongoose.Schema.Types.ObjectId, ref: "Service" }, 
-  virtual: { type: Boolean, default: true }, 
+  patientId:   { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  serviceId:   { type: mongoose.Schema.Types.ObjectId, ref: "Service" },
+  virtual:     { type: Boolean, default: true },
 
-  // Schedule
   start: { type: Date, required: true },
-  end: { type: Date, required: true },
-  
-  videoCallLink: { 
-    type: String,
-    default: null 
-  },
-  
-  // Status tracking
+  end:   { type: Date, required: true },
+
   status: {
     type: String,
     enum: [
-      "pending_accept", 
-      "awaiting_deposit",
-      "booked",                 // deposit paid
-      "confirmed",              // deposit confirmed by doctor
-      "ongoing",
-      "marked_complete",
-      "completed",
-      "fully_paid",             // waiting for remaining payment
-      "confirm_fully_paid",     // full payment confirmed
-      
-      "cancelled_unpaid",
-      "cancelled",
-      "rejected",
-      "no_show_patient",
-      "no_show_doctor",
-      "no_show_both",
-      "freeze",
+      "pending_payment",   // awaiting patient deposit
+      "deposit_paid",      // deposit received, awaiting doctor action
+      "accepted",          // doctor accepted, appointment confirmed
+      "rejected",          // doctor rejected — auto-deleted after 24hrs
+      "cancelled",         // patient cancelled (deposit non-refundable)
+      "ongoing",           // start time reached (cron-triggered)
+      "completed",         // end time passed OR both clicked complete
+      "awaiting_balance",  // virtual only — waiting for remaining 50%
+      "fully_paid",        // remaining balance paid (or in-person complete)
+      "disputed",          // report filed within 8hrs of start
+      "resolved",          // admin resolved dispute
     ],
-    default: "pending_accept",
+    default: "pending_payment",
   },
 
-  // Payment
-  amount: { type: Number, required: true },      // total price at booking time
+  // Payment — all computed at booking time
+  amount:        { type: Number, required: true },  // total price
+  platformFee:   { type: Number, required: true },  // 10% of amount
+  depositAmount: { type: Number, required: true },  // 50% of amount
+  depositPaid:   { type: Boolean, default: false },
+  depositRef:    { type: String },
+  balanceAmount: { type: Number, required: true },  // 50% of amount
+  balancePaid:   { type: Boolean, default: false },
+  balanceRef:    { type: String },
 
-  // Deposit
-  paymentDeposit: { type: Number, required: true }, // 10% of total amount
-  depositPaid: { type: Boolean, default: false },
-  depositRef: { type: String },                    // GCash reference for deposit
-  balanceAmount: { type: Number, default: 0 },    // remaining 90% payment
-  balancePaid: { type: Boolean, default: false },
-  balanceRef: { type: String },                   // GCash reference for remaining
+  // For cron auto-delete (24hrs after rejection)
+  rejectedAt: { type: Date },
 
-  // Presence tracking
-  patientPresent: { type: Boolean, default: false },
-  doctorPresent: { type: Boolean, default: false },
-  institutePresent: { type: Boolean, default: false },
-  bothPresent: { type: Boolean, default: false },
-
-  // Rejection & cancellation
+  // Rejection reason
   rejectionReason: { type: String },
 
-  // Review
-  rating: { type: Number, min: 1, max: 5 }, // star rating
-  review: { type: String }, // textual feedback
+  // Review (submitted after fully_paid)
+  rating: { type: Number, min: 1, max: 5 },
+  review: { type: String },
+
+  // Virtual call join tracking — populated when each party clicks "Join Call"
+  patientJoined:  { type: Boolean, default: false },
+  providerJoined: { type: Boolean, default: false },
 
 }, { timestamps: true });
 

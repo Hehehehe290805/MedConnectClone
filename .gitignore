@@ -24,3 +24,9 @@ dist-ssr
 *.sw?
 
 .env
+
+CLAUDE.md
+
+# Local-only Python data processing scripts + raw training data
+# Outputs (JSON files) are generated and copied to frontend/src/data/ then committed
+trainer/

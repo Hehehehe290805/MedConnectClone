@@ -11,7 +11,7 @@ function getS3Client() {
     if (!process.env.AWS_ACCESS_KEY_ID) throw new Error("AWS_ACCESS_KEY_ID is not set");
     if (!process.env.AWS_SECRET_ACCESS_KEY) throw new Error("AWS_SECRET_ACCESS_KEY is not set");
     if (!process.env.AWS_REGION) throw new Error("AWS_REGION is not set");
-    if (!process.env.AWS_S3_BUCKET) throw new Error("AWS_S3_BUCKET is not set");
+    if (!process.env.AWS_BUCKET_NAME) throw new Error("AWS_BUCKET_NAME is not set");
 
     return new S3Client({
         region: process.env.AWS_REGION,
@@ -22,7 +22,7 @@ function getS3Client() {
     });
 }
 
-const BUCKET = () => process.env.AWS_S3_BUCKET;
+const BUCKET = () => process.env.AWS_BUCKET_NAME;
 
 // generates a unique S3 key for a file
 function generateKey(folder, userId, originalName) {

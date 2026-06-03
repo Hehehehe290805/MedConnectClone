@@ -1,283 +1,172 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { axiosInstance } from "../lib/axios";
+import { rejectClaim } from "../lib/api";
+import toast from "react-hot-toast";
+import { XIcon } from "lucide-react";
 
-const ViewPendingClaimPopup = ({ claim, onClose, onClaimApproved }) => {
+const ViewPendingClaimPopup = ({ claim, onClose, onClaimApproved, onClaimRejected, otherPendingClaims = [] }) => {
     const [loading, setLoading] = useState(false);
+    const [isRejecting, setIsRejecting] = useState(false);
     const [error, setError] = useState(null);
-    const [success, setSuccess] = useState(false);
     const [licenseNumber, setLicenseNumber] = useState(null);
     const [licenseLoading, setLicenseLoading] = useState(false);
+    const [doctorSpecialties, setDoctorSpecialties] = useState([]);
+    const [showRejectConfirm, setShowRejectConfirm] = useState(false);
 
     if (!claim) return null;
 
-    // Fetch license number when component mounts or claim changes
+    const doctorId = claim.doctorId?._id || claim.doctorId;
+
     useEffect(() => {
+        if (!doctorId) return;
+
         const fetchLicenseNumber = async () => {
-            if (claim.doctorId) {
-                try {
-                    setLicenseLoading(true);
-                    const userId = claim.doctorId._id || claim.doctorId;
+            try {
+                setLicenseLoading(true);
+                const res = await axiosInstance.get(`/admin/license/${doctorId}`);
+                setLicenseNumber(res.data.licenseNumber || null);
+            } catch {
+                setLicenseNumber(null);
+            } finally {
+                setLicenseLoading(false);
+            }
+        };
 
-
-                    // Use the new admin license endpoint
-                    const res = await axiosInstance.get(`/admin/license/${userId}`);
-
-
-
-                    if (res.data.licenseNumber) {
-                        setLicenseNumber(res.data.licenseNumber);
-                    } else {
-                        setLicenseNumber("License number not provided");
-                    }
-                } catch (err) {
-                    console.error("Error fetching license number:", err);
-
-                    // Check if there's a specific error message
-                    if (err.response?.data?.message) {
-                        setLicenseNumber(`Error: ${err.response.data.message}`);
-                    } else {
-                        setLicenseNumber("Unable to fetch license");
-                    }
-                } finally {
-                    setLicenseLoading(false);
-                }
+        const fetchDoctorSpecialties = async () => {
+            try {
+                const res = await axiosInstance.get(`/specialties/doctor/${doctorId}`);
+                setDoctorSpecialties(res.data.specialties || []);
+            } catch {
+                setDoctorSpecialties([]);
             }
         };
 
         fetchLicenseNumber();
-    }, [claim]);
+        fetchDoctorSpecialties();
+    }, [doctorId]);
 
     const handleApprove = async () => {
         try {
             setLoading(true);
             setError(null);
-            setSuccess(false);
-
-            const res = await axiosInstance.patch("/admin/approve-claim", { claimId: claim._id });
-
-
-            if (res.data.success) {
-                setSuccess(true);
-                setTimeout(() => {
-                    if (onClaimApproved) {
-                        onClaimApproved(claim._id);
-                    }
-                    onClose();
-                }, 1500);
-            }
+            await axiosInstance.patch("/admin/approve-claim", { claimId: claim._id });
+            toast.success("Claim approved.");
+            onClaimApproved?.(claim._id);
+            onClose();
         } catch (err) {
-            console.error("Error approving claim:", err);
             setError(err.response?.data?.message || "Failed to approve claim");
         } finally {
             setLoading(false);
         }
     };
 
-    const getClaimType = () => {
-        switch (claim.claimType) {
-            case "specialty":
-                return "Specialty Claim";
-            case "subspecialty":
-                return "Subspecialty Claim";
-            case "service":
-                return "Service Claim";
-            default:
-                return "Claim";
+    const handleReject = async () => {
+        setIsRejecting(true);
+        try {
+            await rejectClaim({ claimId: claim._id });
+            toast.success("Claim rejected.");
+            onClaimRejected?.(claim._id);
+            onClose();
+        } catch (err) {
+            setError(err?.response?.data?.message || "Failed to reject.");
+        } finally {
+            setIsRejecting(false); setShowRejectConfirm(false);
         }
     };
 
-    const getUserInfo = () => {
-        if (claim.doctorId) {
-            return {
-                name: `${claim.doctorId.firstName} ${claim.doctorId.lastName}`,
-                email: claim.doctorId.email,
-                type: "Doctor",
-                hasLicense: true
-            };
-        } else if (claim.instituteId) {
-            return {
-                name: claim.instituteId.facilityName,
-                email: claim.instituteId.email,
-                type: "Institute",
-                hasLicense: false
-            };
-        }
-        return { name: "Unknown User", email: "", type: "Unknown", hasLicense: false };
-    };
-
-    const getItemInfo = () => {
-        if (claim.specialtyId) {
-            return {
-                name: claim.specialtyId.name,
-                type: "Specialty"
-            };
-        } else if (claim.subspecialtyId) {
-            return {
-                name: claim.subspecialtyId.name,
-                type: "Subspecialty"
-            };
-        } else if (claim.serviceId) {
-            return {
-                name: claim.serviceId.name,
-                type: "Service"
-            };
-        }
-        return { name: "Unknown Item", type: "Unknown" };
-    };
-
-    const userInfo = getUserInfo();
-    const itemInfo = getItemInfo();
-
-    const renderLicenseInfo = () => {
-        if (!userInfo.hasLicense) return null;
-
-        const isLicenseValid = licenseNumber &&
-            !licenseNumber.includes("not provided") &&
-            !licenseNumber.includes("Unable to fetch") &&
-            !licenseNumber.includes("Error:");
-
-        return (
-            <div>
-                <strong>License Number:</strong>
-                <div className="mt-1">
-                    {licenseLoading ? (
-                        <div className="flex items-center gap-2">
-                            <span className="loading loading-spinner loading-xs"></span>
-                            <span className="text-sm text-gray-500">Fetching license...</span>
-                        </div>
-                    ) : (
-                        <p className={`font-mono ${isLicenseValid ? "text-success font-semibold" : "text-warning"}`}>
-                            {licenseNumber || "No license number found"}
-                        </p>
-                    )}
-                </div>
-            </div>
-        );
-    };
-
-    const renderClaimDetails = () => {
-        return (
-            <>
-                <div className="space-y-4">
-                    {/* Claim Information */}
-                    <div>
-                        <strong>Claim Type:</strong>
-                        <p className="mt-1">
-                            <span className="badge badge-primary">{getClaimType()}</span>
-                        </p>
-                    </div>
-
-                    {/* Item Information */}
-                    <div>
-                        <strong>{itemInfo.type}:</strong>
-                        <p className="text-lg font-semibold mt-1">{itemInfo.name}</p>
-                    </div>
-
-                    {/* User Information */}
-                    <div>
-                        <strong>Claimed By:</strong>
-                        <div className="mt-1">
-                            <p className="font-semibold">{userInfo.name}</p>
-                            <p className="text-sm opacity-70">{userInfo.type}</p>
-                            {userInfo.email && (
-                                <p className="text-sm opacity-70">{userInfo.email}</p>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* License Information - Only for doctors */}
-                    {renderLicenseInfo()}
-
-                    {/* Additional Details */}
-                    {claim.claimType === "subspecialty" && claim.rootSpecialty && (
-                        <div>
-                            <strong>Root Specialty:</strong>
-                            <p className="mt-1">
-                                {claim.rootSpecialty.name || claim.rootSpecialty}
-                            </p>
-                        </div>
-                    )}
-
-                    {claim.createdAt && (
-                        <div>
-                            <strong>Submitted:</strong>
-                            <p className="mt-1">
-                                {new Date(claim.createdAt).toLocaleDateString()} at {" "}
-                                {new Date(claim.createdAt).toLocaleTimeString()}
-                            </p>
-                        </div>
-                    )}
-
-                    {/* Evidence/Supporting Documents (if any) */}
-                    {claim.evidence && (
-                        <div>
-                            <strong>Supporting Evidence:</strong>
-                            <p className="mt-1">{claim.evidence}</p>
-                        </div>
-                    )}
-                </div>
-            </>
-        );
-    };
+    const itemName = claim.specialtyId?.name || claim.subspecialtyId?.name || claim.serviceId?.name || "—";
+    const itemType = claim.claimType?.charAt(0).toUpperCase() + claim.claimType?.slice(1) || "Claim";
+    const doctorName = claim.doctorId?.firstName
+        ? `${claim.doctorId.firstName} ${claim.doctorId.lastName}`
+        : claim.doctorId?.email || "Unknown";
+    const doctorEmail = claim.doctorId?.email || "";
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-            <div className="bg-base-100 p-6 rounded-lg w-96 max-h-[80vh] overflow-y-auto">
-                <h2 className="text-xl font-bold mb-4">Claim Details</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-base-100 rounded-xl p-6 w-full max-w-md max-h-[85vh] overflow-y-auto space-y-4 shadow-xl">
+                <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-bold">Claim Review</h2>
+                    <button className="btn btn-ghost btn-sm btn-circle" onClick={onClose} disabled={loading || isRejecting}>
+                        <XIcon className="size-4" />
+                    </button>
+                </div>
 
-                {success && (
-                    <div className="alert alert-success mb-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span>Claim approved successfully!</span>
+                {error && <p className="text-error text-sm">{error}</p>}
+
+                {/* Claim info */}
+                <div className="space-y-3">
+                    <div className="bg-base-200 rounded-lg p-3 space-y-2">
+                        <div className="flex items-center gap-2">
+                            <span className="badge badge-primary badge-sm">{itemType}</span>
+                        </div>
+                        <p className="font-semibold text-lg">{itemName}</p>
+                        <p className="text-xs opacity-60">Submitted {new Date(claim.createdAt).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" })}</p>
                     </div>
-                )}
 
-                {error && (
-                    <div className="alert alert-error mb-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span>{error}</span>
+                    {/* Doctor info */}
+                    <div className="bg-base-200 rounded-lg p-3 space-y-1">
+                        <p className="text-xs font-semibold opacity-50 uppercase tracking-wide">Claimed By</p>
+                        <p className="font-semibold">{doctorName}</p>
+                        {doctorEmail && <p className="text-xs opacity-60">{doctorEmail}</p>}
+                        {licenseLoading ? (
+                            <p className="text-xs opacity-50">Loading license…</p>
+                        ) : licenseNumber ? (
+                            <p className="text-xs font-mono">License: {licenseNumber}</p>
+                        ) : null}
                     </div>
-                )}
 
-                {!success && renderClaimDetails()}
+                    {/* Doctor's other pending claims */}
+                    {otherPendingClaims.length > 0 && (
+                        <div className="bg-base-200 rounded-lg p-3 space-y-2">
+                            <p className="text-xs font-semibold opacity-50 uppercase tracking-wide">Other Pending Claims</p>
+                            <div className="flex flex-wrap gap-1">
+                                {otherPendingClaims.map(c => (
+                                    <span key={c._id} className="badge badge-sm badge-warning">
+                                        {c.subspecialtyId?.name || c.specialtyId?.name || "—"} ({c.claimType})
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
-                <div className="flex gap-2 mt-6">
-                    {!success ? (
-                        <>
-                            <button
-                                className="btn btn-success flex-1"
-                                onClick={handleApprove}
-                                disabled={loading || licenseLoading}
-                            >
-                                {loading ? (
-                                    <span className="loading loading-spinner loading-sm"></span>
-                                ) : (
-                                    "Approve"
-                                )}
-                            </button>
-                            <button
-                                className="btn btn-outline flex-1"
-                                onClick={onClose}
-                                disabled={loading}
-                            >
-                                Close
-                            </button>
-                        </>
-                    ) : (
-                        <button
-                            className="btn btn-success flex-1"
-                            disabled
-                        >
-                            <span className="loading loading-spinner loading-sm"></span>
-                            Closing...
-                        </button>
+                    {/* Doctor's approved specialties */}
+                    {doctorSpecialties.length > 0 && (
+                        <div className="bg-base-200 rounded-lg p-3 space-y-2">
+                            <p className="text-xs font-semibold opacity-50 uppercase tracking-wide">Doctor's Approved Specialties</p>
+                            <div className="flex flex-wrap gap-1">
+                                {doctorSpecialties.map(s => (
+                                    <span key={s._id} className="badge badge-sm badge-ghost">{s.name}</span>
+                                ))}
+                            </div>
+                        </div>
                     )}
                 </div>
+
+                <div className="flex gap-2 pt-2">
+                    <button className="btn btn-success flex-1" onClick={handleApprove} disabled={loading || isRejecting}>
+                        {loading ? <span className="loading loading-spinner loading-xs" /> : "Approve"}
+                    </button>
+                    <button className="btn btn-error btn-outline flex-1" onClick={() => setShowRejectConfirm(true)} disabled={loading || isRejecting}>
+                        Reject
+                    </button>
+                </div>
             </div>
+
+            {/* Reject confirm modal */}
+            {showRejectConfirm && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+                    <div className="bg-base-100 rounded-xl p-6 w-full max-w-sm space-y-4 shadow-xl">
+                        <h3 className="font-bold text-lg">Reject Claim?</h3>
+                        <p className="text-sm opacity-70">This will reject the <strong>{itemName}</strong> claim by {doctorName}.</p>
+                        <div className="flex gap-2 justify-end">
+                            <button className="btn btn-ghost btn-sm" onClick={() => setShowRejectConfirm(false)} disabled={isRejecting}>Cancel</button>
+                            <button className="btn btn-error btn-sm" onClick={handleReject} disabled={isRejecting}>
+                                {isRejecting ? <span className="loading loading-spinner loading-xs" /> : "Reject"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

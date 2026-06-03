@@ -1,11 +1,12 @@
 import express from "express";
-import {
-    searchDoctors, getDoctorDetails
-} from "../controllers/search.controller.js";
+import { searchDoctors, searchInstitutes } from "../controllers/search.controller.js";
+import { protectRoute } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
-router.get("/doctors", searchDoctors);
-router.get("/doctors/:doctorId", getDoctorDetails);
+router.use(protectRoute);
+
+router.get("/doctors",    searchDoctors);
+router.get("/institutes", searchInstitutes);
 
 export default router;

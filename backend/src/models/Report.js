@@ -29,7 +29,8 @@ const ReportSchema = new mongoose.Schema(
         },
         outcome: {
             type: String,
-            enum: ["patient_right", "doctor_right", "split", null],
+            // "provider_right" covers doctor, institute, and pharmacy disputes
+            enum: ["patient_right", "provider_right", "split", null],
             default: null,
         },
         adminNote: {

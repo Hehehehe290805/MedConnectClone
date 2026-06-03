@@ -21,10 +21,33 @@ export const upsertStreamUser = async (userData) => {
 
 export const generateStreamToken = (userId) => {
   try {
-    // ensure userId is a string
     const userIdStr = userId.toString();
     return streamClient.createToken(userIdStr);
   } catch (error) {
     console.error("Error generating Stream token:", error);
+  }
+};
+
+// Returns file/image attachments from the messaging channel between two users.
+// Channel ID is deterministic: the two user IDs sorted and joined with "-".
+export const getChannelAttachments = async (userId1, userId2) => {
+  try {
+    const channelId = [userId1.toString(), userId2.toString()].sort().join("-");
+    const channel = streamClient.channel("messaging", channelId);
+    const result = await channel.query({ messages: { limit: 500 } });
+    return (result.messages || [])
+      .flatMap(m =>
+        (m.attachments || []).map(a => ({
+          type:       a.type,
+          title:      a.title || a.fallback || "file",
+          url:        a.image_url || a.asset_url || a.thumb_url || "",
+          mimeType:   a.mime_type || "",
+          sentAt:     m.created_at,
+          senderName: m.user?.name || "User",
+        }))
+      )
+      .filter(a => (a.type === "image" || a.type === "file") && a.url);
+  } catch {
+    return [];
   }
 };

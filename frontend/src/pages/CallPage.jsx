@@ -8,11 +8,15 @@ import {
   StreamVideo,
   StreamVideoClient,
   StreamCall,
-  CallControls,
   SpeakerLayout,
   StreamTheme,
   CallingState,
   useCallStateHooks,
+  ToggleAudioPublishingButton,
+  ToggleVideoPublishingButton,
+  ScreenShareButton,
+  CancelCallButton,
+  ReactionsButton,
 } from "@stream-io/video-react-sdk";
 
 import "@stream-io/video-react-sdk/dist/css/styles.css";
@@ -25,7 +29,7 @@ const CallPage = () => {
   const { id: callId } = useParams();
   const [client, setClient] = useState(null);
   const [call, setCall] = useState(null);
-  const [isConnecting, setIsConnecting] = useState(true);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const { authUser, isLoading } = useAuthUser();
 
@@ -37,20 +41,22 @@ const CallPage = () => {
 
   useEffect(() => {
     const initCall = async () => {
-      if (!tokenData.token || !authUser || !callId) return;
+      const token = tokenData?.data?.token;
+      if (!token || !authUser || !callId) return;
 
+      setIsConnecting(true);
       try {
 
         const user = {
           id: authUser._id,
           name: `${authUser.firstName} ${authUser.lastName}`.trim(),
-          image: authUser.profilePic,
+          image: authUser.profilePic?.url || authUser.profilePic || undefined,
         };
 
         const videoClient = new StreamVideoClient({
           apiKey: STREAM_API_KEY,
           user,
-          token: tokenData.token,
+          token,
         });
 
         const callInstance = videoClient.call("default", callId);
@@ -102,7 +108,14 @@ const CallContent = () => {
   return (
     <StreamTheme>
       <SpeakerLayout />
-      <CallControls />
+      {/* Custom controls — recording excluded intentionally */}
+      <div className="str-video__call-controls">
+        <ReactionsButton />
+        <ScreenShareButton />
+        <ToggleAudioPublishingButton />
+        <ToggleVideoPublishingButton />
+        <CancelCallButton />
+      </div>
     </StreamTheme>
   );
 };

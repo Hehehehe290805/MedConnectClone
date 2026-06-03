@@ -52,6 +52,12 @@ export const suggestService = asyncHandler(async (req, res) => {
     return sendSuccess(res, 201, `${type.charAt(0).toUpperCase() + type.slice(1)} suggested successfully`, { item: newItem });
 });
 
+export const getMyDepartmentServices = asyncHandler(async (req, res) => {
+    const claims = await InstituteDepartmentService.find({ departmentId: req.user._id })
+        .populate("serviceId", "name");
+    return sendSuccess(res, 200, "Services fetched", { services: claims });
+});
+
 export const claimService = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     const { targetId, durationMinutes } = req.body;

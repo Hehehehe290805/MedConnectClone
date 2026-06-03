@@ -46,6 +46,11 @@ const adminSchema = new mongoose.Schema({
     },
     pendingDeletion: { type: Boolean, default: false },
     deletionRequestedAt: { type: Date, default: null },
+    resetPasswordCode: { type: String, default: null },
+    resetPasswordCodeExpiry: { type: Date, default: null },
+    twoFactorEnabled: { type: Boolean, default: false },
+    loginAttempts: { type: Number, default: 0 },
+    loginLockedAt: { type: Date, default: null },
     phoneNumber: { type: String },
     phoneType: {
         type: String,
@@ -55,19 +60,27 @@ const adminSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 adminSchema.pre("save", async function (next) {
-    if (this.isModified("password")) {
-        try {
+    try {
+        if (this.isModified("password")) {
             const salt = await bcrypt.genSalt(10);
             this.password = await bcrypt.hash(this.password, salt);
-        } catch (error) {
-            return next(error);
         }
+        if (this.isModified("adminCode")) {
+            const salt = await bcrypt.genSalt(10);
+            this.adminCode = await bcrypt.hash(this.adminCode, salt);
+        }
+    } catch (error) {
+        return next(error);
     }
     next();
 });
 
 adminSchema.methods.matchPassword = async function (enteredPassword) {
     return bcrypt.compare(enteredPassword, this.password);
+};
+
+adminSchema.methods.matchAdminCode = async function (enteredCode) {
+    return bcrypt.compare(enteredCode, this.adminCode);
 };
 
 const Admin = mongoose.model("Admin", adminSchema);

@@ -25,8 +25,8 @@ const ViewAllSpecialtiesPopup = ({ onClose }) => {
     const fetchSpecialties = async () => {
         try {
             setLoading(true);
-            const res = await axiosInstance.get("/specialties-and-services/specialties");
-            setSpecialties(res.data.items || []);
+            const res = await axiosInstance.get("/specialties");
+            setSpecialties(res.data.data?.items || []);
         } catch (err) {
             console.error("Error fetching specialties:", err);
             toast.error("Failed to load specialties");
@@ -38,8 +38,8 @@ const ViewAllSpecialtiesPopup = ({ onClose }) => {
     const fetchSubspecialties = async (specialtyId) => {
         try {
             setLoading(true);
-            const res = await axiosInstance.get(`/specialties-and-services/subspecialties/${specialtyId}`);
-            setSubspecialties(res.data.items || []);
+            const res = await axiosInstance.get(`/specialties/${specialtyId}/subspecialties`);
+            setSubspecialties(res.data.data?.items || []);
         } catch (err) {
             console.error("Error fetching subspecialties:", err);
             toast.error("Failed to load subspecialties");
@@ -52,7 +52,7 @@ const ViewAllSpecialtiesPopup = ({ onClose }) => {
         if (!selectedItem) return toast.error("Please select an item to claim.");
 
         try {
-            await axiosInstance.post("/specialties-and-services/claim", {
+            await axiosInstance.post("/specialties/claim", {
                 targetId: selectedItem._id,
                 type: claimType,
             });

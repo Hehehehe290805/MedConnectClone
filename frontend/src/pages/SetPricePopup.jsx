@@ -19,21 +19,12 @@ const SetPricePopup = ({ onClose, onPriceSet, currentPrice }) => {
             setError("");
 
 
-            try {
-                await axiosInstance.post("/specialties-and-services/auto-claim-appointment", {});
-
-            } catch (err) {
-                console.warn("⚠️ Auto-claim skipped or failed:", err.response?.data?.message || err.message);
-            }
-
-            const res = await axiosInstance.post("/pricing/set-pricing", {
+            await axiosInstance.post("/pricing/set-pricing", {
                 price: parseFloat(price),
             });
-            
-            if (res.data.message === "Pricing set/updated successfully") {
-                onPriceSet(parseFloat(price));
-                onClose();
-            }
+
+            onPriceSet(parseFloat(price));
+            onClose();
         } catch (err) {
             setError(err.response?.data?.message || "Failed to update price");
         } finally {
@@ -54,19 +45,27 @@ const SetPricePopup = ({ onClose, onPriceSet, currentPrice }) => {
                             <span className="label-text">Consultation Price (₱)</span>
                         </label>
                         <input
-                            type="number"
+                            type="text"
+                            inputMode="numeric"
                             placeholder="Enter price in pesos"
                             className="input input-bordered w-full"
                             value={price}
-                            onChange={(e) => setPrice(e.target.value)}
-                            min="0"
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                if (/^\d*\.?\d*$/.test(val)) setPrice(val);
+                            }}
                             disabled={loading}
                         />
                         <label className="label">
-                            <span className="label-text-alt">
-                                This will be your standard consultation fee
+                            <span className="label-text-alt opacity-60">
+                                Platform takes 10% per transaction. Patient pays this amount; you receive 90%.
                             </span>
                         </label>
+                        {price && !isNaN(parseFloat(price)) && parseFloat(price) > 0 && (
+                            <p className="text-xs opacity-50 mt-1">
+                                You receive: ₱{(parseFloat(price) * 0.9).toLocaleString("en-PH", { minimumFractionDigits: 2 })} per appointment
+                            </p>
+                        )}
                     </div>
 
                     {error && (

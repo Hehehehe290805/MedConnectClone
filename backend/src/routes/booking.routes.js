@@ -1,28 +1,36 @@
 import express from "express";
 import {
-    bookAppointment, payDeposit, cancelAppointment, payRemaining, completeAppointment,
-    getUserAppointments, submitReview, fileComplaint, markAttendance, checkNoShows,
+    bookAppointment, payDeposit, acceptAppointment, rejectAppointment,
+    cancelAppointment, completeAppointment, payBalance,
+    fileDispute, submitReview, joinCall, getMyAppointments, getTransactionHistory,
+    getProviderReviews,
 } from "../controllers/booking.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
 import {
-    bookAppointmentValidator, payDepositValidator, cancelAppointmentValidator,
-    submitReviewValidator, payRemainingValidator, fileComplaintValidator, completeAppointmentValidator,
+    bookAppointmentValidator, payDepositValidator,
+    acceptAppointmentValidator, rejectAppointmentValidator,
+    cancelAppointmentValidator, completeAppointmentValidator,
+    payBalanceValidator, fileDisputeValidator, submitReviewValidator,
+    joinCallValidator,
 } from "../validators/booking.validator.js";
 
 const router = express.Router();
 
-router.post("/book", protectRoute, bookAppointmentValidator, validate, bookAppointment);
-router.post("/pay-deposit", protectRoute, payDepositValidator, validate, payDeposit);
-router.post("/cancel", protectRoute, cancelAppointmentValidator, validate, cancelAppointment);
-router.get("/user-appointments", protectRoute, getUserAppointments);
+router.use(protectRoute);
 
-router.post("/attend/:id", protectRoute, markAttendance);
-router.get("/check-attendance", protectRoute, checkNoShows);
-router.post("/complete-appointment", protectRoute, completeAppointmentValidator, validate, completeAppointment);
-
-router.post("/pay-remaining", protectRoute, payRemainingValidator, validate, payRemaining);
-router.post("/submit-review", protectRoute, submitReviewValidator, validate, submitReview);
-router.post("/report/:id", protectRoute, fileComplaintValidator, validate, fileComplaint);
+router.post("/book",     bookAppointmentValidator,    validate, bookAppointment);
+router.post("/pay-deposit", payDepositValidator,      validate, payDeposit);
+router.post("/accept",   acceptAppointmentValidator,  validate, acceptAppointment);
+router.post("/reject",   rejectAppointmentValidator,  validate, rejectAppointment);
+router.post("/cancel",   cancelAppointmentValidator,  validate, cancelAppointment);
+router.post("/complete", completeAppointmentValidator, validate, completeAppointment);
+router.post("/pay-balance", payBalanceValidator,      validate, payBalance);
+router.post("/dispute",  fileDisputeValidator,        validate, fileDispute);
+router.post("/review",   submitReviewValidator,       validate, submitReview);
+router.post("/join-call", joinCallValidator, validate, joinCall);
+router.get("/my-appointments",        getMyAppointments);
+router.get("/transaction-history",    getTransactionHistory);
+router.get("/reviews/:providerId",    getProviderReviews);
 
 export default router;

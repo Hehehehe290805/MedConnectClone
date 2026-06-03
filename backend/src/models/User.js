@@ -54,7 +54,7 @@ const baseUserSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ["notOnBoarded", "pending", "onBoarded",
-      "needsRenewal", "pendingRenewal", "pendingRenewalExpired", "suspended",
+      "needsRenewal", "pendingRenewal", "pendingRenewalExpired", "suspended", "rejected",
     ],
     default: "notOnBoarded",
   },
@@ -70,6 +70,11 @@ const baseUserSchema = new mongoose.Schema({
   },
   pendingDeletion: { type: Boolean, default: false },
   deletionRequestedAt: { type: Date, default: null },
+  resetPasswordCode: { type: String, default: null },
+  resetPasswordCodeExpiry: { type: Date, default: null },
+  twoFactorEnabled: { type: Boolean, default: false },
+  loginAttempts: { type: Number, default: 0 },
+  loginLockedAt: { type: Date, default: null },
   birthDate: {
     type: Date,
     validate: {

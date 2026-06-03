@@ -26,6 +26,16 @@ export const adminLogin = async (data) => {
   return response.data;
 };
 
+export const verify2FA = async (data) => {
+  const response = await axiosInstance.post("/auth/verify-2fa", data);
+  return response.data;
+};
+
+export const toggle2FA = async () => {
+  const response = await axiosInstance.patch("/auth/toggle-2fa");
+  return response.data;
+};
+
 export const logout = async () => {
   const response = await axiosInstance.post("/auth/logout");
   return response.data;
@@ -55,12 +65,12 @@ export const requestEmailUpdate = async (data) => {
   return response.data;
 };
 
-export const verifyCurrentEmail = async (data) => {
+export const verifyCurrentEmailUpdate = async (data) => {
   const response = await axiosInstance.post("/auth/update-email/verify-current", data);
   return response.data;
 };
 
-export const verifyNewEmail = async (data) => {
+export const verifyNewEmailUpdate = async (data) => {
   const response = await axiosInstance.post("/auth/update-email/verify-new", data);
   return response.data;
 };
@@ -72,6 +82,21 @@ export const requestPasswordUpdate = async (data) => {
 
 export const verifyPasswordUpdate = async (data) => {
   const response = await axiosInstance.post("/auth/update-password/verify", data);
+  return response.data;
+};
+
+export const forgotPassword = async (data) => {
+  const response = await axiosInstance.post("/auth/forgot-password", data);
+  return response.data;
+};
+
+export const verifyForgotPassword = async (data) => {
+  const response = await axiosInstance.post("/auth/forgot-password/verify", data);
+  return response.data;
+};
+
+export const resetForgotPassword = async (data) => {
+  const response = await axiosInstance.post("/auth/forgot-password/reset", data);
   return response.data;
 };
 
@@ -89,6 +114,34 @@ export const completeOnboarding = async (userData) => {
   const response = await axiosInstance.post(endpoint, userData);
   return response.data;
 };
+
+export const createDepartmentAccount = async (data) => {
+  const response = await axiosInstance.post("/onboarding/department", data);
+  return response.data;
+};
+
+export const convertToAdmin = async (data) => {
+  const response = await axiosInstance.post("/onboarding/admin/convert", data);
+  return response.data;
+};
+
+// --- ADMIN ---
+export const rejectRole = (data) => axiosInstance.patch("/admin/reject-role", data).then(r => r.data);
+export const rejectSuggestion = (data) => axiosInstance.patch("/admin/reject-suggestion", data).then(r => r.data);
+export const rejectClaim = (data) => axiosInstance.patch("/admin/reject-claim", data).then(r => r.data);
+export const editSuggestion = (data) => axiosInstance.patch("/admin/edit-suggestion", data).then(r => r.data);
+export const approveRoleWithItems = (data) => axiosInstance.patch("/admin/approve-role-with-items", data).then(r => r.data);
+export const bulkApprove = (data) => axiosInstance.patch("/admin/bulk-approve", data).then(r => r.data);
+export const bulkReject = (data) => axiosInstance.patch("/admin/bulk-reject", data).then(r => r.data);
+export const getPendingRenewals = () => axiosInstance.get("/admin/pending-renewals").then(r => r.data);
+export const approveRenewal = (data) => axiosInstance.patch("/admin/approve-renewal", data).then(r => r.data);
+export const rejectRenewal = (data) => axiosInstance.patch("/admin/reject-renewal", data).then(r => r.data);
+export const getAllUsers = () => axiosInstance.get("/admin/all-users").then(r => r.data);
+export const adminDeleteUser = (userId) => axiosInstance.delete(`/admin/users/${userId}`).then(r => r.data);
+
+// --- PERMIT RENEWALS ---
+export const requestPermitRenewal = (data) => axiosInstance.post("/permits/renewal/request", data).then(r => r.data);
+export const getMyRenewals = () => axiosInstance.get("/permits/renewal/my-renewals").then(r => r.data);
 
 // --- FILE UPLOAD ---
 export const uploadFile = async (file, field) => {
@@ -133,33 +186,8 @@ export const verifyPermitRenewal = async (data) => {
 };
 
 // --- USERS ---
-export async function getUserFriends() {
-  const response = await axiosInstance.get("/users/friends");
-  return response.data;
-}
-
-export async function getRecommendedUsers() {
-  const response = await axiosInstance.get("/users");
-  return response.data;
-}
-
-export async function getOutgoingFriendReqs() {
-  const response = await axiosInstance.get("/users/outgoing-friend-requests");
-  return response.data;
-}
-
-export async function sendFriendRequest(userId) {
-  const response = await axiosInstance.post(`/users/friend-request/${userId}`);
-  return response.data;
-}
-
-export async function getFriendRequests() {
-  const response = await axiosInstance.get("/users/friend-requests");
-  return response.data;
-}
-
-export async function acceptFriendRequest(requestId) {
-  const response = await axiosInstance.put(`/users/friend-request/${requestId}/accept`);
+export async function getUserById(userId) {
+  const response = await axiosInstance.get(`/users/${userId}`);
   return response.data;
 }
 
@@ -168,7 +196,30 @@ export async function getStreamToken() {
   return response.data;
 }
 
-export async function getUserById(userId) {
-  const response = await axiosInstance.get(`/users/${userId}`);
-  return response.data;
-}
+// --- NOTIFICATIONS ---
+export const getNotifications = () =>
+  axiosInstance.get("/notifications").then(r => r.data);
+
+export const getUnreadNotificationCount = () =>
+  axiosInstance.get("/notifications/unread-count").then(r => r.data);
+
+export const markNotificationRead = (id) =>
+  axiosInstance.patch(`/notifications/${id}/read`).then(r => r.data);
+
+export const markAllNotificationsRead = () =>
+  axiosInstance.patch("/notifications/read-all").then(r => r.data);
+
+// --- APPOINTMENT FILES ---
+export const listAppointmentFiles = (appointmentId) =>
+  axiosInstance.get(`/appointment-files/${appointmentId}`).then(r => r.data);
+
+export const uploadAppointmentFile = (appointmentId, formData) =>
+  axiosInstance.post(`/appointment-files/${appointmentId}`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  }).then(r => r.data);
+
+export const getAppointmentFileSignedUrl = (fileId) =>
+  axiosInstance.get(`/appointment-files/signed/${fileId}`).then(r => r.data);
+
+export const deleteAppointmentFile = (fileId) =>
+  axiosInstance.delete(`/appointment-files/file/${fileId}`).then(r => r.data);

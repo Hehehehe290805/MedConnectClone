@@ -1,151 +1,106 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { axiosInstance } from "../lib/axios";
+import { rejectSuggestion } from "../lib/api";
+import toast from "react-hot-toast";
+import { XIcon } from "lucide-react";
 
-const ViewPendingSuggestionPopup = ({ suggestion, onClose, onSuggestionApproved }) => {
+const ViewPendingSuggestionPopup = ({ suggestion, onClose, onSuggestionApproved, onSuggestionRejected }) => {
     const [loading, setLoading] = useState(false);
+    const [isRejecting, setIsRejecting] = useState(false);
     const [error, setError] = useState(null);
-    const [success, setSuccess] = useState(false);
     const [rootSpecialtyName, setRootSpecialtyName] = useState("");
+    const [showRejectConfirm, setShowRejectConfirm] = useState(false);
 
-    // Fetch root specialty name if subspecialty
     useEffect(() => {
-        const fetchRootSpecialtyName = async () => {
-            if (suggestion.type === "subspecialty" && suggestion._id) {
-                try {
-                    const res = await axiosInstance.get(`/specialties-and-services/subspecialty-root/${suggestion._id}`);
-
-                    setRootSpecialtyName(res.data.name || "Unknown");
-                } catch (err) {
-                    console.error("Failed to fetch root specialty:", err);
-                    setRootSpecialtyName("Unknown");
-                }
-            }
-        };
-
-        fetchRootSpecialtyName();
+        if (suggestion?.type === "subspecialty" && suggestion._id) {
+            axiosInstance.get(`/specialties/subspecialty-root/${suggestion._id}`)
+                .then((r) => setRootSpecialtyName(r.data.name || "Unknown"))
+                .catch(() => setRootSpecialtyName("Unknown"));
+        }
     }, [suggestion]);
 
     if (!suggestion) return null;
 
     const handleApprove = async () => {
+        setLoading(true); setError(null);
         try {
-            setLoading(true);
-            setError(null);
-            setSuccess(false);
-
-            const res = await axiosInstance.patch(`/admin/approve`, { id: suggestion._id });
-
-
-            if (res.data.message) {
-                setSuccess(true);
-                setTimeout(() => {
-                    if (onSuggestionApproved) onSuggestionApproved(suggestion._id);
-                    onClose();
-                }, 1500);
-            }
+            await axiosInstance.patch("/admin/approve", { id: suggestion._id });
+            toast.success(`"${suggestion.name}" approved.`);
+            onSuggestionApproved?.(suggestion._id);
+            onClose();
         } catch (err) {
-            console.error("Error approving suggestion:", err);
-            setError(err.response?.data?.message || "Failed to approve suggestion");
-        } finally {
-            setLoading(false);
-        }
+            setError(err.response?.data?.message || "Failed to approve");
+        } finally { setLoading(false); }
     };
 
-    const getSuggestionType = () => {
-        switch (suggestion.type) {
-            case "specialty": return "Medical Specialty";
-            case "subspecialty": return "Subspecialty";
-            case "service": return "Service";
-            default: return suggestion.type;
-        }
+    const handleReject = async () => {
+        setIsRejecting(true);
+        try {
+            await rejectSuggestion({ id: suggestion._id });
+            toast.success(`"${suggestion.name}" rejected.`);
+            onSuggestionRejected?.(suggestion._id);
+            onClose();
+        } catch (err) {
+            setError(err?.response?.data?.message || "Failed to reject");
+        } finally { setIsRejecting(false); setShowRejectConfirm(false); }
     };
 
-    const renderSuggestionDetails = () => (
-        <div className="space-y-3">
-            <div>
-                <strong>Name:</strong>
-                <p className="text-lg font-semibold mt-1">{suggestion.name}</p>
-            </div>
-
-            <div>
-                <strong>Type:</strong>
-                <p className="mt-1">
-                    <span className="badge badge-primary">{getSuggestionType()}</span>
-                </p>
-            </div>
-
-            {suggestion.type === "subspecialty" && (
-                <div>
-                    <strong>Root Specialty:</strong>
-                    <p className="mt-1">{rootSpecialtyName}</p>
-                </div>
-            )}
-
-            {suggestion.suggestedBy && (
-                <div>
-                    <strong>Suggested By:</strong>
-                    <p className="mt-1">
-                        {suggestion.suggestedBy.firstName} {suggestion.suggestedBy.lastName}
-                        {suggestion.suggestedBy.email && (
-                            <span className="text-sm opacity-70 block">{suggestion.suggestedBy.email}</span>
-                        )}
-                    </p>
-                </div>
-            )}
-
-            {suggestion.createdAt && (
-                <div>
-                    <strong>Submitted:</strong>
-                    <p className="mt-1">
-                        {new Date(suggestion.createdAt).toLocaleDateString()} at{" "}
-                        {new Date(suggestion.createdAt).toLocaleTimeString()}
-                    </p>
-                </div>
-            )}
-        </div>
-    );
+    const typeLabel = { specialty: "Medical Specialty", subspecialty: "Subspecialty", service: "Service", departmenttype: "Dept. Type" }[suggestion.type] || suggestion.type;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-            <div className="bg-base-100 p-6 rounded-lg w-96 max-h-[80vh] overflow-y-auto">
-                <h2 className="text-xl font-bold mb-4">Suggestion Details</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-base-100 p-6 rounded-xl w-full max-w-md max-h-[80vh] overflow-y-auto shadow-xl">
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold">Suggestion Details</h2>
+                    <button className="btn btn-ghost btn-sm btn-circle" onClick={onClose} disabled={loading || isRejecting}>
+                        <XIcon className="size-4" />
+                    </button>
+                </div>
 
-                {success && (
-                    <div className="alert alert-success mb-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span>Suggestion approved successfully!</span>
-                    </div>
-                )}
+                {error && <p className="text-error text-sm mb-3">{error}</p>}
 
-                {error && (
-                    <div className="alert alert-error mb-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span>{error}</span>
-                    </div>
-                )}
-
-                {!success && renderSuggestionDetails()}
-
-                <div className="flex gap-2 mt-6">
-                    {!success ? (
-                        <>
-                            <button className="btn btn-success flex-1" onClick={handleApprove} disabled={loading}>
-                                {loading ? <span className="loading loading-spinner loading-sm"></span> : "Approve"}
-                            </button>
-                            <button className="btn btn-outline flex-1" onClick={onClose} disabled={loading}>Close</button>
-                        </>
-                    ) : (
-                        <button className="btn btn-success flex-1" disabled>
-                            <span className="loading loading-spinner loading-sm"></span>
-                            Closing...
-                        </button>
+                <div className="space-y-3 text-sm">
+                    <p><span className="opacity-50">Name:</span> <strong className="text-base">{suggestion.name}</strong></p>
+                    <p><span className="opacity-50">Type:</span> <span className="badge badge-info badge-sm rounded-md">{typeLabel}</span></p>
+                    {suggestion.type === "subspecialty" && rootSpecialtyName && (
+                        <p><span className="opacity-50">Under:</span> {rootSpecialtyName}</p>
+                    )}
+                    {suggestion.suggestedBy && (
+                        <div>
+                            <p className="opacity-50">Suggested By:</p>
+                            <p>{suggestion.suggestedBy.firstName} {suggestion.suggestedBy.lastName}</p>
+                            {suggestion.suggestedBy.email && <p className="opacity-60 text-xs">{suggestion.suggestedBy.email}</p>}
+                        </div>
+                    )}
+                    {suggestion.createdAt && (
+                        <p><span className="opacity-50">Submitted:</span> {new Date(suggestion.createdAt).toLocaleDateString("en-PH")}</p>
                     )}
                 </div>
+
+                <div className="flex gap-2 mt-6">
+                    <button className="btn btn-success flex-1" onClick={handleApprove} disabled={loading || isRejecting}>
+                        {loading ? <span className="loading loading-spinner loading-sm" /> : "Approve"}
+                    </button>
+                    <button className="btn btn-error btn-outline flex-1" onClick={() => setShowRejectConfirm(true)} disabled={loading || isRejecting}>
+                        Reject
+                    </button>
+                </div>
             </div>
+
+            {showRejectConfirm && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+                    <div className="bg-base-100 rounded-xl p-6 w-full max-w-sm space-y-4 shadow-xl">
+                        <h3 className="font-bold text-lg">Reject Suggestion?</h3>
+                        <p className="text-sm opacity-70">Reject "<strong>{suggestion.name}</strong>"? This will remove it.</p>
+                        <div className="flex gap-2 justify-end">
+                            <button className="btn btn-ghost btn-sm" onClick={() => setShowRejectConfirm(false)} disabled={isRejecting}>Cancel</button>
+                            <button className="btn btn-error btn-sm" onClick={handleReject} disabled={isRejecting}>
+                                {isRejecting ? <span className="loading loading-spinner loading-xs" /> : "Reject"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

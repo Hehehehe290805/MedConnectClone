@@ -13,10 +13,10 @@ dayjs.tz.setDefault("Asia/Manila");
 const toPhTime = (date) => dayjs(date).tz("Asia/Manila");
 const nowPhTime = () => dayjs().tz("Asia/Manila");
 
-const ALL_ACTIVE_STATUSES = [
-    "pending_accept", "awaiting_deposit", "booked", "confirmed", "ongoing",
-    "completed", "fully_paid", "confirm_fully_paid", "cancelled_unpaid",
-    "cancelled", "rejected", "no_show_patient", "no_show_doctor", "no_show_both", "freeze",
+const ALL_STATUSES = [
+    "pending_payment", "deposit_paid", "accepted", "ongoing",
+    "completed", "awaiting_balance", "fully_paid",
+    "cancelled", "rejected", "disputed", "resolved",
 ];
 
 async function generateAvailableSlots(doctorId, daysAhead = 2) {
@@ -27,11 +27,21 @@ async function generateAvailableSlots(doctorId, daysAhead = 2) {
 
     const slotDuration = 30;
     const gap = 5;
-    const slots = [];
     const now = nowPhTime();
+    const windowEnd = now.add(daysAhead, "day").toDate();
+
+    // Fetch all active appointments in the window once — avoids N+1 queries per slot
+    const existingAppts = await Appointment.find({
+        doctorId,
+        status: { $in: ["pending_payment", "deposit_paid", "accepted", "ongoing"] },
+        start: { $gte: now.toDate() },
+        end: { $lte: windowEnd },
+    }).select("start end").lean();
 
     let endHour = availability.endHour;
     if (endHour === "24:00") endHour = "00:00";
+
+    const slots = [];
 
     for (let i = 0; i < daysAhead; i++) {
         const day = now.add(i, "day").startOf("day");
@@ -52,21 +62,24 @@ async function generateAvailableSlots(doctorId, daysAhead = 2) {
 
         let currentTime = start.clone();
 
-        while (currentTime.add(slotDuration, "minute").isBefore(end)) {
+        while (!currentTime.add(slotDuration, "minute").isAfter(end)) {
+            // Skip slots that have already started
+            if (currentTime.isBefore(now)) {
+                currentTime = currentTime.add(slotDuration + gap, "minute");
+                continue;
+            }
+
             const slotStart = currentTime.toDate();
             const slotEnd = currentTime.add(slotDuration, "minute").toDate();
 
-            const overlapping = await Appointment.findOne({
-                doctorId,
-                status: { $in: ALL_ACTIVE_STATUSES },
-                $or: [
-                    { start: { $lt: slotEnd, $gte: slotStart } },
-                    { end: { $gt: slotStart, $lte: slotEnd } },
-                    { start: { $lte: slotStart }, end: { $gte: slotEnd } },
-                ],
+            // Check overlap in memory using the pre-fetched appointments
+            const hasOverlap = existingAppts.some(a => {
+                const gapStart = new Date(slotStart.getTime() - gap * 60000);
+                const gapEnd = new Date(slotEnd.getTime() + gap * 60000);
+                return new Date(a.start) < gapEnd && new Date(a.end) > gapStart;
             });
 
-            if (!overlapping) slots.push({ start: slotStart, end: slotEnd });
+            if (!hasOverlap) slots.push({ start: slotStart, end: slotEnd });
             currentTime = currentTime.add(slotDuration + gap, "minute");
         }
     }
@@ -85,7 +98,7 @@ const formatSlot = (s) => ({
 const formatAppointment = (a) => ({
     start: toPhTime(a.start).format(),
     end: toPhTime(a.end).format(),
-    title: a.status.charAt(0).toUpperCase() + a.status.slice(1),
+    title: a.status.charAt(0).toUpperCase() + a.status.slice(1).replace(/_/g, " "),
     type: "appointment",
     phTime: `${toPhTime(a.start).format("YYYY-MM-DD HH:mm")} to ${toPhTime(a.end).format("HH:mm")}`,
 });
@@ -93,11 +106,10 @@ const formatAppointment = (a) => ({
 export const getDoctorCalendar = asyncHandler(async (req, res) => {
     const { daysAhead = 5 } = req.query;
     const doctorId = req.user._id;
-    if (!doctorId) return sendError(res, 400, "doctorId is required");
 
     const [slots, appointments] = await Promise.all([
         generateAvailableSlots(doctorId, Number(daysAhead)),
-        Appointment.find({ doctorId, status: { $in: ALL_ACTIVE_STATUSES }, start: { $gte: new Date() } }),
+        Appointment.find({ doctorId, status: { $in: ALL_STATUSES }, start: { $gte: new Date() } }),
     ]);
 
     const events = [...slots.map(formatSlot), ...appointments.map(formatAppointment)];
@@ -110,7 +122,11 @@ export const getDoctorPublicCalendar = asyncHandler(async (req, res) => {
 
     const [slots, appointments] = await Promise.all([
         generateAvailableSlots(doctorId, Number(daysAhead)),
-        Appointment.find({ doctorId, status: { $in: ["booked", "confirmed", "cancelled", "completed"] }, start: { $gte: new Date() } }),
+        Appointment.find({
+            doctorId,
+            status: { $in: ["deposit_paid", "accepted", "ongoing"] },
+            start: { $gte: new Date() },
+        }),
     ]);
 
     const events = [...slots.map(formatSlot), ...appointments.map(formatAppointment)];
@@ -125,7 +141,7 @@ export const getInstitutePublicCalendar = asyncHandler(async (req, res) => {
 
     const appointments = await Appointment.find({
         instituteId,
-        status: { $in: ALL_ACTIVE_STATUSES },
+        status: { $in: ALL_STATUSES },
         start: { $gte: new Date() },
     });
 
@@ -140,9 +156,8 @@ export const setAvailability = asyncHandler(async (req, res) => {
     const providerType = req.user.role;
     const { startHour, endHour, daysOfWeek, isActive } = req.body;
 
-    if (!["doctor", "institute"].includes(providerType)) {
+    if (!["doctor", "institute"].includes(providerType))
         return sendError(res, 400, "Invalid provider type");
-    }
 
     const query = providerType === "doctor" ? { doctorId: providerId } : { instituteId: providerId };
     const availability = await Schedule.findOneAndUpdate(
@@ -158,88 +173,11 @@ export const getAvailability = asyncHandler(async (req, res) => {
     const providerId = req.user._id;
     const providerType = req.user.role;
 
-    if (!["doctor", "institute"].includes(providerType)) {
+    if (!["doctor", "institute"].includes(providerType))
         return sendError(res, 400, "Invalid provider type");
-    }
 
     const query = providerType === "doctor" ? { doctorId: providerId } : { instituteId: providerId };
     const availability = await Schedule.findOne(query);
 
-    return sendSuccess(res, 200, "Availability retrieved successfully", { availability: availability || null });
-});
-
-export const acceptAppointment = asyncHandler(async (req, res) => {
-    const doctorId = req.user._id;
-    const { appointmentId } = req.body;
-
-    const appointment = await Appointment.findById(appointmentId);
-    if (!appointment) return sendError(res, 404, "Appointment not found");
-    if (appointment.doctorId.toString() !== doctorId.toString()) return sendError(res, 403, "Only the assigned doctor can accept this appointment");
-    if (appointment.status !== "pending_accept") return sendError(res, 400, "Appointment cannot be accepted at this stage");
-
-    appointment.status = "awaiting_deposit";
-    await appointment.save();
-
-    return sendSuccess(res, 200, "Appointment accepted. Awaiting patient deposit.", { appointment });
-});
-
-export const rejectAppointment = asyncHandler(async (req, res) => {
-    const doctorId = req.user._id;
-    const { appointmentId, reason } = req.body;
-
-    const appointment = await Appointment.findById(appointmentId);
-    if (!appointment) return sendError(res, 404, "Appointment not found");
-    if (appointment.doctorId.toString() !== doctorId.toString()) return sendError(res, 403, "Only the assigned doctor can reject this appointment");
-    if (appointment.status !== "pending_accept") return sendError(res, 400, "Only appointments pending acceptance can be rejected");
-
-    appointment.status = "rejected";
-    appointment.rejectionReason = reason || "No reason provided";
-    await appointment.save();
-
-    return sendSuccess(res, 200, "Appointment rejected.", { appointment });
-});
-
-export const confirmDeposit = asyncHandler(async (req, res) => {
-    const doctorId = req.user._id;
-    const { appointmentId } = req.body;
-
-    const appointment = await Appointment.findById(appointmentId);
-    if (!appointment) return sendError(res, 404, "Appointment not found");
-    if (appointment.doctorId.toString() !== doctorId.toString()) return sendError(res, 403, "Only the assigned doctor can confirm deposit");
-    if (!appointment.depositPaid || appointment.status !== "booked") return sendError(res, 400, "Deposit not yet paid or appointment not in correct status");
-
-    appointment.status = "confirmed";
-    await appointment.save();
-
-    return sendSuccess(res, 200, "Deposit confirmed. Appointment is now confirmed.", { appointment });
-});
-
-export const markComplete = asyncHandler(async (req, res) => {
-    const doctorId = req.user._id;
-    const { appointmentId } = req.body;
-
-    const appointment = await Appointment.findById(appointmentId);
-    if (!appointment) return sendError(res, 404, "Appointment not found");
-    if (appointment.doctorId.toString() !== doctorId.toString()) return sendError(res, 403, "Only the assigned doctor can mark appointment as completed");
-    if (!["confirmed", "ongoing", "confirm_fully_paid"].includes(appointment.status)) return sendError(res, 400, "Appointment cannot be completed at this stage");
-
-    appointment.status = "marked_complete";
-    await appointment.save();
-
-    return sendSuccess(res, 200, "Appointment marked as completed.", { appointment });
-});
-
-export const confirmFullPayment = asyncHandler(async (req, res) => {
-    const doctorId = req.user._id;
-    const { appointmentId } = req.body;
-
-    const appointment = await Appointment.findById(appointmentId);
-    if (!appointment) return sendError(res, 404, "Appointment not found");
-    if (appointment.doctorId.toString() !== doctorId.toString()) return sendError(res, 403, "Only the assigned doctor can confirm full payment");
-    if (!appointment.balancePaid || appointment.status !== "fully_paid") return sendError(res, 400, "Full payment not yet made or appointment not in correct status");
-
-    appointment.status = "confirm_fully_paid";
-    await appointment.save();
-
-    return sendSuccess(res, 200, "Full payment confirmed. Appointment is fully paid.", { appointment });
+    return sendSuccess(res, 200, "Availability retrieved", { availability: availability || null });
 });

@@ -46,6 +46,45 @@ export const updateMeCredentialsValidator = [
         .matches(passwordRegex).withMessage("Password must be at least 8 characters and include 1 uppercase, 1 lowercase, 1 number, and 1 symbol (@$!%*?&)"),
 ];
 
+export const forgotPasswordValidator = [
+    body("email")
+        .notEmpty().withMessage("Email is required")
+        .isEmail().withMessage("Must be a valid email"),
+];
+
+export const verifyForgotPasswordValidator = [
+    body("email")
+        .notEmpty().withMessage("Email is required")
+        .isEmail().withMessage("Must be a valid email"),
+    body("code")
+        .notEmpty().withMessage("Code is required")
+        .isLength({ min: 6, max: 6 }).withMessage("Code must be 6 digits")
+        .isNumeric().withMessage("Code must be numeric"),
+];
+
+export const verify2FAValidator = [
+    body("email")
+        .notEmpty().withMessage("Email is required")
+        .isEmail().withMessage("Must be a valid email"),
+    body("code")
+        .notEmpty().withMessage("Code is required")
+        .isLength({ min: 6, max: 6 }).withMessage("Code must be 6 digits")
+        .isNumeric().withMessage("Code must be numeric"),
+];
+
+export const resetForgotPasswordValidator = [
+    body("email")
+        .notEmpty().withMessage("Email is required")
+        .isEmail().withMessage("Must be a valid email"),
+    body("code")
+        .notEmpty().withMessage("Code is required")
+        .isLength({ min: 6, max: 6 }).withMessage("Code must be 6 digits")
+        .isNumeric().withMessage("Code must be numeric"),
+    body("newPassword")
+        .notEmpty().withMessage("New password is required")
+        .matches(passwordRegex).withMessage("Password must be at least 8 characters and include 1 uppercase, 1 lowercase, 1 number, and 1 symbol (@$!%*?&)"),
+];
+
 // FLAG: updateMeProfile validator is role-aware — enforced at controller level,
 // validator only checks shared shape rules (image objects, date formats, etc.)
 export const updateMeProfileValidator = [

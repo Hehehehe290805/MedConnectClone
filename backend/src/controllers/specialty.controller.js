@@ -54,6 +54,25 @@ export const getDoctorSpecialties = asyncHandler(async (req, res) => {
     return sendSuccess(res, 200, "Doctor specialties fetched", { pending, verified });
 });
 
+// Returns verified specialties for any doctor — used by profile pages
+export const getDoctorSpecialtiesById = asyncHandler(async (req, res) => {
+    const { doctorId } = req.params;
+    if (!doctorId) return sendError(res, 400, "Doctor ID is required");
+
+    const items = await DoctorSpecialty.find({ doctorId, status: "verified" })
+        .populate("specialtyId", "name")
+        .populate("subspecialtyId", "name")
+        .lean();
+
+    const specialties = items.map((item) => ({
+        _id: item._id,
+        name: item.subspecialtyId?.name || item.specialtyId?.name || "Unknown",
+        type: item.claimType,
+    }));
+
+    return sendSuccess(res, 200, "Doctor specialties fetched", { specialties });
+});
+
 export const suggestSpecialty = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     const { name, type, rootSpecialtyId } = req.body;
@@ -117,4 +136,27 @@ export const claimSpecialty = asyncHandler(async (req, res) => {
     });
 
     return sendSuccess(res, 201, `Successfully claimed ${type}. Waiting for admin approval.`, { item: newClaim });
+});
+
+export const deleteSpecialtyClaim = asyncHandler(async (req, res) => {
+    const doctorId = req.user._id;
+    const { claimId } = req.params;
+
+    const claim = await DoctorSpecialty.findOne({ _id: claimId, doctorId });
+    if (!claim) return sendError(res, 404, "Claim not found");
+
+    // Guard: must keep at least one verified specialty
+    if (claim.claimType === "specialty" && claim.status === "verified") {
+        const verifiedSpecialtyCount = await DoctorSpecialty.countDocuments({
+            doctorId,
+            claimType: "specialty",
+            status: "verified",
+        });
+        if (verifiedSpecialtyCount <= 1) {
+            return sendError(res, 400, "You must keep at least one verified specialty.");
+        }
+    }
+
+    await claim.deleteOne();
+    return sendSuccess(res, 200, "Claim removed");
 });

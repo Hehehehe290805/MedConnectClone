@@ -1,7 +1,9 @@
 import User from "../models/User.js";
+import PermitRenewal from "../models/PermitRenewal.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { createAndSendCode, verifyCode } from "../services/verification.js";
+import { notifyAllAdmins } from "../services/notification.service.js";
 
 const blockedFromSubmit = ["pendingRenewal", "pendingRenewalExpired", "pending"];
 const canSubmit = ["onBoarded", "needsRenewal", "suspended"];
@@ -147,4 +149,40 @@ export const verifyPermitRenewal = asyncHandler(async (req, res) => {
         .select("-password");
 
     return sendSuccess(res, 200, "Permit renewal submitted for approval.", { user: updated });
+});
+
+// ── NEW STAGED RENEWAL ENDPOINTS ──────────────────────────────────────────
+
+export const requestRenewal = asyncHandler(async (req, res) => {
+    const user = req.user;
+    const { type, newImage, newLicenseNumber, licenseCode, newExpiration } = req.body;
+
+    if (!type || !newExpiration) return sendError(res, 400, "type and newExpiration are required");
+
+    // block if there is already a pending renewal of this type
+    const existing = await PermitRenewal.findOne({ userId: user._id, type, status: "pending" });
+    if (existing) return sendError(res, 400, "A renewal request for this document is already pending approval");
+
+    const renewal = new PermitRenewal({
+        userId: user._id,
+        type,
+        newImage: newImage || undefined,
+        newLicenseNumber: newLicenseNumber || undefined,
+        licenseCode: licenseCode || undefined,
+        newExpiration,
+    });
+    await renewal.save();
+
+    // Alert admins that a renewal is waiting for review
+    const label = type.replace(/_/g, " ");
+    notifyAllAdmins("renewal_submitted", "New Renewal Request",
+        `A ${label} renewal has been submitted and is awaiting your approval.`
+    );
+
+    return sendSuccess(res, 201, "Renewal request submitted", { renewal });
+});
+
+export const getMyRenewals = asyncHandler(async (req, res) => {
+    const renewals = await PermitRenewal.find({ userId: req.user._id }).sort({ createdAt: -1 });
+    return sendSuccess(res, 200, "Renewals fetched", { renewals });
 });

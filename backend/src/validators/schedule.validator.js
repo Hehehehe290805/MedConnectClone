@@ -16,33 +16,3 @@ export const setAvailabilityValidator = [
         .isBoolean().withMessage("isActive must be a boolean"),
 ];
 
-export const acceptAppointmentValidator = [
-    body("appointmentId")
-        .notEmpty().withMessage("Appointment ID is required")
-        .isMongoId().withMessage("Invalid appointment ID"),
-];
-
-export const rejectAppointmentValidator = [
-    body("appointmentId")
-        .notEmpty().withMessage("Appointment ID is required")
-        .isMongoId().withMessage("Invalid appointment ID"),
-    body("reason").optional().isString(),
-];
-
-export const confirmDepositValidator = [
-    body("appointmentId")
-        .notEmpty().withMessage("Appointment ID is required")
-        .isMongoId().withMessage("Invalid appointment ID"),
-];
-
-export const markCompleteValidator = [
-    body("appointmentId")
-        .notEmpty().withMessage("Appointment ID is required")
-        .isMongoId().withMessage("Invalid appointment ID"),
-];
-
-export const confirmFullPaymentValidator = [
-    body("appointmentId")
-        .notEmpty().withMessage("Appointment ID is required")
-        .isMongoId().withMessage("Invalid appointment ID"),
-];

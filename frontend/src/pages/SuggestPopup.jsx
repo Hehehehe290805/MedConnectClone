@@ -14,8 +14,8 @@ const SuggestPopup = ({ onClose }) => {
         // Fetch verified specialties for the rootSpecialty dropdown
         const fetchSpecialties = async () => {
             try {
-                const res = await axiosInstance.get("/specialties-and-services/specialties");
-                setSpecialties(res.data.items || []);
+                const res = await axiosInstance.get("/specialties");
+                setSpecialties(res.data.data?.items || []);
             } catch (err) {
                 console.error("Error fetching specialties:", err);
             }
@@ -34,7 +34,7 @@ const SuggestPopup = ({ onClose }) => {
             const payload = { name, type };
             if (type === "subspecialty") payload.rootSpecialtyId = rootSpecialty;
 
-            const res = await axiosInstance.post("/specialties-and-services/suggest", payload);
+            const res = await axiosInstance.post("/specialties/suggest", payload);
             setSuccess(res.data.message);
             setName("");
             setRootSpecialty("");

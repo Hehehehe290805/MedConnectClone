@@ -1,5 +1,7 @@
 import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
+import crypto from "crypto";
 import User from "../models/User.js";
 import Appointment from "../models/Appointment.js";
 import Admin from "../models/Admin.js";
@@ -7,17 +9,20 @@ import EmailRegistry from "../models/EmailRegistry.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { createAndSendCode, verifyCode } from "../services/verification.js";
+import { sendVerificationCode } from "../services/email.js";
 import VerificationCode from "../models/VerificationCode.js";
+import { notify } from "../services/notification.service.js";
+import { deleteFromS3 } from "../services/s3.js";
 
 const cookieOptions = {
-  maxAge: 7 * 24 * 60 * 60 * 1000,
+  maxAge: 24 * 60 * 60 * 1000,
   httpOnly: true,
   sameSite: "strict",
   secure: process.env.NODE_ENV === "production",
 };
 
 const generateToken = (userId) =>
-  jwt.sign({ userId }, process.env.JWT_SECRET_KEY, { expiresIn: "7d" });
+  jwt.sign({ userId }, process.env.JWT_SECRET_KEY, { expiresIn: "1d" });
 
 export const signup = asyncHandler(async (req, res) => {
   const { email, password, adminCode } = req.body;
@@ -98,30 +103,105 @@ export const resendSignupCode = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, "Verification code resent.");
   });
 
+const MAX_LOGIN_ATTEMPTS = 5;
+
+async function sendBruteForceResetCode(account, Model) {
+  const plain = crypto.randomInt(100000, 999999).toString();
+  const hashed = await bcrypt.hash(plain, 10);
+  await Model.findByIdAndUpdate(account._id, {
+    loginAttempts: MAX_LOGIN_ATTEMPTS,
+    loginLockedAt: new Date(),
+    resetPasswordCode: hashed,
+    resetPasswordCodeExpiry: new Date(Date.now() + 15 * 60 * 1000),
+  });
+  try { await sendVerificationCode(account.email, plain); } catch { /* non-fatal */ }
+}
+
+// Regular user login — Admin accounts are in a separate collection and must
+// use POST /api/auth/admin-login which requires their admin code.
 export const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
   const user = await User.findOne({ email });
   if (!user) return sendError(res, 401, "Invalid email or password.");
 
-  // restore account if it was pending deletion
+  if (user.loginAttempts >= MAX_LOGIN_ATTEMPTS) {
+    return sendError(res, 429, "Account locked due to too many failed attempts. Check your email for a password reset code.");
+  }
+
   if (user.pendingDeletion) {
-    await User.findByIdAndUpdate(user._id, {
-      pendingDeletion: false,
-      deletionRequestedAt: null,
-    });
+    await User.findByIdAndUpdate(user._id, { pendingDeletion: false, deletionRequestedAt: null });
   }
 
   const isPasswordValid = await user.matchPassword(password);
-  if (!isPasswordValid) return sendError(res, 401, "Invalid email or password.");
+  if (!isPasswordValid) {
+    const newAttempts = (user.loginAttempts || 0) + 1;
+    if (newAttempts >= MAX_LOGIN_ATTEMPTS) {
+      await sendBruteForceResetCode(user, User);
+      return sendError(res, 429, "Too many failed attempts. A password reset code has been sent to your email.");
+    }
+    await User.findByIdAndUpdate(user._id, { loginAttempts: newAttempts });
+    const remaining = MAX_LOGIN_ATTEMPTS - newAttempts;
+    return sendError(res, 401, `Invalid email or password. ${remaining} attempt(s) remaining before lockout.`);
+  }
+
+  // Successful — clear brute-force counters
+  await User.findByIdAndUpdate(user._id, { loginAttempts: 0, loginLockedAt: null });
+
+  if (user.twoFactorEnabled) {
+    await createAndSendCode(email, "two_factor", {}, null, user._id);
+    return sendSuccess(res, 200, "Verification code sent to your email.", { requires2FA: true });
+  }
 
   const token = generateToken(user._id);
   res.cookie("jwt", token, cookieOptions);
+  return sendSuccess(res, 200, "Login successful", { role: user.role, userId: user._id });
+});
 
-  return sendSuccess(res, 200, "Login successful", {
-    role: user.role,
-    userId: user._id,
+export const verify2FA = asyncHandler(async (req, res) => {
+  const { email, code } = req.body;
+
+  let account = await User.findOne({ email }).select("-password");
+  let isAdmin = false;
+  if (!account) {
+    account = await Admin.findOne({ email }).select("-password");
+    isAdmin = true;
+  }
+  if (!account) return sendError(res, 401, "Invalid request.");
+
+  let record;
+  try {
+    record = await verifyCode(email, "two_factor", code, account._id);
+  } catch (err) {
+    return sendError(res, 400, err.message);
+  }
+
+  // Admin 2FA is only reachable after admin-login already verified the adminCode.
+  // The payload flag confirms that path — reject any attempt that bypassed it.
+  if (isAdmin && !record.payload?.adminVerified) {
+    return sendError(res, 403, "Admin code was not verified. Please use the Admin Login form.");
+  }
+
+  const token = generateToken(account._id);
+  res.cookie("jwt", token, cookieOptions);
+  return sendSuccess(res, 200, "Login successful.", {
+    role: account.role,
+    userId: account._id,
   });
+});
+
+export const toggle2FA = asyncHandler(async (req, res) => {
+  const user = req.user;
+  const Model = user.role === "admin" ? Admin : User;
+  const updated = await Model.findByIdAndUpdate(
+    user._id,
+    { twoFactorEnabled: !user.twoFactorEnabled },
+    { new: true }
+  ).select("twoFactorEnabled");
+  return sendSuccess(res, 200,
+    updated.twoFactorEnabled ? "Two-factor authentication enabled." : "Two-factor authentication disabled.",
+    { twoFactorEnabled: updated.twoFactorEnabled }
+  );
 });
 
 export const logout = asyncHandler(async (req, res) => {
@@ -142,6 +222,8 @@ export const getMe = asyncHandler(async (req, res) => {
     phoneNumber: user.phoneNumber ?? null,
     phoneType: user.phoneType ?? null,
     profilePic: user.profilePic ?? null,
+    createdAt: user.createdAt,
+    twoFactorEnabled: user.twoFactorEnabled ?? false,
   };
 
   // role-specific fields
@@ -187,6 +269,40 @@ export const getMe = asyncHandler(async (req, res) => {
         pharmacistLicenseImage: user.pharmacistLicenseImage,
         pharmacistLegalIDImage: user.pharmacistLegalIDImage,
       };
+    } else if (role === "institute") {
+      // populate departments so names are available in OnboardingDepartment
+      const withDepts = await User.findById(user._id).populate("departments", "name status").lean();
+      roleFields = {
+        instituteName: withDepts?.instituteName ?? user.instituteName,
+        instituteType: withDepts?.instituteType ?? user.instituteType,
+        bio: withDepts?.bio ?? user.bio,
+        address: withDepts?.address ?? null,
+        contactFirstName: withDepts?.contactFirstName ?? user.contactFirstName,
+        contactLastName: withDepts?.contactLastName ?? user.contactLastName,
+        licensingAgency: withDepts?.licensingAgency ?? user.licensingAgency,
+        businessPermit: withDepts?.businessPermit ?? user.businessPermit,
+        businessPermitExpiration: withDepts?.businessPermitExpiration ?? user.businessPermitExpiration,
+        constructionPermit: withDepts?.constructionPermit ?? user.constructionPermit,
+        constructionPermitExpiration: withDepts?.constructionPermitExpiration ?? user.constructionPermitExpiration,
+        departmentAccounts: withDepts?.departmentAccounts ?? user.departmentAccounts,
+        departments: withDepts?.departments || [],
+      };
+    } else if (role === "department") {
+      const withInstitute = await User.findById(user._id).populate("rootInstitute", "instituteName").lean();
+      roleFields = {
+        technologistFirstName: user.technologistFirstName,
+        technologistLastName: user.technologistLastName,
+        sex: user.sex,
+        birthDate: user.birthDate,
+        bio: user.bio,
+        address: user.address,
+        departmentId: user.departmentId,
+        departmentType: user.departmentType,
+        rootInstitute: withInstitute?.rootInstitute || user.rootInstitute,
+        technologistLicenseExpiration: user.technologistLicenseExpiration,
+        technologistLicenseImage: user.technologistLicenseImage,
+        technologistLegalIDImage: user.technologistLegalIDImage,
+      };
     } else if (role === "admin") {
       roleFields = {
         firstName: user.firstName,
@@ -212,10 +328,31 @@ export const adminLogin = asyncHandler(async (req, res) => {
     });
   }
 
-  const isPasswordValid = await admin.matchPassword(password);
-  if (!isPasswordValid) return sendError(res, 401, "Invalid credentials.");
+  if (admin.loginAttempts >= MAX_LOGIN_ATTEMPTS) {
+    return sendError(res, 429, "Account locked due to too many failed attempts. Check your email for a password reset code.");
+  }
 
-  if (admin.adminCode !== adminCode) return sendError(res, 401, "Invalid admin code.");
+  const isPasswordValid = await admin.matchPassword(password);
+  if (!isPasswordValid) {
+    const newAttempts = (admin.loginAttempts || 0) + 1;
+    if (newAttempts >= MAX_LOGIN_ATTEMPTS) {
+      await sendBruteForceResetCode(admin, Admin);
+      return sendError(res, 429, "Too many failed attempts. A password reset code has been sent to your email.");
+    }
+    await Admin.findByIdAndUpdate(admin._id, { loginAttempts: newAttempts });
+    const remaining = MAX_LOGIN_ATTEMPTS - newAttempts;
+    return sendError(res, 401, `Invalid credentials. ${remaining} attempt(s) remaining before lockout.`);
+  }
+
+  // Successful password — clear counter before admin code check
+  await Admin.findByIdAndUpdate(admin._id, { loginAttempts: 0, loginLockedAt: null });
+
+  if (!(await admin.matchAdminCode(adminCode))) return sendError(res, 401, "Invalid admin code.");
+
+  if (admin.twoFactorEnabled) {
+    await createAndSendCode(admin.email, "two_factor", { adminVerified: true }, null, admin._id);
+    return sendSuccess(res, 200, "Verification code sent to your email.", { requires2FA: true });
+  }
 
   const token = generateToken(admin._id);
   res.cookie("jwt", token, cookieOptions);
@@ -239,6 +376,11 @@ export const deleteMe = asyncHandler(async (req, res) => {
     deletionRequestedAt: new Date(),
   });
 
+  // Confirm to the user that deletion is scheduled (non-fatal — user is about to log out)
+  notify(user._id, "account_deletion_requested", "Account Deletion Scheduled",
+    "Your account has been scheduled for deletion. You have 30 days to log back in and cancel this request."
+  );
+
   res.clearCookie("jwt");
   return sendSuccess(res, 200, "Account deletion requested. You have 30 days to log back in to cancel.");
 });
@@ -248,15 +390,22 @@ export const deleteMe = asyncHandler(async (req, res) => {
 export const requestEmailUpdate = asyncHandler(async (req, res) => {
   const { currentEmail, currentPassword, newEmail, adminCode } = req.body;
   const user = req.user;
+  const Model = user.role === "admin" ? Admin : User;
 
   if (user.email !== currentEmail) return sendError(res, 401, "Current email is incorrect.");
 
-  const isPasswordValid = await user.matchPassword(currentPassword);
+  // protectRoute excludes password — re-fetch the document to enable comparison
+  const freshUser = await Model.findById(user._id);
+  if (!freshUser) return sendError(res, 404, "User not found.");
+  if (!freshUser.password) return sendError(res, 401, "Current password is incorrect.");
+
+  const isPasswordValid = await freshUser.matchPassword(currentPassword);
   if (!isPasswordValid) return sendError(res, 401, "Current password is incorrect.");
 
   if (user.role === "admin") {
     if (!adminCode) return sendError(res, 400, "Admin code is required.");
-    if (user.adminCode !== adminCode) return sendError(res, 401, "Invalid admin code.");
+    const freshAdmin = await Admin.findById(user._id);
+    if (!freshAdmin || !(await freshAdmin.matchAdminCode(adminCode))) return sendError(res, 401, "Invalid admin code.");
   }
 
   const existingEmail = await EmailRegistry.findOne({ email: newEmail });
@@ -323,15 +472,22 @@ export const verifyNewEmailUpdate = asyncHandler(async (req, res) => {
 export const requestPasswordUpdate = asyncHandler(async (req, res) => {
   const { currentEmail, currentPassword, newPassword, confirmPassword, adminCode } = req.body;
   const user = req.user;
+  const Model = user.role === "admin" ? Admin : User;
 
   if (user.email !== currentEmail) return sendError(res, 401, "Current email is incorrect.");
 
-  const isPasswordValid = await user.matchPassword(currentPassword);
+  // protectRoute excludes password — re-fetch the document to enable comparison
+  const freshUser = await Model.findById(user._id);
+  if (!freshUser) return sendError(res, 404, "User not found.");
+  if (!freshUser.password) return sendError(res, 401, "Current password is incorrect.");
+
+  const isPasswordValid = await freshUser.matchPassword(currentPassword);
   if (!isPasswordValid) return sendError(res, 401, "Current password is incorrect.");
 
   if (user.role === "admin") {
     if (!adminCode) return sendError(res, 400, "Admin code is required.");
-    if (user.adminCode !== adminCode) return sendError(res, 401, "Invalid admin code.");
+    const freshAdmin = await Admin.findById(user._id);
+    if (!freshAdmin || !(await freshAdmin.matchAdminCode(adminCode))) return sendError(res, 401, "Invalid admin code.");
   }
 
   if (newPassword !== confirmPassword) return sendError(res, 400, "Passwords do not match.");
@@ -352,10 +508,102 @@ export const verifyPasswordUpdate = asyncHandler(async (req, res) => {
   const record = await verifyCode(user.email, "update-password", code, user._id);
   const { newPassword } = record.payload;
 
-  await Model.findByIdAndUpdate(user._id, { password: newPassword }, { runValidators: true });
+  // Use .save() so the pre-save hook hashes the password before storing
+  const doc = await Model.findById(user._id);
+  if (!doc) return sendError(res, 404, "User not found.");
+  doc.password = newPassword;
+  doc.lastPasswordChange = new Date();
+  await doc.save();
 
   res.clearCookie("jwt");
   return sendSuccess(res, 200, "Password updated successfully. Please log in again.");
+});
+
+// resolves account + model by email across User and Admin collections
+async function findAccountByEmail(email) {
+  const user = await User.findOne({ email });
+  if (user) return { account: user, Model: User };
+  const admin = await Admin.findOne({ email });
+  if (admin) return { account: admin, Model: Admin };
+  return { account: null, Model: null };
+}
+
+// FORGOT PASSWORD — Step 1: send code to email
+export const forgotPassword = asyncHandler(async (req, res) => {
+  const { email, adminCode } = req.body;
+
+  const { account, Model } = await findAccountByEmail(email);
+  if (account) {
+    // admin accounts require their admin code before a reset code is sent
+    if (Model === Admin) {
+      if (!adminCode) return sendError(res, 400, "Admin code is required for admin accounts.");
+      if (!(await account.matchAdminCode(adminCode))) return sendError(res, 401, "Invalid admin code.");
+    }
+
+    const plain = crypto.randomInt(100000, 999999).toString();
+    const hashed = await bcrypt.hash(plain, 10);
+    const expiry = new Date(Date.now() + 15 * 60 * 1000);
+    await Model.findByIdAndUpdate(account._id, {
+      resetPasswordCode: hashed,
+      resetPasswordCodeExpiry: expiry,
+    });
+    try {
+      await sendVerificationCode(email, plain);
+    } catch {
+      // non-fatal
+    }
+  }
+
+  return sendSuccess(res, 200, "If an account with that email exists, a code has been sent.");
+});
+
+// FORGOT PASSWORD — Step 2: verify code (check only, does not consume)
+export const verifyForgotPasswordCode = asyncHandler(async (req, res) => {
+  const { email, code } = req.body;
+
+  const { account, Model } = await findAccountByEmail(email);
+  if (!account || !account.resetPasswordCode) return sendError(res, 400, "Invalid or expired code.");
+  if (!account.resetPasswordCodeExpiry || account.resetPasswordCodeExpiry < new Date()) {
+    await Model.findByIdAndUpdate(account._id, { resetPasswordCode: null, resetPasswordCodeExpiry: null });
+    return sendError(res, 400, "Invalid or expired code.");
+  }
+  const isMatch = await bcrypt.compare(code, account.resetPasswordCode);
+  if (!isMatch) return sendError(res, 400, "Invalid or expired code.");
+
+  return sendSuccess(res, 200, "Code verified.");
+});
+
+// FORGOT PASSWORD — Step 3: reset password (verifies + consumes code)
+export const resetForgotPassword = asyncHandler(async (req, res) => {
+  const { email, code, newPassword } = req.body;
+
+  const { account, Model } = await findAccountByEmail(email);
+  if (!account || !account.resetPasswordCode) return sendError(res, 400, "Invalid or expired code.");
+  if (!account.resetPasswordCodeExpiry || account.resetPasswordCodeExpiry < new Date()) {
+    await Model.findByIdAndUpdate(account._id, { resetPasswordCode: null, resetPasswordCodeExpiry: null });
+    return sendError(res, 400, "Invalid or expired code.");
+  }
+  const isMatch = await bcrypt.compare(code, account.resetPasswordCode);
+  if (!isMatch) return sendError(res, 400, "Invalid or expired code.");
+
+  // Enforce once-per-month limit — mirrors the settings flow restriction
+  if (account.lastPasswordChange) {
+    const daysSince = (Date.now() - new Date(account.lastPasswordChange).getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSince < 30) {
+      const daysLeft = Math.ceil(30 - daysSince);
+      return sendError(res, 429, `Password can only be changed once per month. Try again in ${daysLeft} day(s).`);
+    }
+  }
+
+  account.password = newPassword;
+  account.resetPasswordCode = null;
+  account.resetPasswordCodeExpiry = null;
+  account.lastPasswordChange = new Date();
+  account.loginAttempts = 0;
+  account.loginLockedAt = null;
+  await account.save();
+
+  return sendSuccess(res, 200, "Password updated successfully.");
 });
 
 // role-aware field allowlists — only these fields are accepted per role
@@ -373,6 +621,14 @@ const profileFieldsByRole = {
     "bio", "profilePic", "address", "phoneNumber", "phoneType",
     "pharmacyName", "pharmacistFirstName", "pharmacistLastName",
     "birthDate", "sex",
+  ],
+  institute: [
+    "bio", "profilePic", "address", "phoneNumber", "phoneType",
+    "instituteName", "contactFirstName", "contactLastName",
+  ],
+  department: [
+    "bio", "profilePic", "address", "phoneNumber", "phoneType",
+    "technologistFirstName", "technologistLastName",
   ],
   admin: [
     "firstName", "lastName", "phoneNumber", "phoneType", "profilePic",
@@ -400,6 +656,11 @@ export const updateMeProfile = asyncHandler(async (req, res) => {
 
   if (Object.keys(updates).length === 0) {
     return sendError(res, 400, "No valid fields provided for update.");
+  }
+
+  // Delete old profile pic from S3 when it's being replaced
+  if (updates.profilePic && user.profilePic?.key) {
+    try { await deleteFromS3(user.profilePic.key); } catch { /* non-fatal */ }
   }
 
   const Model = user.role === "admin" ? Admin : User;
