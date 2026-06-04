@@ -1,52 +1,25 @@
-import { LayoutDashboardIcon, BookOpenIcon, ClipboardListIcon, SettingsIcon, HistoryIcon } from "lucide-react";
-
-const navCards = [
-    { label: "Dashboard", icon: LayoutDashboardIcon, active: true },
-    { label: "Catalogue", icon: BookOpenIcon },
-    { label: "Order Request", icon: ClipboardListIcon },
-    { label: "Settings", icon: SettingsIcon },
-];
+import { BriefcaseMedicalIcon, WrenchIcon, ArrowLeftIcon } from "lucide-react";
+import { useNavigate } from "react-router";
 
 const ComingSoonPage = () => {
+    const navigate = useNavigate();
     return (
-        <div className="min-h-screen bg-base-100 p-6">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-2">
-                    <span className="text-primary font-bold tracking-wider">PHARMACY</span>
+        <div className="min-h-screen flex items-center justify-center bg-base-100 p-4">
+            <div className="card bg-base-200 shadow-xl w-full max-w-md text-center p-8">
+                <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-primary hover:underline mb-6 mx-auto">
+                    <ArrowLeftIcon className="size-4" /> Go Back
+                </button>
+                <div className="size-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <WrenchIcon className="size-10 text-primary" />
                 </div>
-                <div className="flex items-center gap-2 text-base-content/60">
-                    <div className="size-8 rounded-full border border-base-300 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-                    </div>
-                    <span className="text-sm">user</span>
+                <div className="flex items-center justify-center gap-2 mb-3">
+                    <BriefcaseMedicalIcon className="size-5 text-primary" />
+                    <span className="text-primary font-bold font-mono tracking-wider">MedConnect</span>
                 </div>
-            </div>
-
-            {/* Page Title */}
-            <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
-
-            {/* Nav Cards Row */}
-            <div className="flex gap-4 mb-4 flex-wrap">
-                {navCards.map(({ label, icon: Icon, active }) => (
-                    <div
-                        key={label}
-                        className={`card bg-base-100 shadow p-5 flex flex-col items-start gap-4 flex-1 min-w-32 ${active ? "border-2 border-primary" : ""}`}
-                    >
-                        <span className={`text-sm font-semibold ${active ? "text-primary" : ""}`}>{label}</span>
-                        <div className="flex flex-col gap-1 opacity-30">
-                            <div className="flex items-center gap-1"><div className="size-1 rounded-full bg-base-content" /><div className="h-1 w-16 rounded bg-base-content" /></div>
-                            <div className="flex items-center gap-1"><div className="size-1 rounded-full bg-base-content" /><div className="h-1 w-16 rounded bg-base-content" /></div>
-                            <div className="flex items-center gap-1"><div className="size-1 rounded-full bg-base-content" /><div className="h-1 w-16 rounded bg-base-content" /></div>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {/* Order History Card */}
-            <div className="card bg-base-100 shadow p-5 flex items-center gap-3 w-full">
-                <HistoryIcon className="size-5 text-base-content/40" />
-                <span className="text-sm font-semibold">Order History</span>
+                <h1 className="text-2xl font-bold mb-3">We're Working On This</h1>
+                <p className="opacity-70 text-sm leading-relaxed">
+                    This section of MedConnect is currently under development. We're working hard to bring you a great experience. Check back soon!
+                </p>
             </div>
         </div>
     );
