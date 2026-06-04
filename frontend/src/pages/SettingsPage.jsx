@@ -7,7 +7,7 @@ import { ImageUploadField, uploadPendingImages } from "./OnboardingShared.jsx";
 import {
   Trash2Icon, AlertTriangleIcon, XIcon, EyeIcon, EyeOffIcon, LogOutIcon,
   KeyRoundIcon, ShieldCheckIcon, UploadCloudIcon, HelpCircleIcon, FlagIcon,
-  ChevronDownIcon, ChevronUpIcon, PencilIcon, PlusIcon, FileTextIcon,
+  ChevronDownIcon, ChevronUpIcon, PencilIcon, PlusIcon, FileTextIcon, MailIcon,
 } from "lucide-react";
 
 const FAQ_ITEMS = [
@@ -59,7 +59,7 @@ import {
   requestEmailUpdate, verifyCurrentEmailUpdate, verifyNewEmailUpdate,
   requestPasswordUpdate, verifyPasswordUpdate,
   requestPermitRenewal, getMyRenewals,
-  toggle2FA,
+  toggle2FA, toggleEmailNotifications,
 } from "../lib/api.js";
 import { uploadFile } from "../lib/api.js";
 import useLogout from "../hooks/useLogout.js";
@@ -158,6 +158,19 @@ const SettingsPage = () => {
       queryClient.invalidateQueries({ queryKey: ["authUser"] });
     },
     onError: () => toast.error("Failed to update two-factor authentication."),
+  });
+
+  // ── Email notifications toggle ──────────────────────────────────────────
+  const [emailNotifsEnabled, setEmailNotifsEnabled] = useState(authUser?.emailNotificationsEnabled ?? true);
+
+  const { mutate: doToggleEmailNotifs, isPending: isTogglingEmailNotifs } = useMutation({
+    mutationFn: toggleEmailNotifications,
+    onSuccess: (data) => {
+      setEmailNotifsEnabled(data.data.emailNotificationsEnabled);
+      toast.success(data.message);
+      queryClient.invalidateQueries({ queryKey: ["authUser"] });
+    },
+    onError: () => toast.error("Failed to update email notification preference."),
   });
 
   // ── FAQ & report issue ──────────────────────────────────────────────────
@@ -532,6 +545,29 @@ const SettingsPage = () => {
                 {twoFAEnabled ? "Enabled" : "Disabled"}
               </span>
               {isTogglingTwoFA && <span className="loading loading-spinner loading-xs" />}
+            </div>
+          </div>
+        </div>
+
+        {/* Email Notifications */}
+        <div className="card bg-base-200 shadow-xl">
+          <div className="card-body">
+            <h2 className="card-title text-xl"><MailIcon className="w-5 h-5" />Email Notifications</h2>
+            <p className="text-sm opacity-70 mt-1">
+              Receive email updates for appointment events, account changes, and platform alerts. Verification and security codes are always sent.
+            </p>
+            <div className="flex items-center gap-4 mt-4">
+              <input
+                type="checkbox"
+                className="toggle toggle-primary"
+                checked={emailNotifsEnabled}
+                disabled={isTogglingEmailNotifs}
+                onChange={() => doToggleEmailNotifs()}
+              />
+              <span className="text-sm font-medium">
+                {emailNotifsEnabled ? "Enabled" : "Disabled"}
+              </span>
+              {isTogglingEmailNotifs && <span className="loading loading-spinner loading-xs" />}
             </div>
           </div>
         </div>
