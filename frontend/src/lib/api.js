@@ -36,6 +36,11 @@ export const toggle2FA = async () => {
   return response.data;
 };
 
+export const toggleEmailNotifications = async () => {
+  const response = await axiosInstance.patch("/auth/toggle-email-notifications");
+  return response.data;
+};
+
 export const logout = async () => {
   const response = await axiosInstance.post("/auth/logout");
   return response.data;

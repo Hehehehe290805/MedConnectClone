@@ -49,6 +49,7 @@ const adminSchema = new mongoose.Schema({
     resetPasswordCode: { type: String, default: null },
     resetPasswordCodeExpiry: { type: Date, default: null },
     twoFactorEnabled: { type: Boolean, default: false },
+    emailNotificationsEnabled: { type: Boolean, default: true },
     loginAttempts: { type: Number, default: 0 },
     loginLockedAt: { type: Date, default: null },
     phoneNumber: { type: String },

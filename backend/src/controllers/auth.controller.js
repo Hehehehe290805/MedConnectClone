@@ -204,6 +204,20 @@ export const toggle2FA = asyncHandler(async (req, res) => {
   );
 });
 
+export const toggleEmailNotifications = asyncHandler(async (req, res) => {
+  const user = req.user;
+  const Model = user.role === "admin" ? Admin : User;
+  const updated = await Model.findByIdAndUpdate(
+    user._id,
+    { emailNotificationsEnabled: !(user.emailNotificationsEnabled ?? true) },
+    { new: true }
+  ).select("emailNotificationsEnabled");
+  return sendSuccess(res, 200,
+    updated.emailNotificationsEnabled ? "Email notifications enabled." : "Email notifications disabled.",
+    { emailNotificationsEnabled: updated.emailNotificationsEnabled }
+  );
+});
+
 export const logout = asyncHandler(async (req, res) => {
   res.clearCookie("jwt");
   return sendSuccess(res, 200, "Logout successful");
@@ -224,6 +238,7 @@ export const getMe = asyncHandler(async (req, res) => {
     profilePic: user.profilePic ?? null,
     createdAt: user.createdAt,
     twoFactorEnabled: user.twoFactorEnabled ?? false,
+    emailNotificationsEnabled: user.emailNotificationsEnabled ?? true,
   };
 
   // role-specific fields

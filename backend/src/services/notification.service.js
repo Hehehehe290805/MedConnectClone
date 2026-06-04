@@ -3,13 +3,12 @@ import User from "../models/User.js";
 import Admin from "../models/Admin.js";
 import { sendNotificationEmail } from "./email.js";
 
-// Resolve the email for a given recipient ID, checking both User and Admin
-// collections. Admins live in a separate collection from the User discriminators.
-async function resolveEmail(recipientId) {
-    const user = await User.findById(recipientId).select("email").lean();
-    if (user?.email) return user.email;
-    const admin = await Admin.findById(recipientId).select("email").lean();
-    return admin?.email || null;
+// Resolve email + notification preference for a recipient, checking both collections.
+async function resolveEmailAndPrefs(recipientId) {
+    const user = await User.findById(recipientId).select("email emailNotificationsEnabled").lean();
+    if (user?.email) return { email: user.email, emailEnabled: user.emailNotificationsEnabled !== false };
+    const admin = await Admin.findById(recipientId).select("email emailNotificationsEnabled").lean();
+    return { email: admin?.email || null, emailEnabled: admin?.emailNotificationsEnabled !== false };
 }
 
 /**
@@ -25,10 +24,10 @@ export async function notify(recipientId, type, title, body) {
         console.error("[Notify] Failed to create in-app notification:", err.message);
     }
 
-    // 2. Email — check User first, then Admin (separate collection)
+    // 2. Email — skipped when recipient has turned off email notifications
     try {
-        const email = await resolveEmail(recipientId);
-        if (email) {
+        const { email, emailEnabled } = await resolveEmailAndPrefs(recipientId);
+        if (email && emailEnabled) {
             await sendNotificationEmail(email, `MedConnect: ${title}`, body);
         }
     } catch (err) {
