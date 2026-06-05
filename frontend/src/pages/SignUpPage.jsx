@@ -3,7 +3,7 @@ import { BriefcaseMedicalIcon, XIcon } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 import toast from "react-hot-toast";
 import useSignUp from "../hooks/useSignUp";
-import { useSignupStore } from "../store/useSignupStore";
+import { useSignUpStore } from "../store/useSignUpStore";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
@@ -119,7 +119,7 @@ const TermsPopup = ({ onAccept, onClose }) => {
 
 const SignUpPage = () => {
     const navigate = useNavigate();
-    const { email, step, setEmail, reset } = useSignupStore();
+    const { email, step, setEmail, reset } = useSignUpStore();
 
     const [formData, setFormData] = useState({ email: "", password: "" });
     const [termsAccepted, setTermsAccepted] = useState(false);
