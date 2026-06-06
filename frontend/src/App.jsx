@@ -6,6 +6,9 @@ import HomePageUser from "./pages/HomePageUser.jsx";
 import HomePageDoctor from "./pages/HomePageDoctor.jsx";
 import HomePageAdmin from "./pages/HomePageAdmin.jsx";
 import HomePagePharmacy from "./pages/HomePagePharmacy.jsx";
+import PharmacyCataloguePage from "./pages/PharmacyCataloguePage.jsx";
+import PharmacyIncomePage from "./pages/PharmacyIncomePage.jsx";
+import CustomerPharmacyPage from "./pages/CustomerPharmacyPage.jsx";
 import HomePageInstitute from "./pages/HomePageInstitute.jsx";
 import HomePageDepartment from "./pages/HomePageDepartment.jsx";
 import SignUpPage from "./pages/SignUpPage.jsx";
@@ -147,7 +150,15 @@ const App = () => {
                     <Route path="/mock-payment" element={
                         <ProtectedRoute allowedRoles={["patient"]}><MockGCashPage /></ProtectedRoute>
                     } />
-                    <Route path="/pharmacy" element={<ProtectedRouteWithOnboarding element={<ComingSoonPage />} />} />
+                    <Route path="/pharmacy" element={
+                        <ProtectedRoute allowedRoles={["patient"]}><CustomerPharmacyPage /></ProtectedRoute>
+                    } />
+                    <Route path="/pharmacy-catalogue" element={
+                        <ProtectedRoute allowedRoles={["pharmacy"]}><PharmacyCataloguePage /></ProtectedRoute>
+                    } />
+                    <Route path="/pharmacy-income" element={
+                        <ProtectedRoute allowedRoles={["pharmacy"]}><PharmacyIncomePage /></ProtectedRoute>
+                    } />
 
                     {/* Doctor */}
                     <Route path="/specialty" element={

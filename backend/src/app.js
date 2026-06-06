@@ -21,6 +21,7 @@ import notificationRoutes from "./routes/notification.route.js";
 import gcashRoutes from "./routes/gcashSetup.route.js";
 import appReportRoutes from "./routes/appReport.route.js";
 import appointmentFileRoutes from "./routes/appointmentFile.route.js";
+import pharmacyOrderRoutes from "./routes/pharmacyOrder.route.js";
 
 
 import { errorMiddleware } from "./middleware/error.middleware.js";
@@ -59,6 +60,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/gcash", gcashRoutes);
 app.use("/api/app-reports", appReportRoutes);
 app.use("/api/appointment-files", appointmentFileRoutes);
+app.use("/api/pharmacy", pharmacyOrderRoutes);
 
 // Serve frontend in production
 if (process.env.NODE_ENV === "production") {

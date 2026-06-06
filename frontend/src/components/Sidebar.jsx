@@ -3,7 +3,7 @@ import useAuthUser from "../hooks/useAuthUser";
 import {
     BriefcaseMedicalIcon, HomeIcon, SearchIcon, SettingsIcon,
     CalendarIcon, PillIcon, BuildingIcon, ClipboardListIcon, StarIcon,
-    ReceiptIcon, UsersIcon, BookOpenIcon, FlagIcon, BellIcon
+    ReceiptIcon, UsersIcon, BookOpenIcon, FlagIcon, BellIcon, PackageIcon
 } from "lucide-react";
 
 const Sidebar = () => {
@@ -102,7 +102,8 @@ const Sidebar = () => {
                 return (
                     <>
                         {navItem("/", HomeIcon, "Home")}
-                        {navItem("/transactions", ReceiptIcon, "Transactions")}
+                        {navItem("/pharmacy-catalogue", PackageIcon, "Catalogue")}
+                        {navItem("/pharmacy-income", ReceiptIcon, "Transactions")}
                         {navItem("/settings", SettingsIcon, "Settings")}
                     </>
                 );

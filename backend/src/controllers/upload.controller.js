@@ -1,6 +1,7 @@
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { uploadToS3, getSignedFileUrl } from "../services/s3.js";
+import PharmacyOrder from "../models/PharmacyOrder.js";
 
 const FOLDER_MAP = {
     profilePic: "public/profilepics",
@@ -13,6 +14,8 @@ const FOLDER_MAP = {
     pharmacistLegalIDImage: "private/legalids",
     technologistLicenseImage: "private/licenses",
     technologistLegalIDImage: "private/legalids",
+    pharmacyProductImage: "public/pharmacy-products",
+    prescriptionImage: "private/prescriptions",
 };
 
 export const uploadFile = asyncHandler(async (req, res) => {
@@ -26,15 +29,23 @@ export const uploadFile = asyncHandler(async (req, res) => {
     const folder = FOLDER_MAP[field];
     const userId = req.user._id.toString();
 
-    const { url, key } = await uploadToS3(
-        req.file.buffer,
-        req.file.mimetype,
-        folder,
-        userId,
-        req.file.originalname
-    );
+    let uploaded;
+    try {
+        uploaded = await uploadToS3(
+            req.file.buffer,
+            req.file.mimetype,
+            folder,
+            userId,
+            req.file.originalname
+        );
+    } catch (error) {
+        if (error.message?.includes("AWS_")) {
+            return sendError(res, 503, "Image uploads are unavailable because backend S3 configuration is incomplete.");
+        }
+        throw error;
+    }
 
-    return sendSuccess(res, 200, "File uploaded successfully.", { url, key });
+    return sendSuccess(res, 200, "File uploaded successfully.", uploaded);
 });
 
 export const getSignedUrlForFile = asyncHandler(async (req, res) => {
@@ -47,7 +58,17 @@ export const getSignedUrlForFile = asyncHandler(async (req, res) => {
 
     const user = req.user;
 
-    if (user.role !== "admin" && !key.includes(user._id.toString())) {
+    let canAccess = user.role === "admin" || key.includes(user._id.toString());
+
+    if (!canAccess && user.role === "pharmacy" && key.startsWith("private/prescriptions/")) {
+        const order = await PharmacyOrder.findOne({
+            pharmacyId: user._id,
+            "prescriptionImage.key": key,
+        }).select("_id");
+        canAccess = Boolean(order);
+    }
+
+    if (!canAccess) {
         return sendError(res, 403, "Access denied.");
     }
 
