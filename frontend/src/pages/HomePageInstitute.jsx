@@ -79,7 +79,7 @@ const HomePageInstitute = () => {
                                 <h3 className="font-bold text-lg">Department Sub-Accounts</h3>
                             </div>
                             <p className="text-sm opacity-70 mb-3">{deptCount} department(s) active</p>
-                            <Link to="/setup-departments" className="btn btn-primary btn-sm">Manage Departments</Link>
+                            <Link to="/manage-departments" className="btn btn-primary btn-sm">Manage Departments</Link>
                         </div>
                     )}
 
@@ -100,7 +100,7 @@ const HomePageInstitute = () => {
                                 <h3 className="font-bold text-lg">Department Sub-Accounts</h3>
                             </div>
                             <p className="text-sm opacity-70 mb-3">{deptCount} department(s) set up</p>
-                            <Link to="/setup-departments" className="btn btn-primary btn-sm">Manage Departments</Link>
+                            <Link to="/setup-departments" className="btn btn-primary btn-sm">Add Departments</Link>
                         </div>
                     </div>
                 </div>

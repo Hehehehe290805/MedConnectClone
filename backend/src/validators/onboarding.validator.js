@@ -114,7 +114,12 @@ export const onboardDepartmentValidator = [
     body("deptEmail").notEmpty().withMessage("Department email is required").isEmail().withMessage("Must be a valid email"),
     body("deptPassword").notEmpty().withMessage("Password is required"),
     body("confirmPassword").notEmpty().withMessage("Confirm password is required"),
-    body("departmentTypeId").notEmpty().withMessage("Department type is required"),
+    body("departmentTypeId").custom((value, { req }) => {
+        if (!value && !req.body.customDepartmentName) {
+            throw new Error("Department type is required");
+        }
+        return true;
+    }),
     body("technologistFirstName").notEmpty().withMessage("First name is required"),
     body("technologistLastName").notEmpty().withMessage("Last name is required"),
     body("birthDate")

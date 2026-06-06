@@ -1,7 +1,7 @@
 import express from "express";
 import {
     onboardAsPatient, onboardAsDoctor,
-    onboardAsPharmacy, onboardAsInstitute, onboardAsAdmin, onboardAsDepartment
+    onboardAsPharmacy, onboardAsInstitute, onboardAsAdmin, onboardAsDepartment, deleteDepartmentAccount
 } from "../controllers/onboarding.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
@@ -21,5 +21,6 @@ router.post("/institute", protectRoute, onboardInstituteValidator, validate, onb
 router.post("/department", protectRoute, onboardDepartmentValidator, validate, onboardAsDepartment);
 router.post("/admin", protectRoute, onboardAdminValidator, validate, onboardAsAdmin);
 router.post("/admin/convert", protectRoute, convertToAdmin);
+router.delete("/department/:deptId", protectRoute, deleteDepartmentAccount);
 
 export default router;
