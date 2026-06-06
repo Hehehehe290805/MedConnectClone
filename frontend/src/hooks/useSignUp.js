@@ -1,10 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { signup, verifySignupCode, resendSignupCode } from "../lib/api";
-import { useSignupStore } from "../store/useSignupStore";
+import { useSignUpStore } from "../store/useSignUpStore";
 
 const useSignUp = () => {
   const queryClient = useQueryClient();
-  const { setEmail, setStep } = useSignupStore();
+  const { setEmail, setStep } = useSignUpStore();
 
   // step 1 — send verification code
   const { mutate: signupMutation, isPending: isSigningUp } = useMutation({

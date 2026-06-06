@@ -629,12 +629,30 @@ Added per-user opt-out for notification emails. Verification/security codes (OTP
 | # | Feature | Notes |
 |---|---|---|
 | 53 | Book appointment — institute path | Doctor booking rebuilt and working. Institute booking: pass `instituteId` + `serviceId` + `start` to `POST /api/booking/book` — needs a separate `CreateInstituteBookingPopup` similar to the doctor one (deprioritized) |
+| 68 | Mobile number uniqueness + verification | Phone numbers must be globally unique across all accounts (same mechanism as `emailregistry`). Add OTP verification step on signup/update. Applies to all roles. |
+| 69 | Doctor block patient | Doctors can block a patient: blocked patient becomes invisible in that doctor's search results and cannot book that doctor. Needs a `blockedPatients[]` field on Doctor model and filter in `search.controller.js`. |
+| 70 | Doctor delete review | Allow a doctor to delete a review left on their profile. Needs authorization check (only the reviewed doctor can delete). Consider audit trail. |
+| 71 | Appointment queue system | At day-start, all `ongoing` appointments for the day are moved into a queue. Doctor can advance to the next patient (bumps slot by 15 min). Patient sees their queue position ("X patients ahead"). T&C must disclose the 15-min variance. Needs careful status machine integration — do not add new statuses without explicit follow-up discussion. |
+| 72 | Walk-in appointments | Doctors can add a walk-in slot to their schedule for the current day. Also allow ad-hoc schedule adjustments (add/remove slots for a specific date without changing the recurring weekly schedule). Walk-ins fill queue same as booked appointments. |
+| 73 | Booking calendar view | Replace the 7-day slot grid in `CreateBookingPopup` with a switchable month-view calendar. Extend lookahead from 7 days to 3 months. Month navigation must respect timezone (Asia/Manila). |
+| 88 | Doctor cannot see own verified specialties/subspecialties | Bug: doctor's `SpecialtyPage` (`/specialty`) does not display their already-approved/verified specialty and subspecialty claims. Note: `ProfilePage` (#38) shows verified specialties on the public profile — this bug is specifically the doctor's own management view. Check `SpecialtyPage.jsx` and the `GET /api/specialties/doctor-specialties` endpoint response. |
 
 ### Features — Medium Priority
 | # | Feature | Notes |
 |---|---|---|
 | 24 | Expert system fuzzy logic | Jaccard + bipartite ranker done. Fuzzy membership scores still pending — needs severity data |
 | 23 | AppointmentFilesPanel in DoctorAppointmentsPage list | Panel is now in the detail popups. Consider embedding in the appointments list view too. |
+| 74 | Online status indicator | Show doctor online/offline status on patient-side booking and search. Needs a lightweight presence mechanism (e.g., Stream or a last-seen heartbeat). Display on doctor card and inside `CreateBookingPopup`. |
+| 75 | Admin sales report + analytics | Admin dashboard: revenue summary (total, by date range, by role/doctor), appointment volume, top providers. Export to CSV/Excel. Consider a new `/api/admin/analytics` route. |
+| 76 | T&C checkbox in booking + payment | Add a Terms & Conditions checkbox in `CreateBookingPopup` (before confirming) and on `MockGCashPage`/Demo Payment screen (before paying). Must be checked to proceed. Link to `/terms-of-service`. |
+| 77 | Deposit button UX | Change "Pay Deposit" button copy to "Click to Confirm Deposit" to reduce accidental taps. Optionally add a confirmation step. |
+| 78 | Doctor max patients per day | Add `maxPatientsPerDay` field to Doctor model. Enforce during booking — block new bookings if the day is full. Show remaining slots on doctor card/profile. |
+| 79 | Join call button on dashboard banner | For patients and doctors with an `ongoing` virtual appointment: show a prominent "Join Call" button in the home dashboard pending/active banner. Links to `/call/:id`. |
+| 80 | AI chatbot | In-app chatbot for simple queries (FAQs, how-to, appointment status). Rate-limited per user (e.g., 20 messages/hour). Must not expose PHI. Scope: UI help only, not medical advice. |
+| 81 | Bayesian rating in bipartite ranker | Replace `doc.averageRating / 5` in `SearchPage.jsx` with a Bayesian-smoothed score: `(C × m + Σratings) / (C + n)` where `C=5`, `m` = platform mean. Prevents a 1-review 5-star from outranking a 50-review 4.8-star. Requires `reviewCount` returned alongside `averageRating` from the search API. |
+| 82 | Specialties more visible on doctor card | In search results, doctor specialty tags are currently small/hidden. Make verified specialties more prominent on the doctor card (e.g., larger chips, shown by default without expand). |
+| 83 | Expert system checkbox-style symptom input | In `ConsultationPage` symptom step, add a searchable checkbox list (typeahead, like the languages field) alongside or replacing the current grid. Lets patients find symptoms by typing rather than scanning. |
+| 87 | Patient queue number display | Companion to #71. Patient sees "You are #3 in queue" on their dashboard appointment card. Updates in real time (polling or websocket). |
 
 ### Low Priority / Post-Development
 | # | Flag | Notes |
@@ -643,6 +661,9 @@ Added per-user opt-out for notification emails. Verification/security codes (OTP
 | 11 | Transaction for email update | Needs replica set confirmation on Atlas |
 | 18 | Package version sync | After development — audit `package.json` |
 | 22 | Dual permit renewal endpoints | Old role-specific endpoints in `permits.controller.js` still write directly to User; remove once new `PermitRenewal` flow confirmed |
+| 84 | Data privacy compliance | Audit against Philippine Data Privacy Act (RA 10173). Items: consent banner on signup, data retention policy enforcement, right-to-erasure flow (extend current soft-delete), DPA officer contact in Privacy Policy. |
+| 85 | Name field sanitization | `firstName`, `lastName`, and equivalent name fields on all roles must only accept letters, spaces, hyphens, and apostrophes. Add validator at model level and in `sanitize.middleware.js`. |
+| 86 | Cascading address dropdowns | Replace free-text address fields with cascading dropdowns: Region → Province → City/Municipality → Barangay (PSGC data). Limit choices by parent selection. Free-text for street/unit only. Affects onboarding forms and profile edit for all roles. |
 
 ---
 

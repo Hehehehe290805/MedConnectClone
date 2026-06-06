@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export const useSignupStore = create((set) => ({
+export const useSignUpStore = create((set) => ({
     email: "",
     step: "form", // "form" | "verify"
     setEmail: (email) => set({ email }),
