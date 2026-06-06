@@ -39,6 +39,15 @@ const NotificationSchema = new mongoose.Schema(
                 "appointment_completed",
                 "payment_received",
 
+                // Pharmacy orders
+                "pharmacy_order_ready",
+                "pharmacy_order_in_progress",
+                "pharmacy_order_completed",
+                "pharmacy_order_paid",
+                "pharmacy_prescription_review",
+                "pharmacy_prescription_approved",
+                "pharmacy_prescription_rejected",
+
                 // Disputes / reports
                 "dispute_filed",
                 "dispute_resolved",
@@ -47,6 +56,10 @@ const NotificationSchema = new mongoose.Schema(
         },
         title:  { type: String, required: true },
         body:   { type: String, required: true },
+        metadata: {
+            type: mongoose.Schema.Types.Mixed,
+            default: () => ({}),
+        },
         isRead: { type: Boolean, default: false },
     },
     { timestamps: true }

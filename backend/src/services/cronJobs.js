@@ -12,6 +12,7 @@ import EmailRegistry from "../models/EmailRegistry.js";
 import { logError } from "../utils/logger.js";
 import { deleteFromS3 } from "../services/s3.js";
 import { notify } from "./notification.service.js";
+import { completeDuePharmacyOrders } from "../controllers/pharmacyOrder.controller.js";
 import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone.js";
 import utc from "dayjs/plugin/utc.js";
@@ -192,8 +193,9 @@ export function startCronJobs() {
     cron.schedule("* * * * *", async () => {
         try {
             await sendPreAppointmentReminders();
+            await completeDuePharmacyOrders();
         } catch (err) {
-            console.error("[CRON] Error in pre-appointment reminder:", err);
+            console.error("[CRON] Error in minute cron:", err);
             await logError("CRON", err);
         }
     });

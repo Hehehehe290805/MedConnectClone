@@ -233,3 +233,52 @@ export const getAppointmentFileSignedUrl = (fileId) =>
 
 export const deleteAppointmentFile = (fileId) =>
   axiosInstance.delete(`/appointment-files/file/${fileId}`).then(r => r.data);
+
+// --- PHARMACY ORDERS ---
+export const getPharmacyOrderDashboard = () =>
+  axiosInstance.get("/pharmacy/orders/dashboard").then(r => r.data);
+
+export const markPharmacyOrderReady = (orderId) =>
+  axiosInstance.patch(`/pharmacy/orders/${orderId}/ready`).then(r => r.data);
+
+export const startPharmacyOrderFulfillment = (orderId) =>
+  axiosInstance.patch(`/pharmacy/orders/${orderId}/start-fulfillment`).then(r => r.data);
+
+export const getPublicPharmacyProducts = (params = {}) =>
+  axiosInstance.get("/pharmacy/products", { params }).then(r => r.data);
+
+export const getMyPharmacyProducts = () =>
+  axiosInstance.get("/pharmacy/products/mine").then(r => r.data);
+
+export const createPharmacyProduct = (data) =>
+  axiosInstance.post("/pharmacy/products", data).then(r => r.data);
+
+export const updatePharmacyProduct = ({ productId, data }) =>
+  axiosInstance.patch(`/pharmacy/products/${productId}`, data).then(r => r.data);
+
+export const deletePharmacyProduct = (productId) =>
+  axiosInstance.delete(`/pharmacy/products/${productId}`).then(r => r.data);
+
+export const createPaidPharmacyOrder = (data) =>
+  axiosInstance.post("/pharmacy/orders/pay-now", data).then(r => r.data);
+
+export const submitPrescriptionReviewOrder = (data) =>
+  axiosInstance.post("/pharmacy/orders/prescription-review", data).then(r => r.data);
+
+export const getMyPharmacyOrders = () =>
+  axiosInstance.get("/pharmacy/orders/my").then(r => r.data);
+
+export const payApprovedPrescriptionOrder = (orderId) =>
+  axiosInstance.patch(`/pharmacy/orders/${orderId}/pay-approved`).then(r => r.data);
+
+export const approvePrescriptionOrder = (orderId) =>
+  axiosInstance.patch(`/pharmacy/orders/${orderId}/prescription/approve`).then(r => r.data);
+
+export const rejectPrescriptionOrder = ({ orderId, reason, notes }) =>
+  axiosInstance.patch(`/pharmacy/orders/${orderId}/prescription/reject`, { reason, notes }).then(r => r.data);
+
+export const getPharmacyIncome = (params = {}) =>
+  axiosInstance.get("/pharmacy/income", { params }).then(r => r.data);
+
+export const createManualPharmacyTransaction = (data) =>
+  axiosInstance.post("/pharmacy/income/manual", data).then(r => r.data);

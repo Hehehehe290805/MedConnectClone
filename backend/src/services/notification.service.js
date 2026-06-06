@@ -16,10 +16,10 @@ async function resolveEmailAndPrefs(recipientId) {
  * Checks both User and Admin collections for the email address.
  * Both operations are non-fatal — failures are logged but never propagate.
  */
-export async function notify(recipientId, type, title, body) {
+export async function notify(recipientId, type, title, body, metadata = {}) {
     // 1. In-app record — uses ObjectId ref, valid for both User and Admin docs
     try {
-        await Notification.create({ recipient: recipientId, type, title, body });
+        await Notification.create({ recipient: recipientId, type, title, body, metadata });
     } catch (err) {
         console.error("[Notify] Failed to create in-app notification:", err.message);
     }
