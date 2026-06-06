@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import toast from "react-hot-toast";
-import { BuildingIcon } from "lucide-react";
+import { BuildingIcon, PencilLineIcon } from "lucide-react";
 import { createDepartmentAccount } from "../lib/api";
 import { StepProgress, StepHeader, ImageUploadField, AddressFields, PhoneField, forwardGeocode, uploadPendingImages } from "./OnboardingShared";
 import useAuthUser from "../hooks/useAuthUser";
@@ -47,6 +47,8 @@ const OnboardingDepartment = () => {
     const [selectedDeptType, setSelectedDeptType] = useState(null);
     const [showSuccess, setShowSuccess] = useState(false);
     const [useInstituteAddress, setUseInstituteAddress] = useState(false);
+    const [showOtherInput, setShowOtherInput] = useState(false);
+    const [customDeptName, setCustomDeptName] = useState("");
 
     const isClinic = authUser?.instituteType === "clinic";
     const isHospital = authUser?.instituteType === "hospital";
@@ -213,13 +215,42 @@ const OnboardingDepartment = () => {
                             {departments.map((dept) => (
                                 <button
                                     key={dept._id}
-                                    onClick={() => setSelectedDeptType(dept)}
+                                    onClick={() => { setShowOtherInput(false); setSelectedDeptType(dept); }}
                                     className="w-full btn btn-outline text-left justify-start gap-3"
                                 >
                                     <BuildingIcon className="size-4 text-primary" />
                                     {dept.name}
                                 </button>
                             ))}
+                            <button
+                                onClick={() => setShowOtherInput((v) => !v)}
+                                className={`w-full btn btn-outline text-left justify-start gap-3 ${showOtherInput ? "btn-active" : ""}`}
+                            >
+                                <PencilLineIcon className="size-4 text-primary" />
+                                Others
+                            </button>
+                            {showOtherInput && (
+                                <div className="flex gap-2 mt-2">
+                                    <input
+                                        type="text"
+                                        className="input input-bordered flex-1"
+                                        placeholder="Enter department type"
+                                        value={customDeptName}
+                                        onChange={(e) => setCustomDeptName(e.target.value)}
+                                        autoFocus
+                                    />
+                                    <button
+                                        className="btn btn-primary"
+                                        disabled={!customDeptName.trim()}
+                                        onClick={() => {
+                                            setSelectedDeptType({ _id: null, name: customDeptName.trim(), isCustom: true });
+                                            setShowOtherInput(false);
+                                        }}
+                                    >
+                                        Confirm
+                                    </button>
+                                </div>
+                            )}
                         </div>
                         <button className="btn btn-ghost btn-sm" onClick={() => navigate("/")}>
                             ← Back to Dashboard
@@ -561,7 +592,8 @@ const OnboardingDepartment = () => {
                             }
                             mutate({
                                 ...finalForm,
-                                departmentTypeId: selectedDeptType._id,
+                                departmentTypeId: selectedDeptType._id || undefined,
+                                customDepartmentName: selectedDeptType.isCustom ? selectedDeptType.name : undefined,
                             });
                         }} className="space-y-4">
                             <div className="form-control">

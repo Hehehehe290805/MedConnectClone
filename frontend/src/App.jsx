@@ -32,6 +32,7 @@ import AdminReportsPage from "./pages/AdminReportsPage.jsx";
 // Onboarding & Auth flow
 import OnboardingPage from "./pages/OnboardingPage.jsx";
 import OnboardingDepartment from "./pages/OnboardingDepartment.jsx";
+import ManageDepartments from "./pages/ManageDepartments.jsx";
 import Pending from "./pages/Pending.jsx";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage.jsx";
 import ForgotPasswordVerifyPage from "./pages/ForgotPasswordVerifyPage.jsx";
@@ -157,6 +158,11 @@ const App = () => {
                     <Route path="/setup-departments" element={
                         <ProtectedRouteWithOnboarding element={
                             userRole === "institute" ? <OnboardingDepartment /> : <Navigate to="/" replace />
+                        } />
+                    } />
+                    <Route path="/manage-departments" element={
+                        <ProtectedRouteWithOnboarding element={
+                            userRole === "institute" ? <ManageDepartments /> : <Navigate to="/" replace />
                         } />
                     } />
 

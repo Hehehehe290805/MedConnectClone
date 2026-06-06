@@ -196,6 +196,11 @@ export async function getUserById(userId) {
   return response.data;
 }
 
+export async function deleteDepartmentAccount(deptId) {
+  const response = await axiosInstance.delete(`/onboarding/department/${deptId}`);
+  return response.data;
+}
+
 export async function getStreamToken() {
   const response = await axiosInstance.get("/chat/token");
   return response.data;

@@ -18,7 +18,10 @@ export const getInstitutes = asyncHandler(async (req, res) => {
 
 export const getUserById = asyncHandler(async (req, res) => {
     const { userId } = req.params;
-    const user = await User.findById(userId).select("-password -licenseNumber").lean();
+    const user = await User.findById(userId)
+        .select("-password -licenseNumber")
+        .populate("departmentType", "name")
+        .lean();
     if (!user) return sendError(res, 404, "User not found");
     return sendSuccess(res, 200, "User fetched", user);
 });

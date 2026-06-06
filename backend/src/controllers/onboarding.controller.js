@@ -7,6 +7,7 @@ import { upsertStreamUser } from "../lib/stream.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { notify, notifyAllAdmins } from "../services/notification.service.js";
+import { deleteFromS3 } from "../services/s3.js";
 
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
@@ -287,7 +288,7 @@ export const onboardAsDepartment = asyncHandler(async (req, res) => {
         deptEmail, deptPassword, confirmPassword,
         technologistFirstName, technologistLastName, sex, birthDate, bio,
         profilePic, phoneNumber, phoneType, address,
-        departmentTypeId,
+        departmentTypeId, customDepartmentName,
         technologistLicenseNumber, technologistLicenseExpiration,
         technologistLicenseImage, technologistLegalIDImage,
     } = req.body;
@@ -295,16 +296,40 @@ export const onboardAsDepartment = asyncHandler(async (req, res) => {
     if (deptPassword !== confirmPassword) return sendError(res, 400, "Passwords do not match");
     if (!passwordRegex.test(deptPassword)) return sendError(res, 400, "Password must be at least 8 characters and include 1 uppercase, 1 lowercase, 1 number, and 1 symbol (@$!%*?&)");
 
-    const hasDeptType = instituteUser.departments.some((d) => d.toString() === departmentTypeId);
-    if (!hasDeptType) return sendError(res, 400, "Department type is not in this institute's registered departments");
+    let finalDeptTypeId = departmentTypeId;
+
+    if (customDepartmentName) {
+        // Create a new pending DepartmentType
+        let deptType = await DepartmentType.findOne({ name: { $regex: new RegExp(`^${customDepartmentName}$`, "i") } });
+        if (!deptType) {
+            deptType = await DepartmentType.create({
+                name: customDepartmentName,
+                status: "pending",
+                suggestedBy: instituteUser._id,
+            });
+        }
+        finalDeptTypeId = deptType._id.toString();
+
+        // Add to institute's departments if not already there
+        const hasCustomDept = instituteUser.departments.some((d) => d.toString() === finalDeptTypeId);
+        if (!hasCustomDept) {
+            await User.findByIdAndUpdate(instituteUser._id, {
+                $push: { departments: finalDeptTypeId }
+            });
+            instituteUser.departments.push(finalDeptTypeId);
+        }
+    } else {
+        const hasDeptType = instituteUser.departments.some((d) => d.toString() === finalDeptTypeId);
+        if (!hasDeptType) return sendError(res, 400, "Department type is not in this institute's registered departments");
+    }
 
     const existingEmail = await EmailRegistry.findOne({ email: deptEmail });
     if (existingEmail) return sendError(res, 400, "Email already registered");
 
-    const deptType = await DepartmentType.findById(departmentTypeId);
+    const deptType = await DepartmentType.findById(finalDeptTypeId);
     if (!deptType) return sendError(res, 404, "Department type not found");
 
-    const count = await User.countDocuments({ __t: "Department", departmentType: departmentTypeId });
+    const count = await User.countDocuments({ __t: "Department", departmentType: finalDeptTypeId });
     const seq = String(count + 1).padStart(3, "0");
     const departmentId = `${seq}-${deptType.name}`;
 
@@ -318,7 +343,7 @@ export const onboardAsDepartment = asyncHandler(async (req, res) => {
             role: "department",
             status: "onBoarded",
             rootInstitute: instituteUser._id,
-            departmentType: departmentTypeId,
+            departmentType: finalDeptTypeId,
             departmentId,
             technologistFirstName,
             technologistLastName,
@@ -400,4 +425,42 @@ export const onboardAsAdmin = asyncHandler(async (req, res) => {
     );
 
     return sendSuccess(res, 200, "Admin onboarding submitted for approval", { user: updated });
+});
+
+export const deleteDepartmentAccount = asyncHandler(async (req, res) => {
+    const instituteUser = req.user;
+    if (instituteUser.role !== "institute") return sendError(res, 403, "Only institutes can delete department accounts");
+
+    const { deptId } = req.params;
+
+    // Verify this dept belongs to the institute
+    const owned = instituteUser.departmentAccounts?.some((id) => id.toString() === deptId);
+    if (!owned) return sendError(res, 403, "This department does not belong to your institute");
+
+    const dept = await User.findById(deptId).lean();
+    if (!dept) return sendError(res, 404, "Department account not found");
+
+    // Clean up private S3 files (non-fatal)
+    const s3Keys = [
+        dept.technologistLicenseImage?.key,
+        dept.technologistLegalIDImage?.key,
+        dept.profilePic?.key,
+    ].filter(Boolean);
+    for (const key of s3Keys) {
+        try { await deleteFromS3(key); } catch {}
+    }
+
+    // Remove from EmailRegistry
+    await EmailRegistry.deleteOne({ email: dept.email });
+
+    // Delete the department user
+    await User.deleteOne({ _id: deptId });
+
+    // Pull from institute's departmentAccounts
+    await Institute.findByIdAndUpdate(
+        instituteUser._id,
+        { $pull: { departmentAccounts: dept._id } }
+    );
+
+    return sendSuccess(res, 200, "Department account deleted successfully");
 });
