@@ -6,6 +6,7 @@ import User from "../models/User.js";
 import Appointment from "../models/Appointment.js";
 import Admin from "../models/Admin.js";
 import EmailRegistry from "../models/EmailRegistry.js";
+import DepartmentType from "../models/DepartmentType.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { createAndSendCode, verifyCode } from "../services/verification.js";
@@ -124,6 +125,13 @@ export const login = asyncHandler(async (req, res) => {
 
   const user = await User.findOne({ email });
   if (!user) return sendError(res, 401, "Invalid email or password.");
+
+  if (user.status === "suspended") {
+    return sendError(res, 403, "Your account has been suspended. Please contact support.");
+  }
+  if (user.status === "rejected") {
+    return sendError(res, 403, "Your account application was rejected.");
+  }
 
   if (user.loginAttempts >= MAX_LOGIN_ATTEMPTS) {
     return sendError(res, 429, "Account locked due to too many failed attempts. Check your email for a password reset code.");

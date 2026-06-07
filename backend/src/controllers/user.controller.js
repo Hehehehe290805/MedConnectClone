@@ -1,4 +1,5 @@
 import User from "../models/User.js";
+import DepartmentType from "../models/DepartmentType.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 

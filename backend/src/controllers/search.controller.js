@@ -350,3 +350,149 @@ export const searchInstitutes = asyncHandler(async (req, res) => {
 
     return sendSuccess(res, 200, "Institutes fetched", { institutes: results, sortedByProximity: Boolean(userCoords) });
 });
+
+// ── DEPARTMENT SEARCH ──────────────────────────────────────────────────────────
+// GET /api/search/departments
+// Query: name (string or array), departmentTypeId, serviceId, minPrice, maxPrice
+export const searchDepartments = asyncHandler(async (req, res) => {
+    const { name, departmentTypeId, serviceId, minPrice, maxPrice } = req.query;
+
+    const userCoords = req.user?.address?.coordinates?.coordinates;
+
+    const terms = Array.isArray(name)
+        ? name.map(t => t.trim()).filter(Boolean)
+        : name?.trim() ? [name.trim()] : [];
+
+    const query = { role: "department", status: "onBoarded" };
+    if (departmentTypeId) query.departmentType = new mongoose.Types.ObjectId(departmentTypeId);
+
+    if (terms.length > 0) {
+        const termRegexes = terms.map(t => new RegExp(t, "i"));
+        const termIdSets = await Promise.all(termRegexes.map(async (regex) => {
+            const [byInstName, deptTypes, services] = await Promise.all([
+                User.find({ role: "institute", status: "onBoarded", instituteName: regex }).select("_id").lean(),
+                DepartmentType.find({ name: regex }).select("_id").lean(),
+                Service.find({ name: regex, status: "verified" }).select("_id").lean(),
+            ]);
+            const ids = new Set();
+            if (byInstName.length) {
+                const instIds = byInstName.map(i => i._id);
+                const depts = await User.find({ role: "department", rootInstitute: { $in: instIds } }).select("_id").lean();
+                depts.forEach(d => ids.add(d._id.toString()));
+            }
+            if (deptTypes.length) {
+                const deptTypeIds = deptTypes.map(d => d._id);
+                const withDeptType = await User.find({ role: "department", departmentType: { $in: deptTypeIds } }).select("_id").lean();
+                withDeptType.forEach(d => ids.add(d._id.toString()));
+            }
+            if (services.length) {
+                const serviceIds = services.map(s => s._id);
+                const claims = await InstituteDepartmentService.find({ serviceId: { $in: serviceIds }, status: "verified" }).select("departmentId").lean();
+                claims.forEach(c => ids.add(c.departmentId.toString()));
+            }
+            return ids;
+        }));
+        const intersection = termIdSets.reduce((acc, set) => {
+            const next = new Set();
+            for (const id of acc) { if (set.has(id)) next.add(id); }
+            return next;
+        });
+        query._id = { $in: [...intersection] };
+    }
+
+    let departments = await User.find(query)
+        .select("departmentType rootInstitute profilePic address bio")
+        .populate("departmentType", "name")
+        .populate("rootInstitute", "instituteName instituteType profilePic address")
+        .lean();
+
+    if (serviceId) {
+        const claims = await InstituteDepartmentService.find({
+            departmentId: { $in: departments.map(d => d._id) },
+            serviceId: new mongoose.Types.ObjectId(serviceId),
+            status: "verified",
+        }).select("departmentId").lean();
+        const validDeptIds = new Set(claims.map(c => c.departmentId.toString()));
+        departments = departments.filter(d => validDeptIds.has(d._id.toString()));
+    }
+
+    // Fetch verified services to show on the card, but don't filter out departments without them
+    const allClaims = await InstituteDepartmentService.find({
+        departmentId: { $in: departments.map(d => d._id) },
+        status: "verified",
+    }).populate("serviceId", "name").lean();
+    
+    const serviceMap = {};
+    for (const c of allClaims) {
+        const key = c.departmentId.toString();
+        if (!serviceMap[key]) serviceMap[key] = new Set();
+        if (c.serviceId?.name) serviceMap[key].add(c.serviceId.name);
+    }
+
+    if (!departments.length) return sendSuccess(res, 200, "Departments fetched", { departments: [] });
+
+    const deptIds = departments.map(d => d._id);
+    const pricings = await Pricing.find({ providerId: { $in: deptIds } }).lean();
+    const priceRangeMap = {};
+    for (const p of pricings) {
+        const key = p.providerId.toString();
+        if (!priceRangeMap[key]) priceRangeMap[key] = { min: p.price, max: p.price };
+        else {
+            if (p.price < priceRangeMap[key].min) priceRangeMap[key].min = p.price;
+            if (p.price > priceRangeMap[key].max) priceRangeMap[key].max = p.price;
+        }
+    }
+
+    if (minPrice || maxPrice) {
+        departments = departments.filter(d => {
+            const range = priceRangeMap[d._id.toString()];
+            if (!range) return false;
+            if (minPrice && range.max < parseFloat(minPrice)) return false;
+            if (maxPrice && range.min > parseFloat(maxPrice)) return false;
+            return true;
+        });
+    }
+
+    const ratingAgg = await Appointment.aggregate([
+        { $match: { instituteId: { $in: deptIds.map(id => new mongoose.Types.ObjectId(id)) }, rating: { $exists: true, $ne: null } } },
+        { $group: { _id: "$instituteId", avgRating: { $avg: "$rating" }, reviewCount: { $sum: 1 } } },
+    ]);
+    const ratingMap = {};
+    for (const r of ratingAgg) ratingMap[r._id.toString()] = { avg: Math.round(r.avgRating * 10) / 10, count: r.reviewCount };
+
+    let results = departments.map(d => {
+        const id = d._id.toString();
+        const coords = d.address?.coordinates?.coordinates || d.rootInstitute?.address?.coordinates?.coordinates;
+        let distanceKm = null;
+        if (userCoords?.length === 2 && coords?.length === 2) {
+            distanceKm = Math.round(haversineKm(userCoords[1], userCoords[0], coords[1], coords[0]) * 10) / 10;
+        }
+        return {
+            _id: d._id,
+            rootInstitute: d.rootInstitute,
+            departmentTypeName: d.departmentType?.name || null,
+            profilePic: d.profilePic?.url ? d.profilePic : (d.rootInstitute?.profilePic || null),
+            bio: d.bio,
+            city: d.address?.city || d.rootInstitute?.address?.city || null,
+            province: d.address?.province || d.rootInstitute?.address?.province || null,
+            coordinates: coords || null,
+            services: [...(serviceMap[id] ?? [])],
+            priceRange: priceRangeMap[id] ?? null,
+            averageRating: ratingMap[id]?.avg ?? null,
+            reviewCount: ratingMap[id]?.count ?? 0,
+            distanceKm,
+            role: "department",
+        };
+    });
+
+    results.sort((a, b) => {
+        if (a.distanceKm !== null && b.distanceKm !== null) return a.distanceKm - b.distanceKm;
+        if (a.distanceKm !== null) return -1;
+        if (b.distanceKm !== null) return 1;
+        const nameA = a.rootInstitute?.instituteName || "";
+        const nameB = b.rootInstitute?.instituteName || "";
+        return nameA.localeCompare(nameB);
+    });
+
+    return sendSuccess(res, 200, "Departments fetched", { departments: results, sortedByProximity: Boolean(userCoords) });
+});
