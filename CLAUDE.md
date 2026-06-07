@@ -31,7 +31,7 @@ Student project — actively in development.
 
 **Current Features:**
 - **Expert System** (`/consultation`): 3-step wizard (body system → symptoms → duration/age group). Jaccard similarity against 71 diseases; top 5 matches shown with urgency badges. Generates pre-consultation markdown auto-attached as an `AppointmentFile` at booking time.
-- **Search** (`/search`): Multi-filter search (name, specialty, department type, language, location radius). Bipartite ranker surfaces top 3 symptom-matched doctors (`specialtyScore×0.5 + ratingScore×0.3 + proximityScore×0.2`). Multi-term `+` name search supported.
+- **Search** (`/search`): Multi-filter search with 3 modes — Doctors, Institutes, Departments. Bipartite ranker surfaces top 3 symptom-matched doctors (`specialtyScore×0.5 + ratingScore×0.3 + proximityScore×0.2`). Multi-term `+` name search supported. Department mode uses `GET /api/search/departments`.
 - **Appointment Booking**: `CreateBookingPopup` for doctors — 7-day slot lookahead, pricing fetch from `/api/pricing/appointment-price`. Institute booking path is deprioritized (flag #53).
 - **Payment**: 50% deposit via Demo Payment screen. For virtual appointments, 50% balance payment after appointment completes.
 - **Appointment Calendar** (`/`): Month grid with status dots; day-click shows detail; list view groups active vs. closed. Opens `ViewPendingAppointmentPatientPopup`.
@@ -126,7 +126,7 @@ Student project — actively in development.
 - Department shares `ViewPendingAppointmentDoctorPopup` with the Doctor role. Any popup change affects both — always check both when modifying.
 - Department does not have a chat/video sidebar link. Only patients and doctors have the chat feature.
 - A department with no verified service claims must show a setup prompt on the home page — not an empty calendar.
-- Verified service claims (`institutedepartmentservices` with status `verified`) are required for the department to appear in institute search results.
+- Verified service claims (`institutedepartmentservices` with status `verified`) are required for the department to appear in search results. Valid statuses: `pending`, `verified`, `rejected`.
 
 ---
 
@@ -352,7 +352,7 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 `POST /renewal/request`, `GET /renewal/my-renewals`
 
 ### `/api/search`
-`GET /doctors`, `GET /institutes` — Haversine proximity + multi-filter + rating aggregation
+`GET /doctors`, `GET /institutes`, `GET /departments` — Haversine proximity + multi-filter + rating aggregation. `/departments` is behind `protectRoute`.
 
 ### `/api/users`
 `GET /doctors`, `GET /institutes`, `GET /:userId`
@@ -404,7 +404,7 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 | `/appointments` | ComingSoonPage | Doctor (pending build) |
 | `/specialty` | `SpecialtyPage` | Doctor |
 | `/setup-departments` | `OnboardingDepartment` | Institute |
-| `/services` | ComingSoonPage | Department (pending build) |
+| `/services` | `ServicesPage` | Department |
 | `/transactions` | `TransactionPage` | All except Admin |
 | `/notifications` | `NotificationsPage` | All except Admin |
 | `/settings` | `SettingsPage` | All |
@@ -444,7 +444,7 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 | `AppointmentFilesPanel.jsx` | Upload (WebP auto-convert), list, download (signed URL), delete, PDF export; props: `appointmentId`, `participantRole`, `readOnly` |
 | `LinkifiedText.jsx` | Auto-links URLs and emails in plain text; click shows "Leaving MedConnect" confirmation modal before navigating |
 | `Sidebar.jsx` | Role-aware navigation links; disabled when `status === "pending"` |
-| `Navbar.jsx` | Notifications badge (polls unread-count every 30s) |
+| `Navbar.jsx` | Notifications badge (polls unread-count every 30s); "Add Service" button shown for department role on `/services` page (opens `SuggestServicePopup`) |
 | `Layout.jsx` | Wraps pages with Sidebar + Navbar |
 | `MapPinModal.jsx` | Leaflet map for address coordinate pinning |
 | `SpecialtyField.jsx` | Specialty + subspecialty search/add with pending local state |
@@ -459,6 +459,7 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 | `ViewPendingAppointmentDoctorPopup.jsx` | Doctor/department detail modal: accept/reject, complete, dispute |
 | `SetPricePopup.jsx` | Doctor consultation price form |
 | `SetSchedulePopup.jsx` | Doctor/department availability form |
+| `SuggestServicePopup.jsx` | Department modal to suggest a new service; posts to `POST /api/services/suggest` |
 
 ### Login Flow (LoginPage.jsx)
 Three steps via component state:
@@ -548,6 +549,26 @@ GROQ_API_KEY        ← required for AI chatbot; free key at console.groq.com
 
 ### ForgotPasswordResetPage
 On success: clears Zustand store → `toast.success` → `navigate("/login")`. Already implemented correctly.
+
+### Hannah's Branch (2026-06-07) — Department Search, ServicesPage, Admin fixes
+
+**Backend:**
+- `search.controller.js`: Added `searchDepartments` — Haversine proximity + multi-filter ranking for departments
+- `search.route.js`: `GET /api/search/departments` (behind `protectRoute`)
+- `InstituteDepartmentService.js`: Added `"rejected"` to `status` enum — `rejectClaim` was throwing Mongoose ValidationError silently
+- `admin.controller.js`: Fixed `getPendingClaims` to `populate("departmentId", ...)` instead of `populate("instituteId", ...)` so service claims appear in admin panel; fixed `rejectRole` cleanup (`instituteId` → `departmentId`)
+- `service.controller.js`: Added `notifyAllAdmins` in `claimService` — admins now receive in-app + email when a department submits a service claim
+
+**Frontend:**
+- `ServicesPage.jsx` (NEW): Department services management at `/services` — lists claimed services grouped by status (Approved / Pending / Rejected) with duration badges; calls `GET /api/services/my-services`
+- `SuggestServicePopup.jsx` (NEW): Modal for department users to suggest a new service; posts to `POST /api/services/suggest`
+- `SearchPage.jsx`: Added department search mode as 3rd tab; updated `buildParams` and result rendering for departments using `GET /api/search/departments`
+- `ProviderCard.jsx`: Extended to support `department` provider type — shows services, price range, distance, Google Maps link
+- `HomePageAdmin.jsx`: Fixed `ClaimRow` — now shows department technologist name (from `departmentId`) for service claims instead of "Unknown"
+- `ViewPendingClaimPopup.jsx`: Department-aware — service claims show department name/email and duration; license number + approved specialties sections are hidden for service claims
+- `App.jsx`: Added `/services` route for `department` role pointing to `ServicesPage`
+- `Navbar.jsx`: Added "Add Service" button (department-only, visible on `/services` page) that opens `SuggestServicePopup`
+- `SignUpPage.jsx`: Added Terms & Privacy Policy scroll gate before allowing signup submission
 
 ### Session 2026-06-07 Part 5 — Bayesian rating, files in list, phone cross-login + dual 2FA
 
@@ -775,6 +796,12 @@ The queue system (#71/#72/#87) is a new collection and the most complex feature.
 ### Completed Flags (reference)
 | # | Feature | When Done |
 |---|---|---|
+| Hannah | Department search (`GET /api/search/departments`) + `ServicesPage` + `SuggestServicePopup` | 2026-06-07 (Hannah) |
+| Hannah | Admin `getPendingClaims` departmentId fix + `rejectRole` cleanup fix | 2026-06-07 (Hannah) |
+| Hannah | `InstituteDepartmentService` — added `"rejected"` status enum | 2026-06-07 (Hannah) |
+| Hannah | `service.controller.js` — `notifyAllAdmins` on service claim submission | 2026-06-07 (Hannah) |
+| Hannah | `SignUpPage` — Terms & Privacy Policy scroll gate before submit | 2026-06-07 (Hannah) |
+| Hannah | `ProviderCard` + `ViewPendingClaimPopup` — department-aware rendering | 2026-06-07 (Hannah) |
 | 68 | Mobile number uniqueness + mock SMS OTP | 2026-06-07 |
 | 69 | Doctor block patient | 2026-06-07 |
 | 70 | Doctor delete review | 2026-06-07 |
