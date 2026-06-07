@@ -38,7 +38,16 @@ const TermsOfServiceContent = () => (
             <p>MedConnect reserves the right to modify these terms at any time. Continued use of the platform after changes constitutes acceptance of the revised terms.</p>
         </section>
         <section>
-            <h2 className="font-bold text-lg mb-2">9. Contact</h2>
+            <h2 className="font-bold text-lg mb-2">9. Appointment Queue System</h2>
+            <ul className="list-disc list-inside space-y-1 opacity-80">
+                <li>Appointment times may shift by up to ±15 minutes due to real-time queue dynamics.</li>
+                <li>Emergency cases may be prioritized by the provider, bumping existing queue slots. All affected patients will be notified immediately via in-app notification.</li>
+                <li>If you do not respond or engage within 5 minutes of your queue turn, the provider may skip your slot. Accepting the skip moves you to the end of the queue. Refusing the skip is treated as a cancellation — deposits are non-refundable in this case.</li>
+                <li>Walk-in patients added by the provider are added to the end of the queue unless classified as an emergency.</li>
+            </ul>
+        </section>
+        <section>
+            <h2 className="font-bold text-lg mb-2">10. Contact</h2>
             <p>For questions about these Terms, please use the Report an Issue feature in Settings.</p>
         </section>
     </div>

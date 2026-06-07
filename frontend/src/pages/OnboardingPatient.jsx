@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { completeOnboarding } from "../lib/api";
+import { isValidPersonName, NAME_ERROR } from "../lib/utils";
 import { StepProgress, StepHeader, ImageUploadField, LanguagesField, AddressFields, PhoneField, forwardGeocode, uploadPendingImages } from "./OnboardingShared";
 
 const TOTAL_STEPS = 2;
@@ -39,6 +40,7 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
   const [uploadingFields, setUploadingFields] = useState({});
   const isAnyUploading = Object.values(uploadingFields).some(Boolean);
   const setUploading = (field, val) => setUploadingFields((prev) => ({ ...prev, [field]: val }));
+  const [phoneVerified, setPhoneVerified] = useState(false);
 
   const { mutate, isPending } = useMutation({
     mutationFn: completeOnboarding,
@@ -80,6 +82,7 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
   const step2Complete =
     form.languages.length > 0 &&
     form.phoneNumber.length === 10 &&
+    phoneVerified &&
     form.address.buildingNumber.trim() &&
     form.address.street.trim() &&
     form.address.barangay.trim() &&
@@ -88,6 +91,12 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
     /^\d{4}$/.test(form.address.postalCode);
 
   const validateStep1 = () => {
+    const e = {};
+    if (!isValidPersonName(form.firstName)) e.firstName = NAME_ERROR;
+    if (!isValidPersonName(form.lastName)) e.lastName = NAME_ERROR;
+    setErrors(e);
+    if (Object.keys(e).length > 0) return false;
+
     if (!form.birthDate) {
       dobRef.current?.setCustomValidity("Date of birth is required");
       dobRef.current?.reportValidity();
@@ -137,11 +146,13 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
             <div className="grid grid-cols-2 gap-4">
               <div className="form-control">
                 <label className="label"><span className="label-text">First Name <span className="text-error">*</span></span></label>
-                <input type="text" className="input input-bordered w-full" placeholder="Juan" value={form.firstName} onChange={(e) => update("firstName", e.target.value)} />
+                <input type="text" className={`input input-bordered w-full ${errors.firstName ? "input-error" : ""}`} placeholder="Juan" value={form.firstName} onChange={(e) => update("firstName", e.target.value)} />
+                {errors.firstName && <p className="text-error text-xs mt-1">{errors.firstName}</p>}
               </div>
               <div className="form-control">
                 <label className="label"><span className="label-text">Last Name <span className="text-error">*</span></span></label>
-                <input type="text" className="input input-bordered w-full" placeholder="dela Cruz" value={form.lastName} onChange={(e) => update("lastName", e.target.value)} />
+                <input type="text" className={`input input-bordered w-full ${errors.lastName ? "input-error" : ""}`} placeholder="dela Cruz" value={form.lastName} onChange={(e) => update("lastName", e.target.value)} />
+                {errors.lastName && <p className="text-error text-xs mt-1">{errors.lastName}</p>}
               </div>
             </div>
             <div className="form-control">
@@ -203,7 +214,7 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
             mutate({ ...finalForm, role: "patient" });
           }} className="space-y-4">
             <LanguagesField value={form.languages} onChange={(val) => update("languages", val)} error={errors.languages} />
-            <PhoneField phoneNumber={form.phoneNumber} phoneType={form.phoneType} onNumberChange={(val) => update("phoneNumber", val)} onTypeChange={(val) => update("phoneType", val)} error={errors.phoneNumber} />
+            <PhoneField phoneNumber={form.phoneNumber} phoneType={form.phoneType} onNumberChange={(val) => update("phoneNumber", val)} onTypeChange={(val) => update("phoneType", val)} error={errors.phoneNumber} onVerified={setPhoneVerified} />
             <AddressFields value={form.address} onChange={(val) => update("address", val)} errors={errors} cityRef={cityRef} />
             <button className="btn btn-primary w-full" type="submit" disabled={isPending || !step2Complete || isSubmitting}>
               {isPending || isSubmitting ? <><span className="loading loading-spinner loading-xs" />Submitting...</> : "Complete Onboarding"}

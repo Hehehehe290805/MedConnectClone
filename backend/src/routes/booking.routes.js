@@ -3,7 +3,7 @@ import {
     bookAppointment, payDeposit, acceptAppointment, rejectAppointment,
     cancelAppointment, completeAppointment, payBalance,
     fileDispute, submitReview, joinCall, getMyAppointments, getTransactionHistory,
-    getProviderReviews,
+    getProviderReviews, deleteReview,
 } from "../controllers/booking.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
@@ -32,5 +32,6 @@ router.post("/join-call", joinCallValidator, validate, joinCall);
 router.get("/my-appointments",        getMyAppointments);
 router.get("/transaction-history",    getTransactionHistory);
 router.get("/reviews/:providerId",    getProviderReviews);
+router.delete("/review/:appointmentId", deleteReview);
 
 export default router;

@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { completeOnboarding } from "../lib/api";
 import { StepProgress, StepHeader, ImageUploadField, AddressFields, PhoneField, forwardGeocode, uploadPendingImages } from "./OnboardingShared";
+import { isValidPersonName, NAME_ERROR } from "../lib/utils";
 
 const TOTAL_STEPS = 3;
 
@@ -38,7 +39,9 @@ const OnboardingPharmacy = ({ email, role, onBack, onSuccess }) => {
   const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
   const [uploadingFields, setUploadingFields] = useState({});
+  const [phoneVerified, setPhoneVerified] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState({});
 
   const dobRef = useRef(null);
   const cityRef = useRef(null);
@@ -87,6 +90,7 @@ const OnboardingPharmacy = ({ email, role, onBack, onSuccess }) => {
     form.sex;
 
   const step2Complete =
+    phoneVerified &&
     form.phoneNumber.length === 10 &&
     form.address.buildingNumber.trim() &&
     form.address.street.trim() &&
@@ -106,6 +110,11 @@ const OnboardingPharmacy = ({ email, role, onBack, onSuccess }) => {
     (form.pharmacistLegalIDImage.file || form.pharmacistLegalIDImage.key);
 
   const validateStep1 = () => {
+    const e = {};
+    if (!isValidPersonName(form.pharmacistFirstName)) e.pharmacistFirstName = NAME_ERROR;
+    if (!isValidPersonName(form.pharmacistLastName)) e.pharmacistLastName = NAME_ERROR;
+    setErrors(e);
+    if (Object.keys(e).length > 0) return false;
     if (!form.birthDate) {
       dobRef.current?.setCustomValidity("Date of birth is required");
       dobRef.current?.reportValidity();
@@ -145,11 +154,13 @@ const OnboardingPharmacy = ({ email, role, onBack, onSuccess }) => {
             <div className="grid grid-cols-2 gap-4">
               <div className="form-control">
                 <label className="label"><span className="label-text">Pharmacist First Name <span className="text-error">*</span></span></label>
-                <input type="text" className="input input-bordered w-full" placeholder="Pedro" value={form.pharmacistFirstName} onChange={(e) => update("pharmacistFirstName", e.target.value)} />
+                <input type="text" className={`input input-bordered w-full${errors.pharmacistFirstName ? " input-error" : ""}`} placeholder="Pedro" value={form.pharmacistFirstName} onChange={(e) => { update("pharmacistFirstName", e.target.value); setErrors((prev) => ({ ...prev, pharmacistFirstName: undefined })); }} />
+                {errors.pharmacistFirstName && <p className="text-error text-xs mt-1">{errors.pharmacistFirstName}</p>}
               </div>
               <div className="form-control">
                 <label className="label"><span className="label-text">Pharmacist Last Name <span className="text-error">*</span></span></label>
-                <input type="text" className="input input-bordered w-full" placeholder="Reyes" value={form.pharmacistLastName} onChange={(e) => update("pharmacistLastName", e.target.value)} />
+                <input type="text" className={`input input-bordered w-full${errors.pharmacistLastName ? " input-error" : ""}`} placeholder="Reyes" value={form.pharmacistLastName} onChange={(e) => { update("pharmacistLastName", e.target.value); setErrors((prev) => ({ ...prev, pharmacistLastName: undefined })); }} />
+                {errors.pharmacistLastName && <p className="text-error text-xs mt-1">{errors.pharmacistLastName}</p>}
               </div>
             </div>
             <div className="form-control">
@@ -198,7 +209,7 @@ const OnboardingPharmacy = ({ email, role, onBack, onSuccess }) => {
             setForm(finalForm);
             setStep(3);
           }} className="space-y-4">
-            <PhoneField phoneNumber={form.phoneNumber} phoneType={form.phoneType} onNumberChange={(val) => update("phoneNumber", val)} onTypeChange={(val) => update("phoneType", val)} />
+            <PhoneField phoneNumber={form.phoneNumber} phoneType={form.phoneType} onNumberChange={(val) => update("phoneNumber", val)} onTypeChange={(val) => update("phoneType", val)} onVerified={setPhoneVerified} />
             <AddressFields value={form.address} onChange={(val) => update("address", val)} errors={{}} cityRef={cityRef} label="Business Address" />
             <button className="btn btn-primary w-full" type="submit" disabled={!step2Complete}>Next →</button>
           </form>

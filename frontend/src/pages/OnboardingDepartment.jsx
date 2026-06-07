@@ -6,6 +6,7 @@ import { BuildingIcon, PencilLineIcon } from "lucide-react";
 import { createDepartmentAccount } from "../lib/api";
 import { StepProgress, StepHeader, ImageUploadField, AddressFields, PhoneField, forwardGeocode, uploadPendingImages } from "./OnboardingShared";
 import useAuthUser from "../hooks/useAuthUser";
+import { isValidPersonName, NAME_ERROR } from "../lib/utils";
 
 const TOTAL_STEPS = 3;
 
@@ -43,7 +44,9 @@ const OnboardingDepartment = () => {
 
     const [step, setStep] = useState(1);
     const [uploadingFields, setUploadingFields] = useState({});
+    const [phoneVerified, setPhoneVerified] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [errors, setErrors] = useState({});
     const [selectedDeptType, setSelectedDeptType] = useState(null);
     const [showSuccess, setShowSuccess] = useState(false);
     const [useInstituteAddress, setUseInstituteAddress] = useState(false);
@@ -149,6 +152,7 @@ const OnboardingDepartment = () => {
         /^\d{4}$/.test(form.address.postalCode);
 
     const step2Complete =
+        phoneVerified &&
         form.phoneNumber.length === 10 &&
         (isClinic ? true : addressFilled || useInstituteAddress);
 
@@ -159,6 +163,11 @@ const OnboardingDepartment = () => {
         (form.technologistLegalIDImage.file || form.technologistLegalIDImage.key);
 
     const validateStep1 = () => {
+        const e = {};
+        if (!isValidPersonName(form.technologistFirstName)) e.technologistFirstName = NAME_ERROR;
+        if (!isValidPersonName(form.technologistLastName)) e.technologistLastName = NAME_ERROR;
+        setErrors(e);
+        if (Object.keys(e).length > 0) return false;
         if (!form.birthDate) {
             dobRef.current?.setCustomValidity("Date of birth is required");
             dobRef.current?.reportValidity();
@@ -460,11 +469,13 @@ const OnboardingDepartment = () => {
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="form-control">
                                     <label className="label"><span className="label-text">First Name <span className="text-error">*</span></span></label>
-                                    <input type="text" className="input input-bordered w-full" placeholder="Maria" value={form.technologistFirstName} onChange={(e) => update("technologistFirstName", e.target.value)} />
+                                    <input type="text" className={`input input-bordered w-full${errors.technologistFirstName ? " input-error" : ""}`} placeholder="Maria" value={form.technologistFirstName} onChange={(e) => { update("technologistFirstName", e.target.value); setErrors((prev) => ({ ...prev, technologistFirstName: undefined })); }} />
+                                    {errors.technologistFirstName && <p className="text-error text-xs mt-1">{errors.technologistFirstName}</p>}
                                 </div>
                                 <div className="form-control">
                                     <label className="label"><span className="label-text">Last Name <span className="text-error">*</span></span></label>
-                                    <input type="text" className="input input-bordered w-full" placeholder="Santos" value={form.technologistLastName} onChange={(e) => update("technologistLastName", e.target.value)} />
+                                    <input type="text" className={`input input-bordered w-full${errors.technologistLastName ? " input-error" : ""}`} placeholder="Santos" value={form.technologistLastName} onChange={(e) => { update("technologistLastName", e.target.value); setErrors((prev) => ({ ...prev, technologistLastName: undefined })); }} />
+                                    {errors.technologistLastName && <p className="text-error text-xs mt-1">{errors.technologistLastName}</p>}
                                 </div>
                             </div>
                             <div className="form-control">
@@ -536,6 +547,7 @@ const OnboardingDepartment = () => {
                                 phoneType={form.phoneType}
                                 onNumberChange={(val) => update("phoneNumber", val)}
                                 onTypeChange={(val) => update("phoneType", val)}
+                                onVerified={setPhoneVerified}
                             />
 
                             {isClinic ? (

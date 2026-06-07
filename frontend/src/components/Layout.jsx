@@ -2,6 +2,7 @@ import { Outlet } from "react-router";
 import Sidebar from "./Sidebar";
 import Navbar from "./Navbar";
 import VirtualJoinPrompt from "./VirtualJoinPrompt";
+import ChatbotWidget from "./ChatbotWidget";
 
 const Layout = ({ showSidebar = true }) => {
   return (
@@ -20,6 +21,9 @@ const Layout = ({ showSidebar = true }) => {
 
       {/* Global virtual call join prompt — appears when a virtual appointment starts */}
       <VirtualJoinPrompt />
+
+      {/* AI Assistant — fixed bottom-right, all authenticated pages */}
+      <ChatbotWidget />
     </div>
   );
 };

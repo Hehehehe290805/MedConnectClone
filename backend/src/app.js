@@ -5,6 +5,7 @@ import cors from "cors";
 import path from "path";
 
 import adminRoutes from "./routes/admin.route.js";
+import analyticsRoutes from "./routes/analytics.route.js";
 import authRoutes from "./routes/auth.route.js";
 import bookingRoutes from "./routes/booking.routes.js";
 import chatRoutes from "./routes/chat.route.js";
@@ -22,6 +23,8 @@ import gcashRoutes from "./routes/gcashSetup.route.js";
 import appReportRoutes from "./routes/appReport.route.js";
 import appointmentFileRoutes from "./routes/appointmentFile.route.js";
 import pharmacyOrderRoutes from "./routes/pharmacyOrder.route.js";
+import queueRoutes from "./routes/queue.route.js";
+import chatbotRoutes from "./routes/chatbot.route.js";
 
 
 import { errorMiddleware } from "./middleware/error.middleware.js";
@@ -44,6 +47,7 @@ app.use(sanitizeBody);
 
 // Routes
 app.use("/api/admin", adminRoutes);
+app.use("/api/admin/analytics", analyticsRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/booking", bookingRoutes);
@@ -61,6 +65,8 @@ app.use("/api/gcash", gcashRoutes);
 app.use("/api/app-reports", appReportRoutes);
 app.use("/api/appointment-files", appointmentFileRoutes);
 app.use("/api/pharmacy", pharmacyOrderRoutes);
+app.use("/api/queue", queueRoutes);
+app.use("/api/chatbot", chatbotRoutes);
 
 // Serve frontend in production
 if (process.env.NODE_ENV === "production") {

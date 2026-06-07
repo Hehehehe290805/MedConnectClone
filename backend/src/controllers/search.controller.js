@@ -63,8 +63,14 @@ export const searchDoctors = asyncHandler(async (req, res) => {
     if (sex) query.sex = sex.toLowerCase();
     if (language) query.languages = language;
 
+    // Exclude doctors who have blocked the requesting patient
+    const patientId = req.user?._id;
+    if (patientId) {
+        query.blockedPatients = { $not: { $elemMatch: { $eq: patientId } } };
+    }
+
     let doctors = await User.find(query)
-        .select("firstName lastName sex profilePic address languages bio specialty subSpecialty")
+        .select("firstName lastName sex profilePic address languages bio specialty subSpecialty lastSeen")
         .populate("specialty", "name")
         .populate("subSpecialty", "name")
         .lean();
@@ -159,6 +165,7 @@ export const searchDoctors = asyncHandler(async (req, res) => {
         if (userCoords?.length === 2 && coords?.length === 2) {
             distanceKm = Math.round(haversineKm(userCoords[1], userCoords[0], coords[1], coords[0]) * 10) / 10;
         }
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
         return {
             _id: d._id,
             firstName: d.firstName,
@@ -176,6 +183,7 @@ export const searchDoctors = asyncHandler(async (req, res) => {
             averageRating: ratingMap[id]?.avg ?? null,
             reviewCount: ratingMap[id]?.count ?? 0,
             distanceKm,
+            isOnline: d.lastSeen ? d.lastSeen >= fiveMinutesAgo : false,
             role: "doctor",
         };
     });

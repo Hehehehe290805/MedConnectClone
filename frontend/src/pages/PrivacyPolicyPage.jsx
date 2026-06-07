@@ -53,8 +53,9 @@ const PrivacyPolicyPage = () => (
                         <p>You may request account deletion at any time from Settings → Danger Zone. To request data export or correction, use the Report an Issue feature.</p>
                     </section>
                     <section>
-                        <h2 className="font-bold text-lg mb-2">7. Philippine Data Privacy Act</h2>
-                        <p>MedConnect complies with Republic Act No. 10173 (Data Privacy Act of 2012). For privacy concerns, contact us via the in-app reporting feature.</p>
+                        <h2 className="font-bold text-lg mb-2">7. Philippine Data Privacy Act (RA 10173)</h2>
+                        <p>MedConnect is developed in compliance with Republic Act No. 10173 (Data Privacy Act of 2012). As this platform is currently in development, a formal Data Protection Officer (DPO) designation and National Privacy Commission (NPC) registration are pending. Full compliance documentation will be completed prior to public launch.</p>
+                        <p className="mt-2 opacity-70">For privacy concerns or requests to exercise your data subject rights (access, correction, erasure, portability), use the Report an Issue feature in Settings.</p>
                     </section>
                 </div>
             </div>

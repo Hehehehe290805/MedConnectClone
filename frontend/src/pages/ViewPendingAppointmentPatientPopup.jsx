@@ -89,8 +89,12 @@ const ViewPendingAppointmentPatientPopup = ({ appointment: appt, onClose, onUpda
                 return (
                     <div className="space-y-2">
                         <button className="btn btn-primary w-full" onClick={() => goToPayment("deposit")}>
-                            Pay Deposit — ₱{appt.depositAmount?.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                            Confirm &amp; Pay Deposit — ₱{appt.depositAmount?.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
                         </button>
+                        <p className="text-xs text-center opacity-50">
+                            By clicking this button, you agree to our{" "}
+                            <Link to="/terms-of-service" target="_blank" className="link link-primary">Terms &amp; Conditions</Link>.
+                        </p>
                         <button className="btn btn-ghost btn-sm w-full opacity-60" disabled={isCancelling} onClick={() => cancel()}>
                             Cancel Appointment
                         </button>
@@ -143,8 +147,12 @@ const ViewPendingAppointmentPatientPopup = ({ appointment: appt, onClose, onUpda
                                 </button>
                             )}
                             <button className="btn btn-primary w-full" onClick={() => goToPayment("balance")}>
-                                Pay Balance — ₱{appt.balanceAmount?.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                                Confirm &amp; Pay Balance — ₱{appt.balanceAmount?.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
                             </button>
+                            <p className="text-xs text-center opacity-50">
+                                By clicking this button, you agree to our{" "}
+                                <Link to="/terms-of-service" target="_blank" className="link link-primary">Terms &amp; Conditions</Link>.
+                            </p>
                         </div>
                     )
                     : (
@@ -166,8 +174,12 @@ const ViewPendingAppointmentPatientPopup = ({ appointment: appt, onClose, onUpda
                             </button>
                         )}
                         <button className="btn btn-primary w-full" onClick={() => goToPayment("balance")}>
-                            Pay Balance — ₱{appt.balanceAmount?.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                            Confirm &amp; Pay Balance — ₱{appt.balanceAmount?.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
                         </button>
+                        <p className="text-xs text-center opacity-50">
+                            By clicking this button, you agree to our{" "}
+                            <Link to="/terms-of-service" target="_blank" className="link link-primary">Terms &amp; Conditions</Link>.
+                        </p>
                     </div>
                 );
             case "fully_paid":

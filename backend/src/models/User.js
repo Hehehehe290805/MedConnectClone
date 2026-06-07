@@ -3,6 +3,11 @@ import bcrypt from "bcryptjs";
 import { encrypt, decrypt } from "../utils/crypto.js";
 
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+const nameRegex = /^[a-zA-ZÀ-ÿ\s'\-]+$/;
+const nameValidator = {
+  validator: (v) => !v || nameRegex.test(v),
+  message: "Name may only contain letters, spaces, hyphens, and apostrophes",
+};
 
 const imageSchema = new mongoose.Schema({
   url: { type: String },
@@ -76,6 +81,7 @@ const baseUserSchema = new mongoose.Schema({
   emailNotificationsEnabled: { type: Boolean, default: true },
   loginAttempts: { type: Number, default: 0 },
   loginLockedAt: { type: Date, default: null },
+  lastSeen: { type: Date, default: null },
   birthDate: {
     type: Date,
     validate: {
@@ -113,8 +119,8 @@ export default User;
 
 // --- PATIENT ---
 const patientSchema = new mongoose.Schema({
-  firstName: { type: String, required: true },
-  lastName: { type: String, required: true },
+  firstName: { type: String, required: true, validate: nameValidator },
+  lastName: { type: String, required: true, validate: nameValidator },
   sex: { type: String, enum: ["male", "female"], required: true },
   bio: { type: String },
   profilePic: { type: imageSchema },
@@ -127,8 +133,8 @@ export const Patient = User.discriminator("Patient", patientSchema);
 
 // --- DOCTOR ---
 const doctorSchema = new mongoose.Schema({
-  firstName: { type: String, required: true },
-  lastName: { type: String, required: true },
+  firstName: { type: String, required: true, validate: nameValidator },
+  lastName: { type: String, required: true, validate: nameValidator },
   sex: { type: String, enum: ["male", "female"], required: true },
   bio: { type: String },
   profilePic: { type: imageSchema },
@@ -151,6 +157,8 @@ const doctorSchema = new mongoose.Schema({
   legalIDImage: { type: imageSchema, default: () => ({}), immutable: true },
   specialty: [{ type: mongoose.Schema.Types.ObjectId, ref: "Specialty" }],
   subSpecialty: [{ type: mongoose.Schema.Types.ObjectId, ref: "Subspecialty" }],
+  blockedPatients: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+  maxPatientsPerDay: { type: Number, default: null },
 });
 
 doctorSchema.methods.getLicenseNumber = function () {
@@ -163,8 +171,8 @@ export const Doctor = User.discriminator("Doctor", doctorSchema);
 // --- PHARMACY ---
 const pharmacySchema = new mongoose.Schema({
   pharmacyName: { type: String, required: true },
-  pharmacistFirstName: { type: String, required: true },
-  pharmacistLastName: { type: String, required: true },
+  pharmacistFirstName: { type: String, required: true, validate: nameValidator },
+  pharmacistLastName: { type: String, required: true, validate: nameValidator },
   sex: { type: String, enum: ["male", "female"], required: true },
   bio: { type: String },
   profilePic: { type: imageSchema },
@@ -223,8 +231,8 @@ const instituteSchema = new mongoose.Schema({
   profilePic: { type: imageSchema },
   address: { type: addressSchema, default: () => ({}) },
   // contact person
-  contactFirstName: { type: String, required: true },
-  contactLastName: { type: String, required: true },
+  contactFirstName: { type: String, required: true, validate: nameValidator },
+  contactLastName: { type: String, required: true, validate: nameValidator },
   // permits
   businessPermit: { type: imageSchema, default: () => ({}) },
   businessPermitExpiration: {
@@ -261,8 +269,8 @@ const departmentSchema = new mongoose.Schema({
   },
   // auto-generated department ID e.g. "001MRI"
   departmentId: { type: String, required: true, unique: true },
-  technologistFirstName: { type: String, required: true },
-  technologistLastName: { type: String, required: true },
+  technologistFirstName: { type: String, required: true, validate: nameValidator },
+  technologistLastName: { type: String, required: true, validate: nameValidator },
   sex: { type: String, enum: ["male", "female"], required: true },
   bio: { type: String },
   profilePic: { type: imageSchema },
