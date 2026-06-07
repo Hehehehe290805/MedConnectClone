@@ -8,6 +8,7 @@ import {
   Trash2Icon, AlertTriangleIcon, XIcon, EyeIcon, EyeOffIcon, LogOutIcon,
   KeyRoundIcon, ShieldCheckIcon, UploadCloudIcon, HelpCircleIcon, FlagIcon,
   ChevronDownIcon, ChevronUpIcon, PencilIcon, PlusIcon, FileTextIcon, MailIcon,
+  SmartphoneIcon, CheckCircleIcon,
 } from "lucide-react";
 
 const FAQ_ITEMS = [
@@ -60,6 +61,7 @@ import {
   requestPasswordUpdate, verifyPasswordUpdate,
   requestPermitRenewal, getMyRenewals,
   toggle2FA, toggleEmailNotifications,
+  requestPhoneVerify, confirmPhoneVerify,
 } from "../lib/api.js";
 import { uploadFile } from "../lib/api.js";
 import useLogout from "../hooks/useLogout.js";
@@ -404,6 +406,42 @@ const SettingsPage = () => {
     return items;
   };
 
+  // ── phone verification ──────────────────────────────────────────────────
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [phoneInput, setPhoneInput] = useState("");
+  const [phoneTypeInput, setPhoneTypeInput] = useState("mobile");
+  const [phoneMockCode, setPhoneMockCode] = useState(null);
+  const [phoneOtpInput, setPhoneOtpInput] = useState("");
+  const [phoneError, setPhoneError] = useState("");
+  const [phoneDone, setPhoneDone] = useState(false);
+
+  const openPhoneModal = () => {
+    setPhoneInput(authUser?.phoneNumber?.replace(/^0/, "") || "");
+    setPhoneTypeInput(authUser?.phoneType || "mobile");
+    setPhoneMockCode(null);
+    setPhoneOtpInput("");
+    setPhoneError("");
+    setPhoneDone(false);
+    setShowPhoneModal(true);
+  };
+
+  const { mutate: doRequestPhone, isPending: isRequestingPhone } = useMutation({
+    mutationFn: () => requestPhoneVerify({ phoneNumber: "0" + phoneInput, phoneType: phoneTypeInput }),
+    onSuccess: (data) => { setPhoneMockCode(data.data?.mockCode || null); setPhoneError(""); setPhoneOtpInput(""); },
+    onError: (err) => setPhoneError(err?.response?.data?.message || "Failed to send code."),
+  });
+
+  const { mutate: doConfirmPhone, isPending: isConfirmingPhone } = useMutation({
+    mutationFn: () => confirmPhoneVerify({ code: phoneOtpInput }),
+    onSuccess: () => {
+      setPhoneDone(true);
+      setPhoneMockCode(null);
+      queryClient.invalidateQueries({ queryKey: ["authUser"] });
+      toast.success("Phone number verified!");
+    },
+    onError: (err) => setPhoneError(err?.response?.data?.message || "Incorrect code."),
+  });
+
   const [activeRenewalType, setActiveRenewalType] = useState(null);
   const renewFileRef = useRef(null);
   const minRenewalExp = new Date(new Date().getFullYear(), new Date().getMonth() + 3, 1).toISOString().split("T")[0];
@@ -464,6 +502,33 @@ const SettingsPage = () => {
             </div>
           </div>
         </div>
+
+        {/* Phone Number Verification (non-admin only) */}
+        {!isAdmin && (
+          <div className="card bg-base-200 shadow-xl">
+            <div className="card-body">
+              <h2 className="card-title text-xl"><SmartphoneIcon className="w-5 h-5" />Phone Number</h2>
+              <p className="text-sm opacity-70 mt-1">
+                Verify a phone number to enable login with phone or email, and as a 2FA fallback channel.
+              </p>
+              <div className="flex items-center gap-3 mt-3">
+                {authUser?.phoneVerified ? (
+                  <span className="flex items-center gap-1.5 text-success text-sm font-medium">
+                    <CheckCircleIcon className="size-4" />
+                    {authUser.phoneNumber} — Verified
+                  </span>
+                ) : authUser?.phoneNumber ? (
+                  <span className="text-sm opacity-60">{authUser.phoneNumber} — Not verified</span>
+                ) : (
+                  <span className="text-sm opacity-60">No phone number on file</span>
+                )}
+                <button className="btn btn-primary btn-sm" onClick={openPhoneModal}>
+                  {authUser?.phoneVerified ? "Update Phone" : "Verify Phone"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Edit Profile */}
         {canEditBio && (
@@ -855,6 +920,93 @@ const SettingsPage = () => {
             </div>
           </div>
           <div className="modal-backdrop" onClick={() => setShowLogoutModal(false)} />
+        </div>
+      )}
+
+      {/* Phone Verification Modal */}
+      {showPhoneModal && (
+        <div className="modal modal-open">
+          <div className="modal-box max-w-md">
+            <button onClick={() => setShowPhoneModal(false)} className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"><XIcon className="w-4 h-4" /></button>
+            <h3 className="font-bold text-lg mb-1">Verify Phone Number</h3>
+            <p className="text-xs opacity-60 mb-4">Verified phone enables login with phone number and 2FA via SMS.</p>
+
+            {phoneDone ? (
+              <div className="text-center py-6 space-y-3">
+                <CheckCircleIcon className="size-12 text-success mx-auto" />
+                <p className="font-medium text-success">Phone verified successfully!</p>
+                <button className="btn btn-primary btn-sm" onClick={() => setShowPhoneModal(false)}>Done</button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <select
+                    className="select select-bordered w-32 flex-shrink-0"
+                    value={phoneTypeInput}
+                    onChange={e => { setPhoneTypeInput(e.target.value); setPhoneMockCode(null); }}
+                    disabled={!!phoneMockCode}
+                  >
+                    <option value="mobile">Mobile</option>
+                    <option value="telephone">Telephone</option>
+                  </select>
+                  <div className="relative flex-1">
+                    {phoneTypeInput === "mobile" && (
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm opacity-60 pointer-events-none">+63</span>
+                    )}
+                    <input
+                      type="tel"
+                      className={`input input-bordered w-full ${phoneTypeInput === "mobile" ? "pl-12" : ""}`}
+                      placeholder={phoneTypeInput === "mobile" ? "9171234567" : "028123456"}
+                      value={phoneInput}
+                      onChange={e => { setPhoneInput(e.target.value.replace(/\D/g, "").slice(0, 10)); setPhoneMockCode(null); setPhoneError(""); }}
+                      maxLength={10}
+                      disabled={!!phoneMockCode}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm h-12"
+                    disabled={phoneInput.length !== 10 || phoneTypeInput !== "mobile" || isRequestingPhone}
+                    onClick={() => doRequestPhone()}
+                  >
+                    {isRequestingPhone ? <span className="loading loading-spinner loading-xs" /> : phoneMockCode ? "Resend" : "Send Code"}
+                  </button>
+                </div>
+
+                {phoneMockCode && (
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-2 bg-warning/10 border border-warning/30 rounded-xl p-3 text-sm">
+                      <AlertTriangleIcon className="size-4 text-warning mt-0.5 shrink-0" />
+                      <p className="text-xs opacity-80">
+                        <strong>⚠ Demo mode</strong> — No SMS was sent. Your code is: <strong className="font-mono text-base">{phoneMockCode}</strong>
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        className="input input-bordered flex-1 text-center font-mono tracking-widest"
+                        placeholder="Enter 6-digit code"
+                        value={phoneOtpInput}
+                        onChange={e => { setPhoneOtpInput(e.target.value.replace(/\D/g, "").slice(0, 6)); setPhoneError(""); }}
+                        maxLength={6}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={phoneOtpInput.length !== 6 || isConfirmingPhone}
+                        onClick={() => doConfirmPhone()}
+                      >
+                        {isConfirmingPhone ? <span className="loading loading-spinner loading-xs" /> : "Verify"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {phoneError && <p className="text-error text-sm">{phoneError}</p>}
+              </div>
+            )}
+          </div>
+          <div className="modal-backdrop" onClick={() => setShowPhoneModal(false)} />
         </div>
       )}
 

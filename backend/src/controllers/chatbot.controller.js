@@ -1,23 +1,9 @@
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
+import { makeRateLimiter } from "../utils/rateLimiter.js";
 
-// In-memory rate limiter: userId → { count, windowStart }
-const rateLimits = new Map();
-const RATE_LIMIT = 20;
-const WINDOW_MS = 60 * 60 * 1000; // 1 hour
-
-function checkRateLimit(userId) {
-    const now = Date.now();
-    const key = userId.toString();
-    const entry = rateLimits.get(key);
-    if (!entry || now - entry.windowStart > WINDOW_MS) {
-        rateLimits.set(key, { count: 1, windowStart: now });
-        return true;
-    }
-    if (entry.count >= RATE_LIMIT) return false;
-    entry.count++;
-    return true;
-}
+const checkRateLimit = makeRateLimiter();
+const CHATBOT_TIMEOUT_MS = 12_000; // 12 seconds
 
 const SYSTEM_PROMPT = `You are MedConnect Assistant, the in-app helper for MedConnect — a Philippine telehealth platform connecting patients with licensed healthcare providers.
 
@@ -65,19 +51,33 @@ export const chatbotMessage = asyncHandler(async (req, res) => {
         { role: "user", content: message.trim() },
     ];
 
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-            "Authorization": `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-            model: "llama3-8b-8192",
-            messages,
-            max_tokens: 300,
-            temperature: 0.4,
-        }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), CHATBOT_TIMEOUT_MS);
+
+    let response;
+    try {
+        response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${apiKey}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                model: "llama3-8b-8192",
+                messages,
+                max_tokens: 300,
+                temperature: 0.4,
+            }),
+            signal: controller.signal,
+        });
+    } catch (err) {
+        if (err.name === "AbortError") {
+            return sendError(res, 504, "Chatbot request timed out. Please try again.");
+        }
+        throw err;
+    } finally {
+        clearTimeout(timeout);
+    }
 
     if (!response.ok) {
         const err = await response.text();
