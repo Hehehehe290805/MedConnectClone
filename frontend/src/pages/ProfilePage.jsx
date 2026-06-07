@@ -325,7 +325,7 @@ const ProfilePage = () => {
               </button>
             </div>
             <div className="overflow-y-auto">
-              <ReviewsSection providerId={authUser._id} />
+              <ReviewsSection providerId={authUser._id} isOwner={authUser?.role === "doctor"} />
             </div>
           </div>
         </div>

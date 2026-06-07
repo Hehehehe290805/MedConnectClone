@@ -268,6 +268,8 @@ export const getMe = asyncHandler(async (req, res) => {
         licenseExpiration: user.licenseExpiration,
         licenseImage: user.licenseImage,
         legalIDImage: user.legalIDImage,
+        maxPatientsPerDay: user.maxPatientsPerDay ?? null,
+        blockedPatients: user.blockedPatients ?? [],
       };
     } else if (role === "pharmacy") {
       roleFields = {
@@ -630,7 +632,7 @@ const profileFieldsByRole = {
   doctor: [
     "firstName", "lastName", "birthDate", "sex", "bio",
     "profilePic", "languages", "address", "phoneNumber", "phoneType",
-    "specialty", "subSpecialty",
+    "specialty", "subSpecialty", "maxPatientsPerDay",
   ],
   pharmacy: [
     "bio", "profilePic", "address", "phoneNumber", "phoneType",

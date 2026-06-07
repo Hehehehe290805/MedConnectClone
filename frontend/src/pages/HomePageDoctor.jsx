@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import { axiosInstance } from "../lib/axios.js";
 import AppointmentCalendar from "../components/AppointmentCalendar.jsx";
 import TransactionList from "../components/TransactionList.jsx";
@@ -6,8 +7,15 @@ import ViewPendingAppointmentDoctorPopup from "./ViewPendingAppointmentDoctorPop
 import SetPricePopup from "./SetPricePopup.jsx";
 import SetSchedulePopup from "./SetSchedulePopup.jsx";
 import toast from "react-hot-toast";
-import { ClockIcon, CheckCircleIcon, AlertTriangleIcon, CalendarCheckIcon, ReceiptIcon, CalendarIcon } from "lucide-react";
+import { ClockIcon, CheckCircleIcon, AlertTriangleIcon, CalendarCheckIcon, ReceiptIcon, CalendarIcon, VideoIcon } from "lucide-react";
 import useAuthUser from "../hooks/useAuthUser";
+import QueuePanel from "../components/QueuePanel";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+dayjs.extend(utc);
+dayjs.extend(timezone);
+const PH_TZ = "Asia/Manila";
 
 const HomePageDoctor = () => {
     const { authUser } = useAuthUser();
@@ -25,11 +33,20 @@ const HomePageDoctor = () => {
     const [currentSchedule, setCurrentSchedule] = useState(null);
     const [showPricePopup, setShowPricePopup] = useState(false);
     const [showSchedulePopup, setShowSchedulePopup] = useState(false);
+    const [maxPatients, setMaxPatients] = useState(null);
+    const [maxPatientsInput, setMaxPatientsInput] = useState("");
+    const [showMaxPatients, setShowMaxPatients] = useState(false);
+    const [savingMaxPatients, setSavingMaxPatients] = useState(false);
 
     useEffect(() => {
         fetchAppointments();
         fetchCurrentSchedule();
         fetchCurrentPrice();
+        axiosInstance.get("/auth/me").then(r => {
+            const val = r.data.data?.maxPatientsPerDay ?? null;
+            setMaxPatients(val);
+            setMaxPatientsInput(val != null ? String(val) : "");
+        }).catch(() => {});
     }, []);
 
     const fetchAppointments = async () => {
@@ -106,10 +123,64 @@ const HomePageDoctor = () => {
         fetchCurrentSchedule();
     };
 
+    const saveMaxPatients = async () => {
+        const val = maxPatientsInput.trim() === "" ? null : parseInt(maxPatientsInput, 10);
+        if (val !== null && (isNaN(val) || val < 1)) {
+            toast.error("Max patients must be a positive number.");
+            return;
+        }
+        try {
+            setSavingMaxPatients(true);
+            await axiosInstance.patch("/auth/update-profile", { maxPatientsPerDay: val });
+            setMaxPatients(val);
+            setShowMaxPatients(false);
+            toast.success(val == null ? "Max patients limit removed." : `Max patients set to ${val}.`);
+        } catch (err) {
+            toast.error(err?.response?.data?.message || "Failed to save.");
+        } finally {
+            setSavingMaxPatients(false);
+        }
+    };
+
     const activeCount = appointments.filter(a => ["accepted", "ongoing"].includes(a.status)).length;
+
+    const joinCallAppt = appointments.find(a => {
+        if (!a.virtual) return false;
+        if (a.status === "ongoing") return true;
+        if (a.status === "accepted") {
+            const minsUntil = dayjs(a.start).tz(PH_TZ).diff(dayjs().tz(PH_TZ), "minute");
+            return minsUntil <= 30 && minsUntil >= -5;
+        }
+        return false;
+    });
+
+    const callPartnerId = joinCallAppt
+        ? (joinCallAppt.patientId?._id || joinCallAppt.patientId)
+        : null;
 
     return (
         <div className="p-8 space-y-6">
+            {joinCallAppt && callPartnerId && (
+                <div className="alert bg-success/10 border border-success/30 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <VideoIcon className="size-5 text-success shrink-0" />
+                        <div>
+                            <p className="font-semibold">
+                                {joinCallAppt.status === "ongoing"
+                                    ? "A virtual appointment is in progress!"
+                                    : "A virtual appointment starts soon!"}
+                            </p>
+                            <p className="text-sm opacity-70">
+                                {dayjs(joinCallAppt.start).tz(PH_TZ).format("ddd, MMM D [at] h:mm A")}
+                            </p>
+                        </div>
+                    </div>
+                    <Link to={`/call/${callPartnerId}`} className="btn btn-success btn-sm gap-2 shrink-0">
+                        <VideoIcon className="size-4" /> Join Call
+                    </Link>
+                </div>
+            )}
+
             {isPending && (
                 <div className="alert bg-warning/10 border border-warning/30">
                     <ClockIcon className="size-5 text-warning" />
@@ -191,7 +262,7 @@ const HomePageDoctor = () => {
                         </div>
                     )}
 
-                    {/* Price + Schedule cards */}
+                    {/* Price + Schedule + Max Patients cards */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="card bg-base-100 shadow-sm border p-4">
                             <h3 className="font-bold text-lg mb-2">Consultation Pricing</h3>
@@ -225,9 +296,39 @@ const HomePageDoctor = () => {
                                 </button>
                             </div>
                         </div>
+                        <div className="card bg-base-100 shadow-sm border p-4 md:col-span-2">
+                            <h3 className="font-bold text-lg mb-2">Max Patients Per Day</h3>
+                            {!showMaxPatients ? (
+                                <div className="flex items-center justify-between">
+                                    <p className="text-sm opacity-70">
+                                        {maxPatients != null ? `${maxPatients} patients/day limit` : "No limit set"}
+                                    </p>
+                                    <button className="btn btn-primary btn-sm" onClick={() => setShowMaxPatients(true)}>
+                                        {maxPatients != null ? "Update" : "Set Limit"}
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="text"
+                                        className="input input-bordered input-sm flex-1"
+                                        placeholder="e.g. 20 (leave blank for no limit)"
+                                        value={maxPatientsInput}
+                                        onChange={e => setMaxPatientsInput(e.target.value.replace(/[^0-9]/g, ""))}
+                                    />
+                                    <button className="btn btn-ghost btn-sm" onClick={() => setShowMaxPatients(false)}>Cancel</button>
+                                    <button className="btn btn-primary btn-sm" disabled={savingMaxPatients} onClick={saveMaxPatients}>
+                                        {savingMaxPatients ? <span className="loading loading-spinner loading-xs" /> : "Save"}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {error && <div className="alert alert-error"><span>{error}</span></div>}
+
+                    {/* Queue panel — shown first, above the calendar */}
+                    <QueuePanel />
 
                     <AppointmentCalendar
                         appointments={appointments}

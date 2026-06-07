@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeftIcon, ArrowRightIcon, SearchIcon, AlertTriangleIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, SearchIcon, AlertTriangleIcon, XIcon } from "lucide-react";
 import diseaseData from "../data/diseaseSymptoms.json";
 
 // Body-system cards and their associated canonical symptom strings.
@@ -141,6 +141,11 @@ function matchDiseases(selectedSymptoms) {
     .slice(0, 5);
 }
 
+// Flat list of all unique symptoms across all body systems, with their source system label
+const ALL_SYMPTOMS = [...new Map(
+  BODY_SYSTEMS.flatMap(sys => sys.symptoms.map(s => [s, { symptom: s, systemLabel: sys.label }]))
+).values()];
+
 const ConsultationPage = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
@@ -148,6 +153,9 @@ const ConsultationPage = () => {
   const [selectedSymptoms, setSelectedSymptoms] = useState([]);
   const [duration, setDuration] = useState(null);
   const [ageGroup, setAgeGroup] = useState(null);
+  const [symptomSearch, setSymptomSearch] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
+  const searchRef = useRef(null);
 
   const systemData = BODY_SYSTEMS.find(s => s.id === selectedSystem);
 
@@ -164,6 +172,20 @@ const ConsultationPage = () => {
     setSelectedSymptoms(prev =>
       prev.includes(symptom) ? prev.filter(s => s !== symptom) : [...prev, symptom]
     );
+
+  const addSymptomFromSearch = (symptom) => {
+    if (!selectedSymptoms.includes(symptom)) {
+      setSelectedSymptoms(prev => [...prev, symptom]);
+    }
+    setSymptomSearch("");
+    setShowDropdown(false);
+  };
+
+  const filteredSearchResults = useMemo(() => {
+    if (!symptomSearch.trim()) return [];
+    const q = symptomSearch.toLowerCase();
+    return ALL_SYMPTOMS.filter(({ symptom }) => symptom.toLowerCase().includes(q)).slice(0, 8);
+  }, [symptomSearch]);
 
   const handleSkip = () => navigate("/search");
 
@@ -267,7 +289,59 @@ const ConsultationPage = () => {
             <span className="text-xl">{systemData.icon}</span>
             <h2 className="font-semibold text-lg">Which symptoms are you experiencing?</h2>
           </div>
-          <p className="text-sm opacity-60">Select all that apply.</p>
+          <p className="text-sm opacity-60">Select from the list below, or search for any symptom.</p>
+
+          {/* Typeahead search */}
+          <div className="relative" ref={searchRef}>
+            <div className="flex items-center gap-2 input input-bordered w-full px-3 py-2">
+              <SearchIcon className="size-4 opacity-40 shrink-0" />
+              <input
+                type="text"
+                className="flex-1 bg-transparent text-sm outline-none"
+                placeholder="Search any symptom…"
+                value={symptomSearch}
+                onChange={e => { setSymptomSearch(e.target.value); setShowDropdown(true); }}
+                onFocus={() => setShowDropdown(true)}
+                onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+              />
+              {symptomSearch && (
+                <button className="opacity-40 hover:opacity-70" onClick={() => { setSymptomSearch(""); setShowDropdown(false); }}>
+                  <XIcon className="size-3.5" />
+                </button>
+              )}
+            </div>
+            {showDropdown && filteredSearchResults.length > 0 && (
+              <div className="absolute z-20 top-full left-0 right-0 bg-base-100 border border-base-300 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">
+                {filteredSearchResults.map(({ symptom, systemLabel }) => (
+                  <button
+                    key={symptom}
+                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-primary/10 flex items-center justify-between gap-2 ${selectedSymptoms.includes(symptom) ? "text-primary font-medium" : ""}`}
+                    onMouseDown={() => addSymptomFromSearch(symptom)}
+                  >
+                    <span>{symptom}</span>
+                    <span className="text-xs opacity-40 shrink-0">{systemLabel}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Selected via search (not in current grid) */}
+          {selectedSymptoms.filter(s => !systemData.symptoms.includes(s)).length > 0 && (
+            <div>
+              <p className="text-xs opacity-50 mb-1.5">Added via search:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {selectedSymptoms.filter(s => !systemData.symptoms.includes(s)).map(s => (
+                  <span key={s} className="badge badge-primary badge-sm gap-1">
+                    {s}
+                    <button onClick={() => toggleSymptom(s)} className="hover:opacity-70"><XIcon className="size-3" /></button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Grid for current body system */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {systemData.symptoms.map(symptom => (
               <label

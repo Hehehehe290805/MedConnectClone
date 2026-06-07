@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
-import { XIcon, UserIcon, MessageCircleIcon, FlagIcon } from "lucide-react";
+import { XIcon, UserIcon, MessageCircleIcon, FlagIcon, ShieldOffIcon } from "lucide-react";
 import AppointmentFilesPanel from "../components/AppointmentFilesPanel.jsx";
 import ChatAttachmentsSection from "../components/ChatAttachmentsSection.jsx";
 import toast from "react-hot-toast";
@@ -69,6 +69,14 @@ const ViewPendingAppointmentDoctorPopup = ({ appointment: appt, onClose, onUpdat
         onSuccess: () => { toast.success("Dispute filed."); invalidate(); onClose(); },
         onError: (err) => toast.error(err?.response?.data?.message || "Failed to file dispute."),
     });
+
+    const { mutate: blockPatient, isPending: isBlocking } = useMutation({
+        mutationFn: (patientId) => axiosInstance.post("/users/block", { patientId }),
+        onSuccess: () => { toast.success("Patient blocked and their reviews removed."); onClose(); },
+        onError: (err) => toast.error(err?.response?.data?.message || "Failed to block patient."),
+    });
+
+    const [showBlockConfirm, setShowBlockConfirm] = useState(false);
 
     if (!appt) return null;
 
@@ -301,6 +309,34 @@ const ViewPendingAppointmentDoctorPopup = ({ appointment: appt, onClose, onUpdat
                                             onClick={() => dispute()}
                                         >
                                             Submit Dispute
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    {/* Block patient */}
+                    {patientId && (
+                        <div className="pt-2 border-t border-base-300">
+                            {!showBlockConfirm ? (
+                                <button
+                                    className="btn btn-ghost btn-xs w-full gap-1 text-error opacity-50 hover:opacity-100"
+                                    onClick={() => setShowBlockConfirm(true)}
+                                >
+                                    <ShieldOffIcon className="size-3" />Block this patient
+                                </button>
+                            ) : (
+                                <div className="space-y-2 bg-error/5 border border-error/20 rounded-xl p-3">
+                                    <p className="text-xs text-error font-medium">Block this patient?</p>
+                                    <p className="text-xs opacity-60">They will no longer be able to find or book you. All reviews they left on your profile will be deleted. This cannot be undone from the platform.</p>
+                                    <div className="flex gap-2">
+                                        <button className="btn btn-ghost btn-xs flex-1" onClick={() => setShowBlockConfirm(false)}>Cancel</button>
+                                        <button
+                                            className="btn btn-error btn-xs flex-1"
+                                            disabled={isBlocking}
+                                            onClick={() => blockPatient(patientId)}
+                                        >
+                                            {isBlocking ? <span className="loading loading-spinner loading-xs" /> : "Confirm Block"}
                                         </button>
                                     </div>
                                 </div>

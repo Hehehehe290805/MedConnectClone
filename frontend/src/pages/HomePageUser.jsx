@@ -1,10 +1,17 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { axiosInstance } from "../lib/axios.js";
+import { useQuery } from "@tanstack/react-query";
 import AppointmentCalendar from "../components/AppointmentCalendar.jsx";
 import ViewPendingAppointmentPatientPopup from "./ViewPendingAppointmentPatientPopup.jsx";
-import { ClockIcon, StethoscopeIcon, SearchIcon } from "lucide-react";
+import { ClockIcon, StethoscopeIcon, SearchIcon, VideoIcon, UsersIcon } from "lucide-react";
 import useAuthUser from "../hooks/useAuthUser";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+dayjs.extend(utc);
+dayjs.extend(timezone);
+const PH_TZ = "Asia/Manila";
 
 const HomePageUser = () => {
   const { authUser } = useAuthUser();
@@ -36,8 +43,78 @@ const HomePageUser = () => {
 
   useEffect(() => { fetchAppointments(); }, []);
 
+  const joinCallAppt = appointments.find(a => {
+    if (!a.virtual) return false;
+    if (a.status === "ongoing") return true;
+    if (a.status === "accepted") {
+      const minsUntil = dayjs(a.start).tz(PH_TZ).diff(dayjs().tz(PH_TZ), "minute");
+      return minsUntil <= 30 && minsUntil >= -5;
+    }
+    return false;
+  });
+
+  const callPartnerId = joinCallAppt
+    ? (joinCallAppt.doctorId?._id || joinCallAppt.doctorId)
+    : null;
+
+  // Queue position — poll for the earliest accepted/ongoing appointment today
+  const todayAppt = appointments.find(a =>
+    ["accepted", "ongoing"].includes(a.status) &&
+    !a.virtual &&
+    dayjs(a.start).tz(PH_TZ).isSame(dayjs().tz(PH_TZ), "day")
+  );
+
+  const { data: queuePositionData } = useQuery({
+    queryKey: ["queue-position", todayAppt?._id],
+    queryFn: () =>
+      axiosInstance.get(`/queue/position?appointmentId=${todayAppt._id}`)
+        .then(r => r.data.data),
+    enabled: Boolean(todayAppt?._id),
+    refetchInterval: 60_000,  // poll every 60 seconds
+  });
+
+  const queuePos = queuePositionData?.position;
+  const queueAhead = queuePositionData?.ahead;
+
   return (
     <div className="p-8 space-y-8">
+      {joinCallAppt && callPartnerId && (
+        <div className="alert bg-success/10 border border-success/30 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <VideoIcon className="size-5 text-success shrink-0" />
+            <div>
+              <p className="font-semibold">
+                {joinCallAppt.status === "ongoing"
+                  ? "Your virtual appointment is in progress!"
+                  : "Your virtual appointment starts soon!"}
+              </p>
+              <p className="text-sm opacity-70">
+                {dayjs(joinCallAppt.start).tz(PH_TZ).format("ddd, MMM D [at] h:mm A")}
+              </p>
+            </div>
+          </div>
+          <Link to={`/call/${callPartnerId}`} className="btn btn-success btn-sm gap-2 shrink-0">
+            <VideoIcon className="size-4" /> Join Call
+          </Link>
+        </div>
+      )}
+
+      {queuePos != null && (
+        <div className="alert bg-info/10 border border-info/30 flex items-center gap-4">
+          <UsersIcon className="size-5 text-info shrink-0" />
+          <div>
+            <p className="font-semibold">
+              You are <span className="text-info font-bold">#{queuePos}</span> in the queue
+            </p>
+            <p className="text-sm opacity-70">
+              {queueAhead === 0
+                ? "You're next — please check in with the provider!"
+                : `${queueAhead} patient${queueAhead === 1 ? "" : "s"} ahead of you`}
+            </p>
+          </div>
+        </div>
+      )}
+
       {isPending && (
         <div className="alert bg-warning/10 border border-warning/30">
           <ClockIcon className="size-5 text-warning" />

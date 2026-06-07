@@ -2,12 +2,34 @@ import mongoose from "mongoose";
 import User, { Patient, Doctor, Pharmacy, Institute, Department } from "../models/User.js";
 import Admin from "../models/Admin.js";
 import EmailRegistry from "../models/EmailRegistry.js";
+import PhoneRegistry from "../models/PhoneRegistry.js";
 import DepartmentType from "../models/DepartmentType.js";
 import { upsertStreamUser } from "../lib/stream.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { notify, notifyAllAdmins } from "../services/notification.service.js";
 import { deleteFromS3 } from "../services/s3.js";
+
+function normalizePhone(phone) {
+    if (!phone) return null;
+    const digits = phone.replace(/\D/g, "");
+    if (digits.startsWith("63") && digits.length === 12) return "0" + digits.slice(2);
+    if (digits.length === 10 && !digits.startsWith("0")) return "0" + digits;
+    if (digits.length === 11 && digits.startsWith("0")) return digits;
+    return digits;
+}
+
+async function checkAndRegisterPhone(phone, userId, session, registrantModel = "User") {
+    const normalized = normalizePhone(phone);
+    if (!normalized) return;
+    const existing = await PhoneRegistry.findOne({ phone: normalized }).lean();
+    if (existing && existing.registrant.toString() !== userId.toString()) {
+        throw Object.assign(new Error("Phone number is already in use by another account."), { status: 400 });
+    }
+    if (!existing) {
+        await PhoneRegistry.create([{ phone: normalized, registrant: userId, registrantModel }], { session });
+    }
+}
 
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
@@ -63,6 +85,8 @@ export const onboardAsPatient = asyncHandler(async (req, res) => {
     session.startTransaction();
 
     try {
+        await checkAndRegisterPhone(phoneNumber, userId, session);
+
         const promoted = await promoteUser(userId, Patient, {
             email: existing.email,
             password: existing.password,
@@ -86,6 +110,7 @@ export const onboardAsPatient = asyncHandler(async (req, res) => {
         return sendSuccess(res, 200, "Onboarding successful", { user: promoted });
     } catch (err) {
         await session.abortTransaction();
+        if (err.status === 400) return sendError(res, 400, err.message);
         throw err;
     } finally {
         session.endSession();
@@ -110,6 +135,8 @@ export const onboardAsDoctor = asyncHandler(async (req, res) => {
     session.startTransaction();
 
     try {
+        await checkAndRegisterPhone(phoneNumber, userId, session);
+
         const promoted = await promoteUser(userId, Doctor, {
             email: existing.email,
             password: existing.password,
@@ -144,6 +171,7 @@ export const onboardAsDoctor = asyncHandler(async (req, res) => {
         return sendSuccess(res, 200, "Onboarding submitted for approval", { user: promoted });
     } catch (err) {
         await session.abortTransaction();
+        if (err.status === 400) return sendError(res, 400, err.message);
         throw err;
     } finally {
         session.endSession();
@@ -169,6 +197,8 @@ export const onboardAsPharmacy = asyncHandler(async (req, res) => {
     session.startTransaction();
 
     try {
+        await checkAndRegisterPhone(phoneNumber, userId, session);
+
         const promoted = await promoteUser(userId, Pharmacy, {
             email: existing.email,
             password: existing.password,
@@ -205,6 +235,7 @@ export const onboardAsPharmacy = asyncHandler(async (req, res) => {
         return sendSuccess(res, 200, "Onboarding submitted for approval", { user: promoted });
     } catch (err) {
         await session.abortTransaction();
+        if (err.status === 400) return sendError(res, 400, err.message);
         throw err;
     } finally {
         session.endSession();
@@ -238,6 +269,8 @@ export const onboardAsInstitute = asyncHandler(async (req, res) => {
     session.startTransaction();
 
     try {
+        await checkAndRegisterPhone(phoneNumber, userId, session);
+
         const promoted = await promoteUser(userId, Institute, {
             email: existing.email,
             password: existing.password,
@@ -273,6 +306,7 @@ export const onboardAsInstitute = asyncHandler(async (req, res) => {
         return sendSuccess(res, 200, "Onboarding submitted for approval", { user: promoted });
     } catch (err) {
         await session.abortTransaction();
+        if (err.status === 400) return sendError(res, 400, err.message);
         throw err;
     } finally {
         session.endSession();
@@ -337,6 +371,8 @@ export const onboardAsDepartment = asyncHandler(async (req, res) => {
     session.startTransaction();
 
     try {
+        await checkAndRegisterPhone(phoneNumber, instituteUser._id, session);
+
         const deptUser = new Department({
             email: deptEmail,
             password: deptPassword,
@@ -397,6 +433,7 @@ export const onboardAsDepartment = asyncHandler(async (req, res) => {
         return sendSuccess(res, 201, "Department account created successfully", { department: deptUser });
     } catch (err) {
         await session.abortTransaction();
+        if (err.status === 400) return sendError(res, 400, err.message);
         throw err;
     } finally {
         session.endSession();
@@ -412,6 +449,13 @@ export const onboardAsAdmin = asyncHandler(async (req, res) => {
     if (existing.status !== "notOnBoarded") return sendError(res, 400, "Account is already onboarded or pending");
 
     const { firstName, lastName, phoneNumber, phoneType, profilePic } = req.body;
+
+    try {
+        await checkAndRegisterPhone(phoneNumber, userId, null, "Admin");
+    } catch (err) {
+        if (err.status === 400) return sendError(res, 400, err.message);
+        throw err;
+    }
 
     const updated = await Admin.findByIdAndUpdate(
         userId,
