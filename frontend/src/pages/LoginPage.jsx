@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-import { BriefcaseMedicalIcon, ShieldIcon, KeyRoundIcon, LockIcon } from "lucide-react";
+import { BriefcaseMedicalIcon, ShieldIcon, KeyRoundIcon, LockIcon, SmartphoneIcon } from "lucide-react";
 import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { login, adminLogin, verify2FA, resetForgotPassword } from "../lib/api";
+import { login, adminLogin, verify2FA, resetForgotPassword, switch2FAChannel } from "../lib/api";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
@@ -20,6 +20,8 @@ const LoginPage = () => {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [formError, setFormError] = useState("");
+  const [twoFAChannel, setTwoFAChannel] = useState("email"); // "email" | "phone"
+  const [twoFAMockCode, setTwoFAMockCode] = useState(null); // non-null when channel is "phone" (mock SMS)
   const emailRef = useRef(null);
 
   const images = ["/i_0.png", "/i_1.png", "/i_2.png"];
@@ -69,6 +71,18 @@ const LoginPage = () => {
     onError: (err) => setFormError(err?.response?.data?.message || "Invalid or expired code."),
   });
 
+  // 2FA channel switch
+  const { mutate: doSwitch2FAChannel, isPending: isSwitchingChannel } = useMutation({
+    mutationFn: (preferPhone) => switch2FAChannel({ email, preferPhone }),
+    onSuccess: (data) => {
+      setTwoFAChannel(data.data?.channel ?? "email");
+      setTwoFAMockCode(data.data?.mockCode ?? null);
+      setTwoFACode("");
+      setFormError("");
+    },
+    onError: (err) => setFormError(err?.response?.data?.message || "Could not switch channel."),
+  });
+
   // Brute-force lockout reset
   const { mutate: doResetPassword, isPending: isResetting } = useMutation({
     mutationFn: resetForgotPassword,
@@ -82,19 +96,14 @@ const LoginPage = () => {
 
   const isPending = isUserLogging || isAdminLogging || isVerifying || isResetting;
 
-  const validateEmail = () => {
-    if (!EMAIL_REGEX.test(email)) {
-      emailRef.current?.setCustomValidity("Please enter a valid email address (e.g. name@example.com)");
-      emailRef.current?.reportValidity();
-      return false;
-    }
-    return true;
-  };
-
   const handleUserLogin = (e) => {
     e.preventDefault();
-    if (!validateEmail()) return;
-    doUserLogin({ email, password });
+    if (!email.trim()) {
+      emailRef.current?.setCustomValidity("Email or phone number is required");
+      emailRef.current?.reportValidity();
+      return;
+    }
+    doUserLogin({ email: email.trim(), password });
   };
 
   const handleAdminLogin = (e) => {
@@ -134,6 +143,8 @@ const LoginPage = () => {
     setLockedCode("");
     setNewPassword("");
     setConfirmPassword("");
+    setTwoFAChannel("email");
+    setTwoFAMockCode(null);
   };
 
   const ImagePanel = () => (
@@ -170,18 +181,17 @@ const LoginPage = () => {
 
               <div className="flex flex-col gap-3">
                 <div className="form-control w-full">
-                  <label className="label"><span className="label-text">Email</span></label>
+                  <label className="label"><span className="label-text">Email or Phone</span></label>
                   <input
                     ref={emailRef}
-                    type="email"
-                    placeholder="JohnDoe@example.com"
+                    type="text"
+                    placeholder="name@example.com or 09171234567"
                     className="input input-bordered w-full"
                     value={email}
                     required
                     onChange={(e) => { setEmail(e.target.value); e.target.setCustomValidity(""); }}
                     onBlur={(e) => {
-                      if (!e.target.value) e.target.setCustomValidity("Email is required");
-                      else if (!EMAIL_REGEX.test(e.target.value)) e.target.setCustomValidity("Please enter a valid email address.");
+                      if (!e.target.value.trim()) e.target.setCustomValidity("Email or phone number is required");
                       else e.target.setCustomValidity("");
                     }}
                   />
@@ -294,10 +304,26 @@ const LoginPage = () => {
                 <KeyRoundIcon className="size-5 text-primary" />
                 <h2 className="text-xl font-semibold">Two-Factor Verification</h2>
               </div>
-              <p className="text-sm opacity-70">
-                A 6-digit code was sent to{" "}
-                <span className="font-medium text-primary">{email}</span>. Enter it below to sign in.
-              </p>
+              {twoFAChannel === "phone" ? (
+                <p className="text-sm opacity-70">
+                  A 6-digit code was sent to your <span className="font-medium text-primary">phone</span>. Enter it below.
+                </p>
+              ) : (
+                <p className="text-sm opacity-70">
+                  A 6-digit code was sent to{" "}
+                  <span className="font-medium text-primary">{email}</span>. Enter it below to sign in.
+                </p>
+              )}
+
+              {/* Mock phone SMS code */}
+              {twoFAMockCode && (
+                <div className="flex items-start gap-2 bg-warning/10 border border-warning/30 rounded-xl p-3 text-sm">
+                  <SmartphoneIcon className="size-4 text-warning mt-0.5 shrink-0" />
+                  <p className="text-xs opacity-80">
+                    <strong>⚠ Demo mode</strong> — No SMS sent. Your code: <strong className="font-mono text-base">{twoFAMockCode}</strong>
+                  </p>
+                </div>
+              )}
 
               <div className="flex flex-col gap-3">
                 <div className="form-control w-full">
@@ -315,8 +341,18 @@ const LoginPage = () => {
                   {formError && <p className="text-error text-xs mt-1">{formError}</p>}
                 </div>
 
-                <button type="submit" className="btn btn-primary w-full" disabled={isPending || twoFACode.length !== 6}>
-                  {isPending ? <><span className="loading loading-spinner loading-xs" />Verifying...</> : "Verify & Sign In"}
+                <button type="submit" className="btn btn-primary w-full" disabled={isPending || isSwitchingChannel || twoFACode.length !== 6}>
+                  {isVerifying ? <><span className="loading loading-spinner loading-xs" />Verifying...</> : "Verify & Sign In"}
+                </button>
+
+                {/* Try another way — only visible when user has a verified phone (backend will reject if not) */}
+                <button
+                  type="button"
+                  className="text-xs text-primary hover:underline text-center disabled:opacity-40"
+                  disabled={isSwitchingChannel}
+                  onClick={() => doSwitch2FAChannel(twoFAChannel !== "phone")}
+                >
+                  {isSwitchingChannel ? "Switching…" : twoFAChannel === "phone" ? "Try email instead" : "Try another way (SMS)"}
                 </button>
 
                 <button type="button" className="btn btn-ghost btn-sm w-full" onClick={resetToUser}>

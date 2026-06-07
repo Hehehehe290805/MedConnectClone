@@ -74,12 +74,20 @@ const SearchPage = () => {
         const patientLangs = (authUser?.languages ?? []).map(l => l.toLowerCase());
         const useLanguageScore = patientLangs.length > 0;
 
+        // Bayesian rating: shrink sparse-review doctors toward the platform mean
+        const C = 5;
+        const totalReviews = doctors.reduce((sum, d) => sum + (d.reviewCount ?? 0), 0);
+        const totalRatingSum = doctors.reduce((sum, d) => sum + (d.averageRating ?? 0) * (d.reviewCount ?? 0), 0);
+        const platformMean = totalReviews > 0 ? totalRatingSum / totalReviews : 3;
+
         return doctors
             .map((doc) => {
                 const specialtyScore = Math.max(0, ...(doc.specialties ?? []).map((s) => conf[s] ?? 0));
                 if (specialtyScore === 0) return null;
 
-                const ratingScore    = (doc.averageRating ?? 3) / 5;
+                const n = doc.reviewCount ?? 0;
+                const bayesianRating = (C * platformMean + (doc.averageRating ?? 0) * n) / (C + n);
+                const ratingScore = bayesianRating / 5;
                 // Proximity decay: score 1.0 at 0 km, ~0.67 at 10 km, ~0.33 at 40 km
                 const proximityScore = doc.distanceKm != null ? 1 / (1 + doc.distanceKm * 0.05) : 0.5;
 

@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { axiosInstance } from "../lib/axios.js";
 import ViewPendingAppointmentDoctorPopup from "./ViewPendingAppointmentDoctorPopup.jsx";
+import AppointmentFilesPanel from "../components/AppointmentFilesPanel.jsx";
 import { Link, useNavigate } from "react-router";
 import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
-import { CalendarIcon, UserIcon, MessageCircleIcon } from "lucide-react";
+import { CalendarIcon, UserIcon, MessageCircleIcon, PaperclipIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 const PH_TZ = "Asia/Manila";
@@ -33,6 +34,16 @@ const DoctorAppointmentsPage = () => {
     const [loading, setLoading] = useState(true);
     const [selected, setSelected] = useState(null);
     const [tab, setTab] = useState("active"); // "active" | "past"
+    const [expandedFiles, setExpandedFiles] = useState(new Set());
+
+    const toggleFiles = (e, apptId) => {
+        e.stopPropagation();
+        setExpandedFiles(prev => {
+            const next = new Set(prev);
+            next.has(apptId) ? next.delete(apptId) : next.add(apptId);
+            return next;
+        });
+    };
 
     const fetchAppointments = async () => {
         try {
@@ -150,9 +161,22 @@ const DoctorAppointmentsPage = () => {
                                                     <MessageCircleIcon className="size-4" />
                                                 </button>
                                             )}
+                                            <button
+                                                className="btn btn-ghost btn-xs gap-1"
+                                                title="Appointment files"
+                                                onClick={e => toggleFiles(e, appt._id)}
+                                            >
+                                                <PaperclipIcon className="size-3.5" />
+                                                {expandedFiles.has(appt._id) ? <ChevronUpIcon className="size-3" /> : <ChevronDownIcon className="size-3" />}
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
+                                {expandedFiles.has(appt._id) && (
+                                    <div className="px-4 pb-4 border-t border-base-300 mt-2 pt-3" onClick={e => e.stopPropagation()}>
+                                        <AppointmentFilesPanel appointmentId={appt._id} participantRole="doctor" />
+                                    </div>
+                                )}
                             </div>
                         );
                     })}

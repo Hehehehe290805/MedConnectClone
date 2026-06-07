@@ -47,6 +47,10 @@ export const submitReviewValidator = [
     body("review").optional().isString(),
 ];
 
+export const deleteReviewValidator = [
+    param("appointmentId").notEmpty().isMongoId().withMessage("Invalid appointment ID"),
+];
+
 export const joinCallValidator = [
     body("appointmentId").notEmpty().isMongoId().withMessage("Invalid appointment ID"),
 ];

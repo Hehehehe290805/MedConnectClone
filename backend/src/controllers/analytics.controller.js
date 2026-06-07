@@ -46,20 +46,23 @@ export const getAnalytics = asyncHandler(async (req, res) => {
         {
             $group: {
                 _id: {
-                    // Group by UTC date string; close enough for daily bucketing
-                    year: { $year: "$createdAt" },
-                    month: { $month: "$createdAt" },
-                    day: { $dayOfMonth: "$createdAt" },
+                    day: {
+                        $dateToString: {
+                            format: "%Y-%m-%d",
+                            date: "$createdAt",
+                            timezone: "Asia/Manila",
+                        },
+                    },
                 },
                 revenue: { $sum: "$amount" },
                 platformRevenue: { $sum: "$platformFee" },
             },
         },
-        { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } },
+        { $sort: { "_id.day": 1 } },
     ]).exec();
 
     const revenueByDay = revenueByDayRaw.map((r) => ({
-        date: `${r._id.year}-${String(r._id.month).padStart(2, "0")}-${String(r._id.day).padStart(2, "0")}`,
+        date: dayjs.utc(r._id.day).tz("Asia/Manila").format("YYYY-MM-DD"),
         revenue: r.revenue,
         platformRevenue: r.platformRevenue,
     }));
