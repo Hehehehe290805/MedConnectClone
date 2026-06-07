@@ -76,14 +76,19 @@ Student project — actively in development.
 **Onboarding:** Submits FDA license and pharmacist PRC license → status `pending` → admin approves → `onBoarded`.
 
 **Current Features:**
-- **Home Dashboard** (`/`): Tabbed — **Orders** (placeholder, first tab) | **Manage Catalogue** (placeholder) | **Transactions** (`TransactionList`).
+- **Home Dashboard** (`/`): Full pharmacy order management — Order List (paid, awaiting prep), Shipping & Pickup queue, Completed orders, Order History. Prescription review modal (approve/reject with reason). Rejected prescriptions modal.
+- **Order lifecycle**: `paid → ready_for_shipping/ready_for_pickup → out_for_delivery/pickup_in_progress → completed`. Mock auto-complete after 10 minutes.
+- **Prescription review**: Orders containing prescription-only medicines are held for pharmacist review before payment. Pharmacist can approve or reject with a reason code and free-text notes.
+- **Customer-facing**: `CustomerPharmacyPage.jsx` — browse catalogue, add to cart, checkout, choose delivery/pickup.
+- **Catalogue management**: `PharmacyCataloguePage.jsx` — CRUD for pharmacy products (name, price, stock, OTC flag, image).
+- **Transactions**: `PharmacyIncomePage.jsx` — income tracking.
 - **Notifications**: Receives approval, rejection, and renewal notifications.
 - **Permit Renewal**: FDA license and pharmacist PRC license renewal via `PermitRenewal` flow in Settings.
 
 **Standards:**
-- Pharmacy has no appointment or booking involvement at this stage. Its transaction list will populate only when the Orders feature is built.
-- The Orders and Manage Catalogue tabs are intentional placeholders — do not replace or remove them without explicit instruction.
-- Onboarding requires two private S3 uploads: `fdaLicense` and `pharmacistLicenseImage`. Both must be present before submission.
+- Pharmacy order flow is implemented and functional. Do not overwrite teammate-built order management logic.
+- Prescription items (OTC=false) must go through `prescriptionReviews` queue before customer can pay.
+- Mock fulfillment (auto-complete after 10 min) is intentional for demo purposes.
 
 ---
 
@@ -113,7 +118,7 @@ Student project — actively in development.
 - **Service Claims** (`/services`): Claims services from 149 seeded entries across 36 department types. Each claim includes `durationMinutes`. Admin must approve before claims are `verified` and bookable.
 - **Appointment Calendar** (`/`): `AppointmentCalendar` with status dots and `ViewPendingAppointmentDoctorPopup` on click.
 - **Appointment Popup Actions**: Accept, reject, complete (in-person), dispute — same actions as doctor.
-- **Home Dashboard** (`/`): Tabbed — **Appointments** (service setup prompt or verified-services card, dept info, calendar) | **Transactions** (`TransactionList`).
+- **Home Dashboard** (`/`): Tabbed — **Appointments** (service setup prompt or verified-services card, dept info, **`QueuePanel`** above calendar, `AppointmentCalendar`) | **Transactions** (`TransactionList`).
 - **Appointment Files**: `AppointmentFilesPanel` embedded in the popup.
 - **Technologist License Renewal**: Via Settings → Licenses & Permits → Renew.
 
@@ -420,7 +425,7 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 
 **Patient (`HomePageUser`)** — pending banner; Book Now card (→ /consultation or /search); `AppointmentCalendar` with calendar/list toggle + `ViewPendingAppointmentPatientPopup` on click.
 
-**Doctor (`HomePageDoctor`)** — pending banner; tabbed: **Appointments** (setup warning or success card, pricing card, schedule card, `AppointmentCalendar` + `ViewPendingAppointmentDoctorPopup`) | **Transactions** (`TransactionList`).
+**Doctor (`HomePageDoctor`)** — pending banner; Join Call banner (virtual, 30 min before / ongoing); tabbed: **Appointments** (setup warning or success card, pricing card, schedule card, max patients card, **`QueuePanel`** (today's queue with walk-in/advance/no-show), `AppointmentCalendar` + `ViewPendingAppointmentDoctorPopup`) | **Transactions** (`TransactionList`).
 
 **Pharmacy (`HomePagePharmacy`)** — pending banner; tabbed: **Manage Catalogue** (placeholder) | **Transactions** (`TransactionList`).
 
@@ -726,34 +731,39 @@ The queue system (#71/#72/#87) is a new collection and the most complex feature.
 
 ## Open Flags
 
-### Features — High Priority
+### Features — High Priority (Open)
 | # | Feature | Notes |
 |---|---|---|
-| 53 | Book appointment — institute path | Doctor booking rebuilt and working. Institute booking: pass `instituteId` + `serviceId` + `start` to `POST /api/booking/book` — needs a separate `CreateInstituteBookingPopup` similar to the doctor one (deprioritized) |
-| 68 | Mobile number uniqueness + verification | Phone numbers must be globally unique across all accounts (same mechanism as `emailregistry`). Philippine format: `09XXXXXXXXX` or `+639XXXXXXXXX`. OTP delivery: **Brevo SMS is paid — build mock design** matching the email OTP style with a small "⚠ Mock — SMS not sent in demo" note. Add a `phoneregistry` collection (same as `emailregistry`) for uniqueness. Applies to all roles. |
-| 69 | Doctor block patient | Doctor blocks a patient: (1) patient becomes invisible in that doctor's search results and cannot book; (2) all reviews the patient left on that doctor's profile are deleted from the `appointments` collection (`rating`/`review` fields nulled); (3) no admin override. Add `blockedPatients[]` array to Doctor model. Filter in `search.controller.js`. |
-| 70 | Doctor delete review | Doctor can delete any review left on their profile (null out `rating` and `review` on the `Appointment` doc). Authorization: only the doctor being reviewed can delete. No audit trail required. |
-| 71 | Appointment queue system | See **Queue System Architecture** section above for full spec. New `appointmentqueues` collection. No new appointment statuses. Cron at day-start builds queue. Doctor advances only when current is finished. Emergency bumps revert current to `accepted`. Position notifications at 10/5/2 ahead. |
-| 72 | Walk-in appointments | Doctor-only. Two types: `walkin` (appended to end of queue) and `emergency` (inserted at position 1, bumps everyone including currently ongoing). Creating an emergency mid-session reverts the `ongoing` appointment to `accepted` and notifies all affected. No ad-hoc schedule changes to recurring weekly schedule — queue entries are independent. |
-| 73 | Booking calendar view | Replace 7-day slot grid in `CreateBookingPopup` with a month-view calendar. Extend lookahead from 7 days to 3 months. Month navigation respects `Asia/Manila`. View is switchable (calendar / list). Default to calendar view. |
-| 88 | Doctor cannot see own verified specialties/subspecialties | Bug: `SpecialtyPage` (`/specialty`) does not display already-approved/verified claims. `ProfilePage` (#38) shows them publicly — this is specifically the doctor's own management view. Check `SpecialtyPage.jsx` and `GET /api/specialties/doctor-specialties` response. |
+| 53 | Book appointment — institute path | Doctor booking done. Institute booking: needs `CreateInstituteBookingPopup` (pass `instituteId` + `serviceId` + `start` to `POST /api/booking/book`). Deprioritized. |
 
-### Features — Medium Priority
+### Features — Medium Priority (Open)
 | # | Feature | Notes |
 |---|---|---|
-| 24 | Expert system fuzzy logic | Jaccard + bipartite ranker done. Fuzzy membership scores still pending — needs severity data |
-| 23 | AppointmentFilesPanel in DoctorAppointmentsPage list | Panel is now in the detail popups. Consider embedding in the appointments list view too. |
-| 74 | Online status indicator | Use **Stream's built-in presence API** (already integrated). Show online/offline dot on doctor card in search results and inside `CreateBookingPopup`. |
-| 75 | Admin sales report + analytics | New `/api/admin/analytics` route. All metrics: total revenue, revenue by date range, revenue by doctor/department, appointment volume, top providers by revenue and volume, cancellation/dispute rates. Export as **CSV** and **Excel (.xlsx)** — use `xlsx` npm package (free). New "Analytics" tab on `HomePageAdmin`. |
-| 76 | T&C in booking + payment | No checkbox. Instead: show a hyperlink "Terms & Conditions" inline near the confirm/pay button with text: *"By clicking this button, you agree to our Terms & Conditions."* Add to `CreateBookingPopup` and Demo Payment screen. Link opens `/terms-of-service` in a new tab. |
-| 77 | Deposit button UX | Change button copy from "Pay Deposit" to **"Confirm & Pay Deposit"** (communicates it is a payment action). No confirmation modal needed beyond the existing flow. |
-| 78 | Doctor max patients per day | Add `maxPatientsPerDay` field to Doctor model. Enforce during booking (`POST /api/booking/book`): count `accepted`+`deposit_paid`+`ongoing` appointments for that day; reject if at cap. Show "X slots remaining today" on doctor card/profile. No time-block logic — queue manages order. |
-| 79 | Join call button on dashboard banner | Show "Join Call" button on the home dashboard appointment banner when: (a) virtual appointment is `ongoing`, or (b) virtual appointment is `accepted` and start time is within 30 minutes. Links to `/call/:id`. Applies to both patient and doctor home pages. |
-| 80 | AI chatbot | **Groq free tier** (Llama 3 model via `groq-sdk`). Rate limit: 20 messages/hour per user (tracked in-memory or Redis). Scope: MedConnect feature help + T&C answers only; redirect to `/consultation` for "what doctor for my symptoms"; redirect to `/search` for doctor lookup. Never generate medical advice. Add `GROQ_API_KEY` to env vars. Floating chat button on all authenticated pages. |
-| 81 | Bayesian rating in bipartite ranker | Replace `doc.averageRating / 5` in `SearchPage.jsx` with Bayesian-smoothed score: `(C × m + Σratings) / (C + n)` where `C=5`, `m` = platform mean. Requires `reviewCount` returned alongside `averageRating` from the search API. |
-| 82 | Specialties more visible on doctor card | Show top 3 verified specialties as larger chips (e.g., `badge-md`) by default on the doctor card in search results. "Show more" expandable for the rest. Use bigger, readable text. |
-| 83 | Expert system checkbox-style symptom input | In `ConsultationPage` symptom step, add a **searchable typeahead input** (like the languages field) alongside the existing symptom grid. Typing filters symptoms; selecting adds a checkbox. Both input methods work simultaneously. |
-| 87 | Patient queue number display | If patient has an appointment **today**, show "You are #N in queue — N people ahead" on their home dashboard appointment card. Polls every 60s via `GET /api/queue/my-position?appointmentId=`. Also update the card when notified at 10/5/2 ahead. |
+| 23 | AppointmentFilesPanel in DoctorAppointmentsPage list view | Panel is in detail popups. Embedding in the list row is still pending. |
+| 24 | Expert system fuzzy logic | Jaccard + bipartite ranker done. Fuzzy membership scores need severity data — blocked. |
+| 81 | Bayesian rating in bipartite ranker | Replace `doc.averageRating / 5` in `SearchPage.jsx` with `(C × m + Σratings) / (C + n)` (C=5, m=platform mean). `reviewCount` is already returned by the search API. Small change. |
+
+### Completed Flags (reference)
+| # | Feature | When Done |
+|---|---|---|
+| 68 | Mobile number uniqueness + mock SMS OTP | 2026-06-07 |
+| 69 | Doctor block patient | 2026-06-07 |
+| 70 | Doctor delete review | 2026-06-07 |
+| 71/72/87 | Queue system (incl. walk-ins, emergencies, patient position) | 2026-06-07 |
+| 73 | Booking calendar view (3-month, switchable) | 2026-06-07 |
+| 74 | Online status (lastSeen heartbeat) | 2026-06-07 |
+| 75 | Admin analytics + CSV/Excel export | 2026-06-07 |
+| 76 | T&C inline text on all payment buttons | 2026-06-07 |
+| 77 | Deposit button copy | 2026-06-07 |
+| 78 | Max patients per day (model + enforcement + UI) | 2026-06-07 |
+| 79 | Join Call banner | 2026-06-07 |
+| 80 | AI chatbot (Groq, floating bottom-right) | 2026-06-07 |
+| 82 | Specialties visible on doctor card | 2026-06-07 |
+| 83 | Symptom typeahead in ConsultationPage | 2026-06-07 |
+| 84 | T&C queue disclosures + RA 10173 notice | 2026-06-07 |
+| 85 | Name field sanitization | 2026-06-07 |
+| 86 | PSGC address dropdowns (psgc.cloud API) | 2026-06-07 |
+| 88 | Fix SpecialtyPage Column anti-pattern | 2026-06-07 |
 
 ### Low Priority / Post-Development
 | # | Flag | Notes |
@@ -762,9 +772,7 @@ The queue system (#71/#72/#87) is a new collection and the most complex feature.
 | 11 | Transaction for email update | Needs replica set confirmation on Atlas |
 | 18 | Package version sync | After development — audit `package.json` |
 | 22 | Dual permit renewal endpoints | Old role-specific endpoints in `permits.controller.js` still write directly to User; remove once new `PermitRenewal` flow confirmed |
-| 84 | Data privacy compliance | **FLAG: Partially implemented.** `TermsOfServicePage` and `PrivacyPolicyPage` exist but are not fully RA 10173 compliant. Items still missing: consent banner on signup, formal data retention policy, right-to-erasure audit (current 30-day soft-delete may not satisfy), DPA officer contact in Privacy Policy. Do not attempt full compliance pass without explicit instruction — just keep these pages updated as features are added. |
-| 85 | Name field sanitization | `firstName`, `lastName`, and personal name equivalents only (NOT pharmacy/institute/dept business names — those can contain numbers). Allowed: letters, spaces, hyphens, apostrophes. Add Mongoose validator at model level + frontend validation on the relevant onboarding/profile inputs. |
-| 86 | Cascading address dropdowns | Replace free-text address fields with PSGC cascading dropdowns: **Region → Province → City/Municipality** (no barangay — too granular). Use **psgc.cloud public API** (free, no auth) — fetch on component mount, cache in state. Keep free-text inputs for street/unit. Affects onboarding forms and profile edit for all roles. `PSGCAddressFields` component in `frontend/src/components/`. |
+| 84 | Data privacy compliance | **Partially done.** T&C + Privacy Policy pages updated. Still missing: consent banner on signup, formal data retention policy, DPA officer contact. Do not attempt full compliance pass without explicit instruction. |
 
 ### New Flags — Cross-Login & Dual 2FA (#89–#93)
 

@@ -149,10 +149,12 @@ const ProviderCard = ({ provider }) => {
 
                     {isDoctor && (
                         <button
-                            className="btn btn-primary btn-sm w-full mt-2"
-                            onClick={() => setShowBooking(true)}
+                            className={`btn btn-sm w-full mt-2 ${provider.isFullToday ? "btn-disabled opacity-50 cursor-not-allowed" : "btn-primary"}`}
+                            onClick={() => !provider.isFullToday && setShowBooking(true)}
+                            disabled={provider.isFullToday}
+                            title={provider.isFullToday ? "This doctor has reached their patient limit for today" : ""}
                         >
-                            Book Now
+                            {provider.isFullToday ? "Fully Booked Today" : "Book Now"}
                         </button>
                     )}
                     {directionsUrl && (

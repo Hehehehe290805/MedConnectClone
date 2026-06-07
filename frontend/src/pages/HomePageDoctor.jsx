@@ -9,6 +9,7 @@ import SetSchedulePopup from "./SetSchedulePopup.jsx";
 import toast from "react-hot-toast";
 import { ClockIcon, CheckCircleIcon, AlertTriangleIcon, CalendarCheckIcon, ReceiptIcon, CalendarIcon, VideoIcon } from "lucide-react";
 import useAuthUser from "../hooks/useAuthUser";
+import QueuePanel from "../components/QueuePanel";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -325,6 +326,9 @@ const HomePageDoctor = () => {
                     </div>
 
                     {error && <div className="alert alert-error"><span>{error}</span></div>}
+
+                    {/* Queue panel — shown first, above the calendar */}
+                    <QueuePanel />
 
                     <AppointmentCalendar
                         appointments={appointments}
