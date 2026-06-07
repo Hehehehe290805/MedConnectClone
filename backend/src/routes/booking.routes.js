@@ -12,7 +12,7 @@ import {
     acceptAppointmentValidator, rejectAppointmentValidator,
     cancelAppointmentValidator, completeAppointmentValidator,
     payBalanceValidator, fileDisputeValidator, submitReviewValidator,
-    joinCallValidator,
+    joinCallValidator, deleteReviewValidator,
 } from "../validators/booking.validator.js";
 
 const router = express.Router();
@@ -32,6 +32,6 @@ router.post("/join-call", joinCallValidator, validate, joinCall);
 router.get("/my-appointments",        getMyAppointments);
 router.get("/transaction-history",    getTransactionHistory);
 router.get("/reviews/:providerId",    getProviderReviews);
-router.delete("/review/:appointmentId", deleteReview);
+router.delete("/review/:appointmentId", deleteReviewValidator, validate, deleteReview);
 
 export default router;

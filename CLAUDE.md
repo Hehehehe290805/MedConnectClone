@@ -528,7 +528,7 @@ STREAM_API_KEY
 STREAM_SECRET
 ENCRYPTION_KEY
 ADMIN_CODE
-GROQ_API_KEY
+GROQ_API_KEY        ← required for AI chatbot; free key at console.groq.com
 ```
 
 ---
@@ -548,6 +548,37 @@ GROQ_API_KEY
 
 ### ForgotPasswordResetPage
 On success: clears Zustand store → `toast.success` → `navigate("/login")`. Already implemented correctly.
+
+### Session 2026-06-07 Part 5 — Bayesian rating, files in list, phone cross-login + dual 2FA
+
+**#81 — Bayesian rating in bipartite ranker:** `SearchPage.jsx` — replaced `doc.averageRating / 5` with `(C * m + averageRating * reviewCount) / (C + reviewCount) / 5` where `C = 5` and `m` is the weighted platform mean computed from all doctors in the current result set. Falls back to 3 if no reviews exist.
+
+**#23 — AppointmentFilesPanel in DoctorAppointmentsPage list:** Each row now has a paperclip button. Clicking it expands `AppointmentFilesPanel` inline below the row (accordion style). State tracked per appointment ID via a `Set`. Clicking the card body still opens the detail popup; the paperclip click stops propagation.
+
+**#94 — normalizePhone consolidation:** Already done in Part 4 — `onboarding.controller.js` already imports from `validation.js`. CLAUDE.md was stale.
+
+**#89 — Settings phone verification:** `User.phoneVerified: Boolean (default false)` added to base schema. Backend: `POST /api/auth/phone/request-verify` (protectRoute) — generates 6-digit mock OTP stored in `verificationcodes`, returns `mockCode` in response. `POST /api/auth/phone/confirm-verify` — verifies OTP, sets `phoneVerified = true`, upserts `PhoneRegistry`. Frontend: "Phone Number" card in Settings (non-admin only). Modal: enter mobile number → Send Code → shows mock code with ⚠ demo warning → enter code → verified. `phoneVerified` exposed in `getMe` response.
+
+**#91 — Dual login (email OR phone):** `login` controller now tries `User.findOne({ email })` first, then falls back to `User.findOne({ phoneNumber: normalize(input), phoneVerified: true })`. Login form label changed to "Email or Phone", `type="text"` instead of `type="email"`. `normalizePhone` imported in `auth.controller.js`.
+
+**#92 — 2FA "Try another way":** `POST /api/auth/2fa/switch-channel` — takes `{ email, preferPhone }`. Invalidates existing OTP, generates new one, sends to email (real) or phone (mock, returns `mockCode` in response). Frontend: "Try another way (SMS)" / "Try email instead" link in the 2FA step. Mock code shown with ⚠ warning banner when phone channel active. `switch2FAChannel` API function added to `api.js`.
+
+**#93 — Forgot password via phone:** `forgotPassword` controller now tries email lookup first, then phone lookup (`User.findOne({ phoneNumber: normalize(input), phoneVerified: true })`). Frontend: no UI change needed — users can simply enter their phone number in the existing forgot-password email field (the backend now handles both).
+
+**Tests:** 42/42 pass unchanged.
+
+### Session 2026-06-07 Part 4 — Utility refactors + test cleanup
+
+Teammates extracted shared logic into proper utility modules:
+- `backend/src/utils/rateLimiter.js` — exports `makeRateLimiter()`, `RATE_LIMIT`, `WINDOW_MS`. Used by `chatbot.controller.js`. `makeRateLimiter()` returns a function and exposes `._rateLimits` map for test inspection. Includes automatic stale-entry cleanup via `setInterval`.
+- `backend/src/utils/validation.js` — exports `normalizePhone(phone)` and `isValidPersonName(value)`. NOTE: `onboarding.controller.js` still has an inline copy of `normalizePhone` — these should be consolidated to import from `validation.js` to avoid drift.
+
+Tests updated to import from proper modules:
+- `test/utils.test.js` imports from `../src/utils/validation.js`
+- `test/chatbotRateLimit.test.js` imports from `../src/utils/rateLimiter.js`
+- `test/response.test.js` imports directly from `../src/utils/response.js`
+
+`GROQ_API_KEY` confirmed added to `backend/.env` — chatbot is functional.
 
 ### Session 2026-06-07 Part 3 — Analytics, Chatbot, PSGC, Phone Verification
 
@@ -739,9 +770,7 @@ The queue system (#71/#72/#87) is a new collection and the most complex feature.
 ### Features — Medium Priority (Open)
 | # | Feature | Notes |
 |---|---|---|
-| 23 | AppointmentFilesPanel in DoctorAppointmentsPage list view | Panel is in detail popups. Embedding in the list row is still pending. |
 | 24 | Expert system fuzzy logic | Jaccard + bipartite ranker done. Fuzzy membership scores need severity data — blocked. |
-| 81 | Bayesian rating in bipartite ranker | Replace `doc.averageRating / 5` in `SearchPage.jsx` with `(C × m + Σratings) / (C + n)` (C=5, m=platform mean). `reviewCount` is already returned by the search API. Small change. |
 
 ### Completed Flags (reference)
 | # | Feature | When Done |
@@ -764,25 +793,27 @@ The queue system (#71/#72/#87) is a new collection and the most complex feature.
 | 85 | Name field sanitization | 2026-06-07 |
 | 86 | PSGC address dropdowns (psgc.cloud API) | 2026-06-07 |
 | 88 | Fix SpecialtyPage Column anti-pattern | 2026-06-07 |
+| 81 | Bayesian rating in bipartite ranker | 2026-06-07 (Part 5) |
+| 23 | AppointmentFilesPanel expandable in DoctorAppointmentsPage rows | 2026-06-07 (Part 5) |
+| 89 | Settings: Verify phone number (mock SMS OTP, phoneVerified field) | 2026-06-07 (Part 5) |
+| 91 | Dual login: email OR verified phone | 2026-06-07 (Part 5) |
+| 92 | 2FA: "Try another way" — switch between email and phone | 2026-06-07 (Part 5) |
+| 93 | Forgot password: phone lookup fallback | 2026-06-07 (Part 5) |
+| 94 | Consolidate normalizePhone utility | 2026-06-07 (Part 5) — already done; CLAUDE.md was stale |
 
 ### Low Priority / Post-Development
 | # | Flag | Notes |
 |---|---|---|
-| 7 | Update Render env vars | After development only |
+| 7 | Update Render env vars | After development only — add GROQ_API_KEY and all others |
 | 11 | Transaction for email update | Needs replica set confirmation on Atlas |
 | 18 | Package version sync | After development — audit `package.json` |
 | 22 | Dual permit renewal endpoints | Old role-specific endpoints in `permits.controller.js` still write directly to User; remove once new `PermitRenewal` flow confirmed |
 | 84 | Data privacy compliance | **Partially done.** T&C + Privacy Policy pages updated. Still missing: consent banner on signup, formal data retention policy, DPA officer contact. Do not attempt full compliance pass without explicit instruction. |
 
-### New Flags — Cross-Login & Dual 2FA (#89–#93)
-
+### Remaining Flags — Cross-Login & Dual 2FA
 | # | Feature | Notes |
 |---|---|---|
-| 89 | Settings: Verify phone number (for email-based accounts) | In Settings, email-registered accounts can add and verify a phone number via mock SMS OTP (same mock design as onboarding). Stores `phoneVerified: true` on User model. Verified phone stored in `phoneNumber` + registered in `PhoneRegistry`. |
 | 90 | Settings: Verify email (for phone-based accounts) | Not currently applicable — all accounts are email-based at signup. Reserved for future phone-first signup. |
-| 91 | Dual login: email OR verified phone | Once a user has verified their phone, they can log in with either email or phone number. Login endpoint checks both fields. Phone input during login should be normalized (same as PhoneRegistry format). |
-| 92 | 2FA: "Try another way" — switch between email and phone | When 2FA OTP is sent to email, show a "Try another way" link that sends to the verified phone instead (mock SMS). Vice versa. The `verificationcodes` collection already stores OTPs — just need to track which channel was used and allow switching. |
-| 93 | Forgot password & change password: support phone channel | Allow forgot-password flow to send reset code to verified phone (mock SMS) as an alternative to email. Show option at the role-picker step or on the verify page. Same mock design. |
 
 ---
 

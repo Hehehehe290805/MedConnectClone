@@ -41,6 +41,21 @@ export const toggleEmailNotifications = async () => {
   return response.data;
 };
 
+export const requestPhoneVerify = async (data) => {
+  const response = await axiosInstance.post("/auth/phone/request-verify", data);
+  return response.data;
+};
+
+export const confirmPhoneVerify = async (data) => {
+  const response = await axiosInstance.post("/auth/phone/confirm-verify", data);
+  return response.data;
+};
+
+export const switch2FAChannel = async (data) => {
+  const response = await axiosInstance.post("/auth/2fa/switch-channel", data);
+  return response.data;
+};
+
 export const logout = async () => {
   const response = await axiosInstance.post("/auth/logout");
   return response.data;

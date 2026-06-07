@@ -6,6 +6,7 @@ import User from "../models/User.js";
 import Appointment from "../models/Appointment.js";
 import Admin from "../models/Admin.js";
 import EmailRegistry from "../models/EmailRegistry.js";
+import PhoneRegistry from "../models/PhoneRegistry.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { createAndSendCode, verifyCode } from "../services/verification.js";
@@ -13,6 +14,7 @@ import { sendVerificationCode } from "../services/email.js";
 import VerificationCode from "../models/VerificationCode.js";
 import { notify } from "../services/notification.service.js";
 import { deleteFromS3 } from "../services/s3.js";
+import { normalizePhone } from "../utils/validation.js";
 
 const cookieOptions = {
   maxAge: 24 * 60 * 60 * 1000,
@@ -122,8 +124,13 @@ async function sendBruteForceResetCode(account, Model) {
 export const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
-  const user = await User.findOne({ email });
-  if (!user) return sendError(res, 401, "Invalid email or password.");
+  // Try email lookup first; fall back to verified phone number
+  let user = await User.findOne({ email });
+  if (!user) {
+    const normalized = normalizePhone(email);
+    if (normalized) user = await User.findOne({ phoneNumber: normalized, phoneVerified: true });
+  }
+  if (!user) return sendError(res, 401, "Invalid credentials.");
 
   if (user.loginAttempts >= MAX_LOGIN_ATTEMPTS) {
     return sendError(res, 429, "Account locked due to too many failed attempts. Check your email for a password reset code.");
@@ -235,6 +242,7 @@ export const getMe = asyncHandler(async (req, res) => {
     status: user.status,
     phoneNumber: user.phoneNumber ?? null,
     phoneType: user.phoneType ?? null,
+    phoneVerified: user.phoneVerified ?? false,
     profilePic: user.profilePic ?? null,
     createdAt: user.createdAt,
     twoFactorEnabled: user.twoFactorEnabled ?? false,
@@ -545,11 +553,19 @@ async function findAccountByEmail(email) {
   return { account: null, Model: null };
 }
 
-// FORGOT PASSWORD — Step 1: send code to email
+// FORGOT PASSWORD — Step 1: send code to email (or phone for users with verified phone)
 export const forgotPassword = asyncHandler(async (req, res) => {
   const { email, adminCode } = req.body;
 
-  const { account, Model } = await findAccountByEmail(email);
+  let { account, Model } = await findAccountByEmail(email);
+  // Fall back to verified phone lookup for regular users
+  if (!account) {
+    const normalized = normalizePhone(email);
+    if (normalized) {
+      const userByPhone = await User.findOne({ phoneNumber: normalized, phoneVerified: true });
+      if (userByPhone) { account = userByPhone; Model = User; }
+    }
+  }
   if (account) {
     // admin accounts require their admin code before a reset code is sent
     if (Model === Admin) {
@@ -688,4 +704,103 @@ export const updateMeProfile = asyncHandler(async (req, res) => {
   ).select("-password");
 
   return sendSuccess(res, 200, "Profile updated successfully", { user: updated });
+});
+
+// PHONE VERIFICATION — Step 1: generate mock OTP and return it (demo mode)
+export const requestPhoneVerify = asyncHandler(async (req, res) => {
+  const { phoneNumber, phoneType } = req.body;
+  const user = req.user;
+
+  if (user.role === "admin") return sendError(res, 403, "Admins cannot add a phone number via this route.");
+
+  const normalized = normalizePhone(phoneNumber);
+  if (!normalized) return sendError(res, 400, "Invalid phone number. Enter a valid Philippine mobile number.");
+
+  // Reject if already claimed by a different account
+  const existing = await PhoneRegistry.findOne({ phone: normalized });
+  if (existing && existing.registrant.toString() !== user._id.toString()) {
+    return sendError(res, 400, "Phone number is already in use by another account.");
+  }
+
+  const plain = crypto.randomInt(100000, 999999).toString();
+  const hashed = await bcrypt.hash(plain, 10);
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+  await VerificationCode.deleteMany({ email: user.email, type: "phone_verify", userId: user._id });
+  await VerificationCode.create({
+    userId: user._id,
+    email: user.email,
+    code: hashed,
+    type: "phone_verify",
+    payload: { phoneNumber: normalized, phoneType: phoneType || "mobile" },
+    expiresAt,
+  });
+
+  return sendSuccess(res, 200, "Verification code generated.", { mockCode: plain });
+});
+
+// PHONE VERIFICATION — Step 2: confirm OTP, set phoneVerified = true
+export const confirmPhoneVerify = asyncHandler(async (req, res) => {
+  const { code } = req.body;
+  const user = req.user;
+
+  const record = await VerificationCode.findOne({ email: user.email, type: "phone_verify", userId: user._id });
+  if (!record) return sendError(res, 400, "No pending phone verification found.");
+  if (record.expiresAt < new Date()) {
+    await VerificationCode.deleteOne({ _id: record._id });
+    return sendError(res, 400, "Verification code expired. Please request a new one.");
+  }
+
+  const isMatch = await bcrypt.compare(code, record.code);
+  if (!isMatch) return sendError(res, 400, "Incorrect code.");
+
+  const { phoneNumber, phoneType } = record.payload;
+  await VerificationCode.deleteOne({ _id: record._id });
+
+  // Upsert PhoneRegistry (idempotent — same user re-verifying is fine)
+  await PhoneRegistry.findOneAndUpdate(
+    { phone: phoneNumber },
+    { $setOnInsert: { phone: phoneNumber, registrant: user._id, registrantModel: "User" } },
+    { upsert: true, new: true }
+  );
+
+  await User.findByIdAndUpdate(user._id, { phoneNumber, phoneType, phoneVerified: true });
+
+  return sendSuccess(res, 200, "Phone number verified successfully.");
+});
+
+// 2FA CHANNEL SWITCH — resend OTP to the alternate channel (email ↔ phone)
+// Called during the 2FA login step when the user wants to switch channels.
+// Returns mockCode when channel is "phone" (demo SMS).
+export const switch2FAChannel = asyncHandler(async (req, res) => {
+  const { email, preferPhone } = req.body;
+
+  const user = await User.findOne({ email }).select("email phoneNumber phoneType phoneVerified twoFactorEnabled _id");
+  if (!user) return sendError(res, 404, "Account not found.");
+
+  if (preferPhone && (!user.phoneNumber || !user.phoneVerified)) {
+    return sendError(res, 400, "No verified phone number on file for this account.");
+  }
+
+  const plain = crypto.randomInt(100000, 999999).toString();
+  const hashed = await bcrypt.hash(plain, 10);
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+  await VerificationCode.deleteMany({ email, type: "two_factor", userId: user._id });
+  await VerificationCode.create({
+    userId: user._id,
+    email,
+    code: hashed,
+    type: "two_factor",
+    payload: { channel: preferPhone ? "phone" : "email" },
+    expiresAt,
+  });
+
+  if (!preferPhone) {
+    try { await sendVerificationCode(email, plain); } catch {}
+    return sendSuccess(res, 200, "Code sent to email.", { channel: "email" });
+  }
+
+  // Mock SMS — return code directly for demo
+  return sendSuccess(res, 200, "Code sent to phone.", { channel: "phone", mockCode: plain });
 });

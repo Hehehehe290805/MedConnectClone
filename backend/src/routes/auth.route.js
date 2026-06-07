@@ -7,6 +7,7 @@ import {
     updateMeProfile,
     forgotPassword, verifyForgotPasswordCode, resetForgotPassword,
     verify2FA, toggle2FA, toggleEmailNotifications,
+    requestPhoneVerify, confirmPhoneVerify, switch2FAChannel,
     } from "../controllers/auth.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
@@ -40,5 +41,9 @@ router.patch("/toggle-email-notifications", protectRoute, toggleEmailNotificatio
 router.post("/forgot-password", forgotPasswordValidator, validate, forgotPassword);
 router.post("/forgot-password/verify", verifyForgotPasswordValidator, validate, verifyForgotPasswordCode);
 router.post("/forgot-password/reset", resetForgotPasswordValidator, validate, resetForgotPassword);
+
+router.post("/phone/request-verify", protectRoute, requestPhoneVerify);
+router.post("/phone/confirm-verify", protectRoute, confirmPhoneVerify);
+router.post("/2fa/switch-channel", switch2FAChannel);
 
 export default router;

@@ -1,27 +1,5 @@
 import { strict as assert } from "assert";
-
-// Inline the sanitize logic (same algorithm as sanitize.middleware.js)
-function sanitizeValue(value) {
-    if (typeof value === "string") {
-        return value.replace(/<[^>]*>/g, "").trim();
-    }
-    if (Array.isArray(value)) {
-        return value.map(sanitizeValue);
-    }
-    if (value && typeof value === "object") {
-        return sanitizeObject(value);
-    }
-    return value;
-}
-
-function sanitizeObject(obj) {
-    const result = {};
-    for (const [key, val] of Object.entries(obj)) {
-        if (key.startsWith("$")) continue; // drop $-prefixed keys (NoSQL injection)
-        result[key] = sanitizeValue(val);
-    }
-    return result;
-}
+import { sanitizeValue, sanitizeObject } from "../src/middleware/sanitize.middleware.js";
 
 describe("sanitizeObject() — body sanitization", () => {
     it("strips HTML tags from string values (keeps text content between tags)", () => {

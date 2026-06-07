@@ -18,9 +18,9 @@ function toQueueDate(date) {
     return dayjs(date).tz(PH_TZ).startOf("day").utc().toDate();
 }
 
-// Re-number slot positions 1..N in order, emit position-change notifications
-// for thresholds (2, 5, 10). Also updates currentStart for each slot based on
-// the original ordering of the queue.
+// Re-number live slot positions 1..N in order, skipping cancelled/done slots.
+// This helper only updates the numeric positions and does not emit notifications
+// or adjust currentStart timing.
 async function renumberSlots(queue) {
     let pos = 1;
     for (const slot of queue.slots) {

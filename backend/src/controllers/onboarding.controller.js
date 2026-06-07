@@ -7,27 +7,33 @@ import DepartmentType from "../models/DepartmentType.js";
 import { upsertStreamUser } from "../lib/stream.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
+import { normalizePhone } from "../utils/validation.js";
 import { notify, notifyAllAdmins } from "../services/notification.service.js";
 import { deleteFromS3 } from "../services/s3.js";
-
-function normalizePhone(phone) {
-    if (!phone) return null;
-    const digits = phone.replace(/\D/g, "");
-    if (digits.startsWith("63") && digits.length === 12) return "0" + digits.slice(2);
-    if (digits.length === 10 && !digits.startsWith("0")) return "0" + digits;
-    if (digits.length === 11 && digits.startsWith("0")) return digits;
-    return digits;
-}
 
 async function checkAndRegisterPhone(phone, userId, session, registrantModel = "User") {
     const normalized = normalizePhone(phone);
     if (!normalized) return;
-    const existing = await PhoneRegistry.findOne({ phone: normalized }).lean();
-    if (existing && existing.registrant.toString() !== userId.toString()) {
-        throw Object.assign(new Error("Phone number is already in use by another account."), { status: 400 });
-    }
-    if (!existing) {
-        await PhoneRegistry.create([{ phone: normalized, registrant: userId, registrantModel }], { session });
+
+    try {
+        const result = await PhoneRegistry.findOneAndUpdate(
+            { phone: normalized },
+            { $setOnInsert: { phone: normalized, registrant: userId, registrantModel } },
+            { upsert: true, new: true, returnDocument: "after", session }
+        ).lean();
+
+        if (result.registrant.toString() !== userId.toString()) {
+            throw Object.assign(new Error("Phone number is already in use by another account."), { status: 400 });
+        }
+    } catch (err) {
+        if (err.code === 11000) {
+            const existing = await PhoneRegistry.findOne({ phone: normalized }).lean();
+            if (existing && existing.registrant.toString() !== userId.toString()) {
+                throw Object.assign(new Error("Phone number is already in use by another account."), { status: 400 });
+            }
+            return;
+        }
+        throw err;
     }
 }
 

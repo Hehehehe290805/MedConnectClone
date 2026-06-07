@@ -68,7 +68,7 @@ const ChatbotWidget = () => {
         setInput("");
         const newMessages = [...messages, { role: "user", content: msg }];
         setMessages(newMessages);
-        const history = newMessages.slice(-9).map(m => ({ role: m.role, content: m.content }));
+        const history = newMessages.slice(-9, -1).map(m => ({ role: m.role, content: m.content }));
         sendMessage({ message: msg, history });
     };
 

@@ -50,9 +50,11 @@ const PSGCAddressFields = ({ value = {}, onChange, required = false }) => {
             // NCR has no provinces — fetch cities directly
             if (code === "130000000") {
                 const data = await fetchPSGC(`/regions/${code}/cities-municipalities`);
-                setProvinces([{ code: "NCR", name: "Metro Manila (NCR)" }]);
+                const metro = { code: "NCR", name: "Metro Manila (NCR)" };
+                setProvinces([metro]);
                 setCities(data.sort((a, b) => a.name.localeCompare(b.name)));
-                setSelectedProvince({ code: "NCR", name: "Metro Manila (NCR)" });
+                setSelectedProvince(metro);
+                onChange({ ...value, province: metro.name, city: "" });
             } else {
                 const data = await fetchPSGC(`/regions/${code}/provinces`);
                 setProvinces(data.sort((a, b) => a.name.localeCompare(b.name)));
