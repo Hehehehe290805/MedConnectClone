@@ -116,7 +116,9 @@ const SuggestionRow = ({ s, checked, onCheck, onApproveSingle, onRejectSingle })
 const ClaimRow = ({ claim, onView }) => {
     const who = claim.doctorId
         ? `Dr. ${claim.doctorId.firstName} ${claim.doctorId.lastName}`
-        : claim.instituteId?.instituteName || claim.instituteId?.facilityName || "Unknown";
+        : claim.departmentId
+        ? `${claim.departmentId.technologistFirstName || ""} ${claim.departmentId.technologistLastName || ""}`.trim() || claim.departmentId.email || "Department"
+        : "Unknown";
     const what = claim.specialtyId?.name || claim.subspecialtyId?.name || claim.serviceId?.name || "—";
     return (
         <div className="flex items-center gap-3 p-3 bg-base-100 rounded-lg border border-base-300">

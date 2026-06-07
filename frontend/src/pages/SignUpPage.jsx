@@ -124,6 +124,8 @@ const SignUpPage = () => {
     const [formData, setFormData] = useState({ email: "", password: "" });
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [showTermsPopup, setShowTermsPopup] = useState(false);
+    const [isAdminMode, setIsAdminMode] = useState(false);
+    const [adminCode, setAdminCode] = useState("");
 
     const [code, setCode] = useState(["", "", "", "", "", ""]);
     const [resendCooldown, setResendCooldown] = useState(0);
@@ -134,6 +136,7 @@ const SignUpPage = () => {
     const emailRef = useRef(null);
     const passwordRef = useRef(null);
     const termsCheckboxRef = useRef(null);
+    const adminCodeRef = useRef(null);
 
     const { signupMutation, isSigningUp, verifyMutation, isVerifying, resendMutation, isResending } = useSignUp();
 
@@ -206,8 +209,17 @@ const SignUpPage = () => {
             return;
         }
 
+        if (isAdminMode && !adminCode.trim()) {
+            adminCodeRef.current?.setCustomValidity("Admin code is required");
+            adminCodeRef.current?.reportValidity();
+            return;
+        }
+
+        const payload = { email: formData.email, password: formData.password };
+        if (isAdminMode) payload.adminCode = adminCode;
+
         signupMutation(
-            { email: formData.email, password: formData.password },
+            payload,
             { onError: (err) => toast.error(err?.response?.data?.message || "Something went wrong.") }
         );
     };
@@ -341,6 +353,25 @@ const SignUpPage = () => {
                                         )}
                                     </div>
 
+                                    {/* ADMIN CODE */}
+                                    {isAdminMode && (
+                                        <div className="form-control w-full">
+                                            <label className="label"><span className="label-text">Admin Code</span></label>
+                                            <input
+                                                ref={adminCodeRef}
+                                                type="text"
+                                                placeholder="Enter admin code"
+                                                className="input input-bordered w-full"
+                                                value={adminCode}
+                                                required
+                                                onChange={(e) => {
+                                                    setAdminCode(e.target.value);
+                                                    e.target.setCustomValidity("");
+                                                }}
+                                            />
+                                        </div>
+                                    )}
+
                                     {/* TERMS */}
                                     <div className="form-control">
                                         <label className="label cursor-pointer justify-start gap-2">
@@ -380,6 +411,16 @@ const SignUpPage = () => {
                                             Already have an account?{" "}
                                             <Link to="/login" className="text-primary hover:underline">Sign in</Link>
                                         </p>
+                                    </div>
+                                    
+                                    <div className="text-center mt-3 pt-3 border-t border-base-300">
+                                        <button
+                                            type="button"
+                                            className="text-xs opacity-40 hover:opacity-70 transition-opacity"
+                                            onClick={() => setIsAdminMode(!isAdminMode)}
+                                        >
+                                            {isAdminMode ? "<- Back to User Sign Up" : "Admin Sign Up ->"}
+                                        </button>
                                     </div>
                                 </div>
                             </div>

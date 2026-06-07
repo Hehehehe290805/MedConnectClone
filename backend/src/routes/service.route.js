@@ -5,6 +5,7 @@ import {
     suggestService,
     claimService,
     getMyDepartmentServices,
+    deleteServiceClaim,
 } from "../controllers/service.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
@@ -27,5 +28,6 @@ router.get("/my-services", protectRoute, getMyDepartmentServices);
 router.get("/:departmentTypeId/services", protectRoute, getServicesByDepartmentType);
 router.post("/suggest", protectRoute, suggestValidator, validate, suggestService);
 router.post("/claim", protectRoute, claimValidator, validate, claimService);
+router.delete("/claim/:claimId", protectRoute, deleteServiceClaim);
 
 export default router;

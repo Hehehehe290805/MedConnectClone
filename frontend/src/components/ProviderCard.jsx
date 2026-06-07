@@ -18,6 +18,7 @@ const ProviderCard = ({ provider }) => {
     const [showBooking, setShowBooking] = useState(false);
     const [showAllSpecialties, setShowAllSpecialties] = useState(false);
     const isDoctor = provider.role === "doctor";
+    const isDepartment = provider.role === "department";
     const location = [provider.city, provider.province].filter(Boolean).join(", ") || null;
 
     // Build Google Maps directions URL using coordinates (preferred) or address string
@@ -41,11 +42,11 @@ const ProviderCard = ({ provider }) => {
                                 {provider.profilePic?.url ? (
                                     <img
                                         src={provider.profilePic.url}
-                                        alt={isDoctor ? `Dr. ${provider.firstName} ${provider.lastName}` : provider.instituteName}
+                                        alt={isDoctor ? `Dr. ${provider.firstName} ${provider.lastName}` : isDepartment ? `${provider.rootInstitute?.instituteName} - ${provider.departmentTypeName}` : provider.instituteName}
                                         className="w-full h-full object-cover"
                                     />
                                 ) : (
-                                    <span className="text-lg">{isDoctor ? "👨‍⚕️" : "🏥"}</span>
+                                    <span className="text-lg">{isDoctor ? "👨‍⚕️" : isDepartment ? "🔬" : "🏥"}</span>
                                 )}
                             </div>
                             {isDoctor && (
@@ -62,7 +63,9 @@ const ProviderCard = ({ provider }) => {
                             <h3 className="font-semibold text-sm leading-tight truncate">
                                 {isDoctor
                                     ? `Dr. ${provider.firstName} ${provider.lastName}`
-                                    : provider.instituteName}
+                                    : isDepartment
+                                        ? `${provider.rootInstitute?.instituteName} - ${provider.departmentTypeName}`
+                                        : provider.instituteName}
                             </h3>
                         </Link>
 
@@ -99,13 +102,24 @@ const ProviderCard = ({ provider }) => {
                     </div>
                 )}
 
-                {!isDoctor && provider.departmentTypes?.length > 0 && (
+                {!isDoctor && !isDepartment && provider.departmentTypes?.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-2">
                         {provider.departmentTypes.slice(0, 3).map((d) => (
                             <span key={d} className="badge badge-secondary badge-xs">{d}</span>
                         ))}
                         {provider.departmentTypes.length > 3 && (
                             <span className="badge badge-ghost badge-xs">+{provider.departmentTypes.length - 3}</span>
+                        )}
+                    </div>
+                )}
+
+                {isDepartment && provider.services?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                        {provider.services.slice(0, 3).map((s) => (
+                            <span key={s} className="badge badge-secondary badge-xs">{s}</span>
+                        ))}
+                        {provider.services.length > 3 && (
+                            <span className="badge badge-ghost badge-xs">+{provider.services.length - 3}</span>
                         )}
                     </div>
                 )}

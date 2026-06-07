@@ -223,7 +223,7 @@ export const getPendingClaims = asyncHandler(async (req, res) => {
       .populate("doctorId", "firstName lastName email")
       .populate("subspecialtyId", "name"),
     InstituteDepartmentService.find({ status: "pending", claimType: "service" })
-      .populate("instituteId", "facilityName email")
+      .populate("departmentId", "technologistFirstName technologistLastName departmentType email")
       .populate("serviceId", "name"),
   ]);
 
@@ -345,7 +345,7 @@ export const rejectRole = asyncHandler(async (req, res) => {
 
   // clean up their pending suggestions/claims
   await DoctorSpecialty.deleteMany({ doctorId: userId, status: "pending" });
-  await InstituteDepartmentService.deleteMany({ instituteId: userId, status: "pending" });
+  await InstituteDepartmentService.deleteMany({ departmentId: userId, status: "pending" });
 
   // Delete S3 files — best-effort, non-fatal
   for (const key of collectUserS3Keys(account)) {

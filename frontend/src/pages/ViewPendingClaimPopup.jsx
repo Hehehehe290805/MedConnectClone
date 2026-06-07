@@ -15,10 +15,11 @@ const ViewPendingClaimPopup = ({ claim, onClose, onClaimApproved, onClaimRejecte
 
     if (!claim) return null;
 
+    const isServiceClaim = claim.claimType === "service";
     const doctorId = claim.doctorId?._id || claim.doctorId;
 
     useEffect(() => {
-        if (!doctorId) return;
+        if (!doctorId || isServiceClaim) return;
 
         const fetchLicenseNumber = async () => {
             try {
@@ -43,7 +44,7 @@ const ViewPendingClaimPopup = ({ claim, onClose, onClaimApproved, onClaimRejecte
 
         fetchLicenseNumber();
         fetchDoctorSpecialties();
-    }, [doctorId]);
+    }, [doctorId, isServiceClaim]);
 
     const handleApprove = async () => {
         try {
@@ -76,10 +77,18 @@ const ViewPendingClaimPopup = ({ claim, onClose, onClaimApproved, onClaimRejecte
 
     const itemName = claim.specialtyId?.name || claim.subspecialtyId?.name || claim.serviceId?.name || "—";
     const itemType = claim.claimType?.charAt(0).toUpperCase() + claim.claimType?.slice(1) || "Claim";
+
     const doctorName = claim.doctorId?.firstName
         ? `${claim.doctorId.firstName} ${claim.doctorId.lastName}`
         : claim.doctorId?.email || "Unknown";
     const doctorEmail = claim.doctorId?.email || "";
+
+    const deptName = claim.departmentId?.technologistFirstName
+        ? `${claim.departmentId.technologistFirstName} ${claim.departmentId.technologistLastName || ""}`.trim()
+        : claim.departmentId?.email || "Department";
+    const deptEmail = claim.departmentId?.email || "";
+    const claimerName = isServiceClaim ? deptName : doctorName;
+    const claimerEmail = isServiceClaim ? deptEmail : doctorEmail;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -103,20 +112,25 @@ const ViewPendingClaimPopup = ({ claim, onClose, onClaimApproved, onClaimRejecte
                         <p className="text-xs opacity-60">Submitted {new Date(claim.createdAt).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" })}</p>
                     </div>
 
-                    {/* Doctor info */}
+                    {/* Claimant info */}
                     <div className="bg-base-200 rounded-lg p-3 space-y-1">
                         <p className="text-xs font-semibold opacity-50 uppercase tracking-wide">Claimed By</p>
-                        <p className="font-semibold">{doctorName}</p>
-                        {doctorEmail && <p className="text-xs opacity-60">{doctorEmail}</p>}
-                        {licenseLoading ? (
-                            <p className="text-xs opacity-50">Loading license…</p>
-                        ) : licenseNumber ? (
-                            <p className="text-xs font-mono">License: {licenseNumber}</p>
-                        ) : null}
+                        <p className="font-semibold">{claimerName}</p>
+                        {claimerEmail && <p className="text-xs opacity-60">{claimerEmail}</p>}
+                        {!isServiceClaim && (
+                            licenseLoading ? (
+                                <p className="text-xs opacity-50">Loading license…</p>
+                            ) : licenseNumber ? (
+                                <p className="text-xs font-mono">License: {licenseNumber}</p>
+                            ) : null
+                        )}
+                        {isServiceClaim && claim.durationMinutes && (
+                            <p className="text-xs opacity-60">Duration: {claim.durationMinutes} min</p>
+                        )}
                     </div>
 
-                    {/* Doctor's other pending claims */}
-                    {otherPendingClaims.length > 0 && (
+                    {/* Doctor-specific: other pending claims */}
+                    {!isServiceClaim && otherPendingClaims.length > 0 && (
                         <div className="bg-base-200 rounded-lg p-3 space-y-2">
                             <p className="text-xs font-semibold opacity-50 uppercase tracking-wide">Other Pending Claims</p>
                             <div className="flex flex-wrap gap-1">
@@ -129,8 +143,8 @@ const ViewPendingClaimPopup = ({ claim, onClose, onClaimApproved, onClaimRejecte
                         </div>
                     )}
 
-                    {/* Doctor's approved specialties */}
-                    {doctorSpecialties.length > 0 && (
+                    {/* Doctor-specific: approved specialties */}
+                    {!isServiceClaim && doctorSpecialties.length > 0 && (
                         <div className="bg-base-200 rounded-lg p-3 space-y-2">
                             <p className="text-xs font-semibold opacity-50 uppercase tracking-wide">Doctor's Approved Specialties</p>
                             <div className="flex flex-wrap gap-1">
@@ -157,7 +171,7 @@ const ViewPendingClaimPopup = ({ claim, onClose, onClaimApproved, onClaimRejecte
                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
                     <div className="bg-base-100 rounded-xl p-6 w-full max-w-sm space-y-4 shadow-xl">
                         <h3 className="font-bold text-lg">Reject Claim?</h3>
-                        <p className="text-sm opacity-70">This will reject the <strong>{itemName}</strong> claim by {doctorName}.</p>
+                        <p className="text-sm opacity-70">This will reject the <strong>{itemName}</strong> claim by {claimerName}.</p>
                         <div className="flex gap-2 justify-end">
                             <button className="btn btn-ghost btn-sm" onClick={() => setShowRejectConfirm(false)} disabled={isRejecting}>Cancel</button>
                             <button className="btn btn-error btn-sm" onClick={handleReject} disabled={isRejecting}>

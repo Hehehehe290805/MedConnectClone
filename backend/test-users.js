@@ -1,0 +1,1 @@
+import mongoose from 'mongoose'; import User from './src/models/User.js'; import 'dotenv/config'; async function test() { await mongoose.connect(process.env.MONGO_URI); const users = await User.find().sort({createdAt:-1}).limit(5); console.log(users.map(u => ({ email: u.email, role: u.role, status: u.status, pw: u.password }))); process.exit(0); } test();

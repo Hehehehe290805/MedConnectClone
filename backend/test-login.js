@@ -1,0 +1,1 @@
+import mongoose from 'mongoose'; import bcrypt from 'bcryptjs'; import User from './src/models/User.js'; import 'dotenv/config'; async function test() { await mongoose.connect(process.env.MONGO_URI); const u = await User.findOne({ email: 'test@example.com' }); console.log(u); process.exit(0); } test();
