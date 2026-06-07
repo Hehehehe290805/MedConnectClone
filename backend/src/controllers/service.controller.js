@@ -3,6 +3,7 @@ import Service from "../models/Service.js";
 import InstituteDepartmentService from "../models/InstituteDepartmentService.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
+import { notifyAllAdmins } from "../services/notification.service.js";
 
 export const getDepartmentTypes = asyncHandler(async (req, res) => {
     const items = await DepartmentType.find({ status: "verified" }).sort({ name: 1 });
@@ -79,5 +80,21 @@ export const claimService = asyncHandler(async (req, res) => {
         status: "pending",
     });
 
+    try {
+        notifyAllAdmins("new_account_pending", "New Service Claim",
+            `A department has submitted a service claim for "${service.name}" — pending review.`);
+    } catch { /* non-fatal */ }
+
     return sendSuccess(res, 201, "Service claimed successfully. Waiting for admin approval.", { item: newClaim });
+});
+
+export const deleteServiceClaim = asyncHandler(async (req, res) => {
+    const departmentId = req.user._id;
+    const { claimId } = req.params;
+
+    const claim = await InstituteDepartmentService.findOne({ _id: claimId, departmentId });
+    if (!claim) return sendError(res, 404, "Claim not found");
+
+    await claim.deleteOne();
+    return sendSuccess(res, 200, "Claim removed");
 });

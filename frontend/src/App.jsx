@@ -11,6 +11,7 @@ import PharmacyIncomePage from "./pages/PharmacyIncomePage.jsx";
 import CustomerPharmacyPage from "./pages/CustomerPharmacyPage.jsx";
 import HomePageInstitute from "./pages/HomePageInstitute.jsx";
 import HomePageDepartment from "./pages/HomePageDepartment.jsx";
+import ServicesPage from "./pages/ServicesPage.jsx";
 import SignUpPage from "./pages/SignUpPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import NotificationsPage from "./pages/NotificationsPage.jsx";
@@ -184,7 +185,7 @@ const App = () => {
 
                     {/* Department */}
                     <Route path="/services" element={
-                        <ProtectedRoute allowedRoles={["department"]}><ComingSoonPage /></ProtectedRoute>
+                        <ProtectedRoute allowedRoles={["department"]}><ServicesPage /></ProtectedRoute>
                     } />
 
                     {/* Chat */}

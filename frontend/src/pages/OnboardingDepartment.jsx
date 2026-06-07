@@ -2,13 +2,14 @@ import { useState, useRef, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import toast from "react-hot-toast";
-import { BuildingIcon, PencilLineIcon } from "lucide-react";
+import { BuildingIcon, PencilLineIcon, ClockIcon, PlusIcon, XIcon } from "lucide-react";
 import { createDepartmentAccount } from "../lib/api";
 import { StepProgress, StepHeader, ImageUploadField, AddressFields, PhoneField, forwardGeocode, uploadPendingImages } from "./OnboardingShared";
 import useAuthUser from "../hooks/useAuthUser";
 import { isValidPersonName, NAME_ERROR } from "../lib/utils";
+import { axiosInstance } from "../lib/axios";
 
-const TOTAL_STEPS = 3;
+const TOTAL_STEPS = 4;
 
 const ExpirationField = ({ label, field, inputRef, form, update, minExpiration, minExpirationLabel }) => (
     <div className="form-control">
@@ -53,6 +54,12 @@ const OnboardingDepartment = () => {
     const [showOtherInput, setShowOtherInput] = useState(false);
     const [customDeptName, setCustomDeptName] = useState("");
 
+    // Step 4 — service claim state
+    const [availableServices, setAvailableServices] = useState([]);
+    const [servicesLoading, setServicesLoading] = useState(false);
+    const [selectedServices, setSelectedServices] = useState([]); // [{ serviceId, serviceName, durationMinutes }]
+    const [durations, setDurations] = useState({});               // serviceId → duration string (pre-add input)
+
     const isClinic = authUser?.instituteType === "clinic";
     const isHospital = authUser?.instituteType === "hospital";
 
@@ -75,6 +82,20 @@ const OnboardingDepartment = () => {
             setForm((prev) => ({ ...prev, address: authUser.address }));
         }
     }, [isClinic, authUser?.address]);
+
+    // Step 4: load verified services for the selected dept type
+    useEffect(() => {
+        if (step !== 4 || !selectedDeptType) return;
+        if (selectedDeptType.isCustom || !selectedDeptType._id) {
+            setAvailableServices([]);
+            return;
+        }
+        setServicesLoading(true);
+        axiosInstance.get(`/services/${selectedDeptType._id}/services`)
+            .then(res => setAvailableServices(res.data.data?.items || []))
+            .catch(() => setAvailableServices([]))
+            .finally(() => setServicesLoading(false));
+    }, [step, selectedDeptType]);
 
     const [form, setForm] = useState({
         deptEmail: "",
@@ -105,6 +126,39 @@ const OnboardingDepartment = () => {
 
     const isAnyUploading = Object.values(uploadingFields).some(Boolean);
     const setUploading = (field, val) => setUploadingFields((prev) => ({ ...prev, [field]: val }));
+
+    const selectedServiceIds = new Set(selectedServices.map(s => s.serviceId));
+
+    const handleAddService = (service) => {
+        const duration = parseInt(durations[service._id]);
+        if (!duration || duration < 1) {
+            toast.error("Enter a valid duration in minutes.");
+            return;
+        }
+        setSelectedServices(prev => [...prev, { serviceId: service._id, serviceName: service.name, durationMinutes: duration }]);
+        setDurations(prev => { const next = { ...prev }; delete next[service._id]; return next; });
+    };
+
+    const handleRemoveService = (serviceId) => {
+        setSelectedServices(prev => prev.filter(s => s.serviceId !== serviceId));
+    };
+
+    const handleFinalSubmit = async () => {
+        setIsSubmitting(true);
+        let finalForm;
+        try {
+            finalForm = await uploadPendingImages(form, ["profilePic", "technologistLicenseImage", "technologistLegalIDImage"]);
+        } catch {
+            setIsSubmitting(false);
+            return;
+        }
+        mutate({
+            ...finalForm,
+            departmentTypeId: selectedDeptType._id || undefined,
+            customDepartmentName: selectedDeptType.isCustom ? selectedDeptType.name : undefined,
+            initialServices: selectedServices.map(s => ({ serviceId: s.serviceId, durationMinutes: s.durationMinutes })),
+        });
+    };
 
     const { mutate, isPending } = useMutation({
         mutationFn: createDepartmentAccount,
@@ -377,6 +431,9 @@ const OnboardingDepartment = () => {
                                     technologistLicenseNumber: "", technologistLicenseExpiration: "",
                                     technologistLicenseImage: {}, technologistLegalIDImage: {},
                                 });
+                                setSelectedServices([]);
+                                setDurations({});
+                                setAvailableServices([]);
                                 if (departments.length > 1) setSelectedDeptType(null);
                             }}
                         >
@@ -395,6 +452,19 @@ const OnboardingDepartment = () => {
         isFirstStep: step === 1,
     };
 
+    const stepTitles = {
+        1: "Department Account Setup",
+        2: "Contact & Location",
+        3: "Credentials",
+        4: "Claim Services",
+    };
+    const stepSubtitles = {
+        1: "Enter the department account details and technologist info",
+        2: "Where is the department located?",
+        3: "Technologist license details",
+        4: "Select the services your department offers",
+    };
+
     return (
         <div className="min-h-screen bg-base-100 flex items-center justify-center p-4">
             <div className="card bg-base-200 w-full max-w-2xl shadow-xl">
@@ -409,8 +479,8 @@ const OnboardingDepartment = () => {
                     </div>
 
                     <StepHeader
-                        title={step === 1 ? "Department Account Setup" : step === 2 ? "Contact & Location" : "Credentials"}
-                        subtitle={step === 1 ? "Enter the department account details and technologist info" : step === 2 ? "Where is the department located?" : "Technologist license details"}
+                        title={stepTitles[step]}
+                        subtitle={stepSubtitles[step]}
                         {...sharedHeaderProps}
                     />
 
@@ -591,23 +661,7 @@ const OnboardingDepartment = () => {
 
                     {/* STEP 3 */}
                     {step === 3 && (
-                        <form onSubmit={async (e) => {
-                            e.preventDefault();
-                            if (!step3Complete) return;
-                            setIsSubmitting(true);
-                            let finalForm;
-                            try {
-                                finalForm = await uploadPendingImages(form, ["profilePic", "technologistLicenseImage", "technologistLegalIDImage"]);
-                            } catch {
-                                setIsSubmitting(false);
-                                return;
-                            }
-                            mutate({
-                                ...finalForm,
-                                departmentTypeId: selectedDeptType._id || undefined,
-                                customDepartmentName: selectedDeptType.isCustom ? selectedDeptType.name : undefined,
-                            });
-                        }} className="space-y-4">
+                        <form onSubmit={(e) => { e.preventDefault(); if (step3Complete) setStep(4); }} className="space-y-4">
                             <div className="form-control">
                                 <label className="label"><span className="label-text">Technologist License Number <span className="text-error">*</span></span></label>
                                 <input type="text" className="input input-bordered w-full" placeholder="RT-12345" value={form.technologistLicenseNumber} onChange={(e) => update("technologistLicenseNumber", e.target.value)} />
@@ -626,11 +680,110 @@ const OnboardingDepartment = () => {
                             <button
                                 className="btn btn-primary w-full"
                                 type="submit"
-                                disabled={isPending || isAnyUploading || !step3Complete || isSubmitting}
+                                disabled={isAnyUploading || !step3Complete}
                             >
-                                {isPending || isSubmitting ? <><span className="loading loading-spinner loading-xs" />Submitting...</> : "Create Department Account"}
+                                Next →
                             </button>
                         </form>
+                    )}
+
+                    {/* STEP 4 — Claim Services */}
+                    {step === 4 && (
+                        <div className="space-y-4">
+                            {/* Selected services */}
+                            {selectedServices.length > 0 && (
+                                <div className="space-y-2">
+                                    <p className="text-xs font-semibold opacity-50 uppercase tracking-wide">Added Services ({selectedServices.length})</p>
+                                    {selectedServices.map(s => (
+                                        <div key={s.serviceId} className="flex items-center justify-between bg-base-100 rounded-lg px-3 py-2 border border-base-300">
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-medium truncate">{s.serviceName}</p>
+                                                <p className="text-xs opacity-50">{s.durationMinutes} min</p>
+                                            </div>
+                                            <button
+                                                className="btn btn-ghost btn-xs text-error shrink-0"
+                                                onClick={() => handleRemoveService(s.serviceId)}
+                                            >
+                                                <XIcon className="size-3" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Available services list */}
+                            {servicesLoading ? (
+                                <div className="flex justify-center py-8">
+                                    <span className="loading loading-spinner loading-md" />
+                                </div>
+                            ) : availableServices.length === 0 ? (
+                                <div className="text-center py-8 space-y-2">
+                                    <p className="text-sm opacity-50">
+                                        {selectedDeptType.isCustom
+                                            ? "No services available yet — your department type is new and pending approval. You can claim services later from your dashboard."
+                                            : "No verified services available for this department type yet. You can claim services later from your dashboard."}
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                                    <p className="text-xs font-semibold opacity-50 uppercase tracking-wide">Available Services</p>
+                                    {availableServices
+                                        .filter(s => !selectedServiceIds.has(s._id))
+                                        .map(service => (
+                                            <div key={service._id} className="flex items-center gap-3 bg-base-100 rounded-lg px-3 py-3 border border-base-300">
+                                                <span className="text-sm flex-1 truncate">{service.name}</span>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    <ClockIcon className="size-4 opacity-40" />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="min"
+                                                        className="input input-bordered input-sm w-20 text-center"
+                                                        value={durations[service._id] || ""}
+                                                        onChange={e => {
+                                                            const val = e.target.value;
+                                                            if (/^\d*$/.test(val)) setDurations(prev => ({ ...prev, [service._id]: val }));
+                                                        }}
+                                                    />
+                                                    <button
+                                                        className="btn btn-primary btn-sm gap-1"
+                                                        onClick={() => handleAddService(service)}
+                                                        disabled={!durations[service._id]}
+                                                    >
+                                                        <PlusIcon className="size-3" /> Add
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    {availableServices.filter(s => !selectedServiceIds.has(s._id)).length === 0 && selectedServices.length > 0 && (
+                                        <p className="text-xs opacity-40 text-center py-2">All available services have been added.</p>
+                                    )}
+                                </div>
+                            )}
+
+                            <p className="text-xs opacity-50">
+                                Services are subject to admin approval. You can also add more from your dashboard later.
+                            </p>
+
+                            <button
+                                className="btn btn-primary w-full"
+                                onClick={handleFinalSubmit}
+                                disabled={isPending || isSubmitting || isAnyUploading}
+                            >
+                                {isPending || isSubmitting
+                                    ? <><span className="loading loading-spinner loading-xs" />Creating Account...</>
+                                    : `Create Department Account${selectedServices.length > 0 ? ` with ${selectedServices.length} Service${selectedServices.length > 1 ? "s" : ""}` : ""}`}
+                            </button>
+
+                            {selectedServices.length === 0 && (
+                                <button
+                                    className="btn btn-ghost btn-sm w-full"
+                                    onClick={handleFinalSubmit}
+                                    disabled={isPending || isSubmitting || isAnyUploading}
+                                >
+                                    Skip & Create Account Without Services
+                                </button>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>

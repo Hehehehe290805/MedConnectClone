@@ -2,13 +2,15 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import useAuthUser from "../hooks/useAuthUser";
-import { BellIcon, BriefcaseMedicalIcon, LogOutIcon, UserIcon } from "lucide-react";
+import { BellIcon, BriefcaseMedicalIcon, LogOutIcon, UserIcon, PlusIcon } from "lucide-react";
 import ThemeSelector from "./ThemeSelector";
 import useLogout from "../hooks/useLogout";
 import { getUnreadNotificationCount } from "../lib/api";
+import SuggestServicePopup from "./SuggestServicePopup";
 
 const Navbar = () => {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showAddService, setShowAddService] = useState(false);
   const { authUser } = useAuthUser();
   const location = useLocation();
   const isChatPage = location.pathname?.startsWith("/chat");
@@ -46,6 +48,14 @@ const Navbar = () => {
           )}
 
           <div className="flex items-center gap-3 sm:gap-4 ml-auto">
+            {authUser?.role === "department" && location.pathname === "/services" && (
+                <button 
+                    className="btn btn-sm btn-primary gap-1"
+                    onClick={() => setShowAddService(true)}
+                >
+                    <PlusIcon className="w-4 h-4" /> Add Service
+                </button>
+            )}
             <Link to={"/notifications"}>
               <button className="btn btn-ghost btn-circle relative">
                 <BellIcon className="h-6 w-6 text-base-content opacity-70" />
@@ -95,6 +105,10 @@ const Navbar = () => {
           </div>
           <div className="modal-backdrop" onClick={() => setShowLogoutModal(false)} />
         </div>
+      )}
+
+      {showAddService && (
+          <SuggestServicePopup onClose={() => setShowAddService(false)} />
       )}
     </nav>
   );

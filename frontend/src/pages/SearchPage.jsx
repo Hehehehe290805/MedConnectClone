@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { SearchIcon, MapPinIcon, StethoscopeIcon, BuildingIcon, SparklesIcon, XIcon } from "lucide-react";
+import { SearchIcon, MapPinIcon, StethoscopeIcon, BuildingIcon, SparklesIcon, XIcon, ActivityIcon } from "lucide-react";
 import ProviderCard from "../components/ProviderCard.jsx";
 import FilterSearch from "../components/FilterSearch.jsx";
 import { axiosInstance } from "../lib/axios";
@@ -26,7 +26,7 @@ const buildParams = (name, filters) => {
 
 const SearchPage = () => {
     const { authUser } = useAuthUser();
-    const [mode, setMode] = useState("doctor"); // "doctor" | "institute"
+    const [mode, setMode] = useState("doctor"); // "doctor" | "institute" | "department"
     const [query, setQuery] = useState("");
     const [filters, setFilters] = useState({});
 
@@ -49,13 +49,15 @@ const SearchPage = () => {
 
     const { data, isLoading, error } = useQuery({
         queryKey: ["search", mode, qs],
-        queryFn: () => axiosInstance.get(`/search/${mode === "doctor" ? "doctors" : "institutes"}?${qs}`).then(r => r.data),
+        queryFn: () => axiosInstance.get(`/search/${mode === "doctor" ? "doctors" : mode === "institute" ? "institutes" : "departments"}?${qs}`).then(r => r.data),
         keepPreviousData: true,
     });
 
     const results = mode === "doctor"
         ? (data?.data?.doctors ?? [])
-        : (data?.data?.institutes ?? []);
+        : mode === "institute"
+            ? (data?.data?.institutes ?? [])
+            : (data?.data?.departments ?? []);
 
     const sortedByProximity = data?.data?.sortedByProximity ?? false;
 
@@ -134,6 +136,12 @@ const SearchPage = () => {
                     >
                         <BuildingIcon className="w-4 h-4" />Institutes
                     </button>
+                    <button
+                        className={`tab gap-2 ${mode === "department" ? "tab-active" : ""}`}
+                        onClick={() => switchMode("department")}
+                    >
+                        <ActivityIcon className="w-4 h-4" />Departments
+                    </button>
                 </div>
 
                 {/* Search bar + filters */}
@@ -144,7 +152,9 @@ const SearchPage = () => {
                             type="text"
                             placeholder={mode === "doctor"
                                 ? "Search by name, specialty or subspecialty..."
-                                : "Search by name, department type or service..."}
+                                : mode === "institute"
+                                    ? "Search by name, department type or service..."
+                                    : "Search by institute name, department type or service..."}
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
                             className="input input-bordered w-full pl-10"
@@ -210,7 +220,7 @@ const SearchPage = () => {
                     </div>
                 ) : results.length === 0 ? (
                     <div className="text-center py-16 opacity-50">
-                        <p className="text-lg">No {mode === "doctor" ? "doctors" : "institutes"} found.</p>
+                        <p className="text-lg">No {mode === "doctor" ? "doctors" : mode === "institute" ? "institutes" : "departments"} found.</p>
                         <p className="text-sm mt-1">Try adjusting your filters.</p>
                     </div>
                 ) : (

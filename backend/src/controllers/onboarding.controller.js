@@ -4,6 +4,7 @@ import Admin from "../models/Admin.js";
 import EmailRegistry from "../models/EmailRegistry.js";
 import PhoneRegistry from "../models/PhoneRegistry.js";
 import DepartmentType from "../models/DepartmentType.js";
+import InstituteDepartmentService from "../models/InstituteDepartmentService.js";
 import { upsertStreamUser } from "../lib/stream.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
@@ -331,6 +332,7 @@ export const onboardAsDepartment = asyncHandler(async (req, res) => {
         departmentTypeId, customDepartmentName,
         technologistLicenseNumber, technologistLicenseExpiration,
         technologistLicenseImage, technologistLegalIDImage,
+        initialServices,
     } = req.body;
 
     if (deptPassword !== confirmPassword) return sendError(res, 400, "Passwords do not match");
@@ -403,6 +405,24 @@ export const onboardAsDepartment = asyncHandler(async (req, res) => {
         });
         await deptUser.save({ session });
 
+        // Create initial service claims if provided
+        let claimedServiceCount = 0;
+        if (Array.isArray(initialServices) && initialServices.length > 0) {
+            const serviceDocs = initialServices
+                .filter(s => s.serviceId && s.durationMinutes && parseInt(s.durationMinutes) > 0)
+                .map(s => ({
+                    departmentId: deptUser._id,
+                    serviceId: s.serviceId,
+                    claimType: "service",
+                    durationMinutes: parseInt(s.durationMinutes),
+                    status: "pending",
+                }));
+            if (serviceDocs.length > 0) {
+                await InstituteDepartmentService.insertMany(serviceDocs, { session });
+                claimedServiceCount = serviceDocs.length;
+            }
+        }
+
         await EmailRegistry.create([{
             email: deptEmail,
             registrant: deptUser._id,
@@ -427,14 +447,19 @@ export const onboardAsDepartment = asyncHandler(async (req, res) => {
             console.error("Stream upsert error:", err.message);
         }
 
-        // Notify the institute owner that their new department sub-account is under review
-        notify(instituteUser._id, "new_account_pending", "Department Account Submitted",
-            `Your department account for ${technologistFirstName} ${technologistLastName} has been created and is pending admin approval.`
+        // Notify the institute owner that their new department sub-account is active
+        notify(instituteUser._id, "account_approved", "Department Account Created",
+            `Your department account for ${technologistFirstName} ${technologistLastName} has been created and is now active.`
         );
-        // Alert admins about the new department account
-        notifyAllAdmins("new_account_pending", "New Department Account Pending",
-            `A new department sub-account (${technologistFirstName} ${technologistLastName}) has been created and needs review.`
-        );
+
+        // If service claims were submitted, alert admins for review
+        if (claimedServiceCount > 0) {
+            try {
+                notifyAllAdmins("new_account_pending", "New Service Claims Pending",
+                    `${technologistFirstName} ${technologistLastName}'s department submitted ${claimedServiceCount} service claim(s) for review.`
+                );
+            } catch { /* non-fatal */ }
+        }
 
         return sendSuccess(res, 201, "Department account created successfully", { department: deptUser });
     } catch (err) {

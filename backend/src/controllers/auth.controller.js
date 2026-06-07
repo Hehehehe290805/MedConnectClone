@@ -132,6 +132,13 @@ export const login = asyncHandler(async (req, res) => {
   }
   if (!user) return sendError(res, 401, "Invalid credentials.");
 
+  if (user.status === "suspended") {
+    return sendError(res, 403, "Your account has been suspended. Please contact support.");
+  }
+  if (user.status === "rejected") {
+    return sendError(res, 403, "Your account application was rejected.");
+  }
+
   if (user.loginAttempts >= MAX_LOGIN_ATTEMPTS) {
     return sendError(res, 429, "Account locked due to too many failed attempts. Check your email for a password reset code.");
   }
