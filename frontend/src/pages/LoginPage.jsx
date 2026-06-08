@@ -20,6 +20,7 @@ const LoginPage = () => {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [formError, setFormError] = useState("");
+  const [loginMode, setLoginMode] = useState("email"); // "email" | "phone"
   const [twoFAChannel, setTwoFAChannel] = useState("email"); // "email" | "phone"
   const [twoFAMockCode, setTwoFAMockCode] = useState(null); // non-null when channel is "phone" (mock SMS)
   const emailRef = useRef(null);
@@ -73,7 +74,7 @@ const LoginPage = () => {
 
   // 2FA channel switch
   const { mutate: doSwitch2FAChannel, isPending: isSwitchingChannel } = useMutation({
-    mutationFn: (preferPhone) => switch2FAChannel({ email, preferPhone }),
+    mutationFn: (preferPhone) => switch2FAChannel({ email: loginMode === "phone" ? `+63${email}` : email, preferPhone }),
     onSuccess: (data) => {
       setTwoFAChannel(data.data?.channel ?? "email");
       setTwoFAMockCode(data.data?.mockCode ?? null);
@@ -98,12 +99,22 @@ const LoginPage = () => {
 
   const handleUserLogin = (e) => {
     e.preventDefault();
-    if (!email.trim()) {
-      emailRef.current?.setCustomValidity("Email or phone number is required");
-      emailRef.current?.reportValidity();
-      return;
+    const inputEl = emailRef.current;
+    if (loginMode === "phone") {
+      if (!email || email.length !== 10) {
+        inputEl?.setCustomValidity("Enter your 10-digit mobile number after +63");
+        inputEl?.reportValidity();
+        return;
+      }
+      doUserLogin({ email: `+63${email}`, password });
+    } else {
+      if (!email.trim()) {
+        inputEl?.setCustomValidity("Email is required");
+        inputEl?.reportValidity();
+        return;
+      }
+      doUserLogin({ email: email.trim(), password });
     }
-    doUserLogin({ email: email.trim(), password });
   };
 
   const handleAdminLogin = (e) => {
@@ -145,6 +156,7 @@ const LoginPage = () => {
     setConfirmPassword("");
     setTwoFAChannel("email");
     setTwoFAMockCode(null);
+    setLoginMode("email");
   };
 
   const ImagePanel = () => (
@@ -181,20 +193,61 @@ const LoginPage = () => {
 
               <div className="flex flex-col gap-3">
                 <div className="form-control w-full">
-                  <label className="label"><span className="label-text">Email or Phone</span></label>
-                  <input
-                    ref={emailRef}
-                    type="text"
-                    placeholder="name@example.com or 09171234567"
-                    className="input input-bordered w-full"
-                    value={email}
-                    required
-                    onChange={(e) => { setEmail(e.target.value); e.target.setCustomValidity(""); }}
-                    onBlur={(e) => {
-                      if (!e.target.value.trim()) e.target.setCustomValidity("Email or phone number is required");
-                      else e.target.setCustomValidity("");
-                    }}
-                  />
+                  {loginMode === "email" ? (
+                    <>
+                      <label className="label"><span className="label-text">Email</span></label>
+                      <input
+                        ref={emailRef}
+                        type="email"
+                        placeholder="name@example.com"
+                        className="input input-bordered w-full"
+                        value={email}
+                        required
+                        onChange={(e) => { setEmail(e.target.value); e.target.setCustomValidity(""); }}
+                        onBlur={(e) => {
+                          if (!e.target.value.trim()) e.target.setCustomValidity("Email is required");
+                          else e.target.setCustomValidity("");
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="text-xs text-primary hover:underline text-left mt-1 w-fit"
+                        onClick={() => { setLoginMode("phone"); setEmail(""); emailRef.current?.setCustomValidity(""); }}
+                      >
+                        Use phone number instead
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <label className="label"><span className="label-text">Phone Number</span></label>
+                      <div className="flex">
+                        <span className="input input-bordered rounded-r-none flex items-center px-3 bg-base-200 text-sm font-mono select-none border-r-0">+63</span>
+                        <input
+                          ref={emailRef}
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={10}
+                          placeholder="9171234567"
+                          className="input input-bordered rounded-l-none flex-1 w-0"
+                          value={email}
+                          required
+                          onChange={(e) => { const d = e.target.value.replace(/\D/g, "").slice(0, 10); setEmail(d); e.target.setCustomValidity(""); }}
+                          onBlur={(e) => {
+                            if (!e.target.value) e.target.setCustomValidity("Phone number is required");
+                            else if (e.target.value.length !== 10) e.target.setCustomValidity("Enter 10 digits after +63");
+                            else e.target.setCustomValidity("");
+                          }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="text-xs text-primary hover:underline text-left mt-1 w-fit"
+                        onClick={() => { setLoginMode("email"); setEmail(""); emailRef.current?.setCustomValidity(""); }}
+                      >
+                        Use email instead
+                      </button>
+                    </>
+                  )}
                 </div>
 
                 <div className="form-control w-full">

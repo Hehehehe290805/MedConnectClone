@@ -1,5 +1,8 @@
 # MedConnect — Claude Code Project Guide
 
+## Current Phase: Bug Hunting
+The project is in active bug hunting and refinement. The developer tests the app and reports issues or changes directly. Implement all requested changes without pushback unless the requirement **conflicts with an existing design decision, breaks a documented protocol, or would functionally break a feature**. In those cases, flag the conflict briefly before proceeding. Do not offer unsolicited refactors, cleanups, or scope expansions.
+
 ## Project Overview
 MedConnect is a Philippine telehealth platform (MERN stack) that connects patients with licensed healthcare providers — doctors, pharmacies, clinics, and hospitals — through a unified booking, communication, payment, and file-sharing system. It is designed for the Philippine healthcare context: doctors claim from 52 PRC-recognized specialties, pharmacies hold FDA and pharmacist PRC licenses, institutes hold business permits and operate diagnostic departments as sub-accounts, and all monetary amounts are in Philippine Pesos (PHP).
 
