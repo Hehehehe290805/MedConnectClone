@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { UploadCloudIcon, XIcon, ArrowLeftIcon, MapPinIcon } from "lucide-react";
+import { UploadCloudIcon, XIcon, ArrowLeftIcon, MapPinIcon, AlertTriangleIcon, CheckCircleIcon } from "lucide-react";
 import imageCompression from "browser-image-compression";
 import { uploadFile } from "../lib/api";
 import toast from "react-hot-toast";
 import { LANGUAGES } from "../constants";
 import MapPinModal from "../components/MapPinModal";
+import PSGCAddressFields from "../components/PSGCAddressFields";
 export { forwardGeocode } from "../components/MapPinModal";
 
 // --- STEP PROGRESS BAR ---
@@ -347,61 +348,130 @@ export const AddressFields = ({ value = {}, onChange, errors = {}, cityRef, labe
                     <AddressFieldItem label="Building / House No." fieldKey="buildingNumber" placeholder="Unit 4B" required={!disabled} value={value.buildingNumber || ""} onChange={update} error={errors["address.buildingNumber"]} disabled={disabled} />
                     <AddressFieldItem label="Street" fieldKey="street" placeholder="Rizal Street" required={!disabled} value={value.street || ""} onChange={update} error={errors["address.street"]} disabled={disabled} />
                 </div>
-                <div className={`grid grid-cols-2 gap-3 ${disabled ? "opacity-60" : ""}`}>
-                    <AddressFieldItem label="Barangay" fieldKey="barangay" placeholder="Barangay 1" required={!disabled} value={value.barangay || ""} onChange={update} error={errors["address.barangay"]} disabled={disabled} />
-                    <AddressFieldItem label="City" fieldKey="city" placeholder="Manila" required={!disabled} value={value.city || ""} onChange={update} error={errors["address.city"]} inputRef={cityRef} disabled={disabled} />
-                </div>
-                <div className={`grid grid-cols-2 gap-3 ${disabled ? "opacity-60" : ""}`}>
-                    <AddressFieldItem label="Province" fieldKey="province" placeholder="Metro Manila" required={!disabled} value={value.province || ""} onChange={update} error={errors["address.province"]} disabled={disabled} />
-                    <AddressFieldItem label="Postal Code" fieldKey="postalCode" placeholder="1000" required={!disabled} value={value.postalCode || ""} onChange={update} error={errors["address.postalCode"]} maxLength={4} disabled={disabled} />
-                </div>
+                <AddressFieldItem label="Barangay" fieldKey="barangay" placeholder="Barangay 1" required={!disabled} value={value.barangay || ""} onChange={update} error={errors["address.barangay"]} disabled={disabled} />
+
+                {/* PSGC cascading dropdowns — Region → Province → City/Municipality */}
+                {!disabled ? (
+                    <PSGCAddressFields
+                        required
+                        value={{ province: value.province || "", city: value.city || "" }}
+                        onChange={({ province, city }) => onChange({ ...value, province, city })}
+                    />
+                ) : (
+                    <div className="grid grid-cols-2 gap-3 opacity-60">
+                        <AddressFieldItem label="City" fieldKey="city" placeholder="Manila" required={false} value={value.city || ""} onChange={update} disabled />
+                        <AddressFieldItem label="Province" fieldKey="province" placeholder="Metro Manila" required={false} value={value.province || ""} onChange={update} disabled />
+                    </div>
+                )}
+
+                <AddressFieldItem label="Postal Code" fieldKey="postalCode" placeholder="1000" required={!disabled} value={value.postalCode || ""} onChange={update} error={errors["address.postalCode"]} maxLength={4} disabled={disabled} />
             </div>
         </>
     );
 };
 
 // --- PHONE NUMBER FIELD ---
-export const PhoneField = ({ phoneNumber, phoneType, onNumberChange, onTypeChange, error }) => {
+export const PhoneField = ({ phoneNumber, phoneType, onNumberChange, onTypeChange, error, onVerified }) => {
     const isMobile = phoneType === "mobile";
+    const [mockOtp, setMockOtp] = useState(null);
+    const [otpInput, setOtpInput] = useState("");
+    const [verified, setVerified] = useState(false);
 
     const handleNumberInput = (e) => {
         const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
         onNumberChange(digits);
+        setMockOtp(null);
+        setOtpInput("");
+        setVerified(false);
+        onVerified?.(false);
     };
 
+    const sendCode = () => {
+        const code = String(Math.floor(100000 + Math.random() * 900000));
+        setMockOtp(code);
+        setOtpInput("");
+    };
+
+    const verifyCode = () => {
+        if (otpInput === mockOtp) {
+            setVerified(true);
+            onVerified?.(true);
+        } else {
+            setOtpInput("");
+            toast.error("Incorrect code. Try again.");
+        }
+    };
+
+    const canSend = isMobile && phoneNumber.length === 10;
+
     return (
-        <div className="form-control">
-            <label className="label">
+        <div className="form-control space-y-2">
+            <label className="label pb-0">
                 <span className="label-text">
                     Phone Number <span className="text-error">*</span>
                 </span>
+                {verified && (
+                    <span className="flex items-center gap-1 text-success text-xs font-medium">
+                        <CheckCircleIcon className="size-3.5" /> Verified
+                    </span>
+                )}
             </label>
             <div className="flex gap-2">
                 <select
                     className="select select-bordered w-32 flex-shrink-0"
                     value={phoneType}
-                    onChange={(e) => onTypeChange(e.target.value)}
+                    onChange={(e) => { onTypeChange(e.target.value); setMockOtp(null); setVerified(false); onVerified?.(false); }}
+                    disabled={verified}
                 >
                     <option value="mobile">Mobile</option>
                     <option value="telephone">Telephone</option>
                 </select>
                 <div className="relative flex-1">
                     {isMobile && (
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm opacity-60 font-medium pointer-events-none">
-                            +63
-                        </span>
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm opacity-60 font-medium pointer-events-none">+63</span>
                     )}
                     <input
                         type="tel"
-                        className={`input input-bordered w-full ${isMobile ? "pl-12" : ""} ${error ? "input-error" : ""}`}
+                        className={`input input-bordered w-full ${isMobile ? "pl-12" : ""} ${error ? "input-error" : ""} ${verified ? "input-success" : ""}`}
                         placeholder={isMobile ? "9171234567" : "028123456"}
                         value={phoneNumber}
                         onChange={handleNumberInput}
                         maxLength={10}
+                        disabled={verified}
                     />
                 </div>
+                {!verified && (
+                    <button type="button" className="btn btn-outline btn-sm h-12" disabled={!canSend} onClick={sendCode}>
+                        {mockOtp ? "Resend" : "Send Code"}
+                    </button>
+                )}
             </div>
-            {error && <p className="text-error text-xs mt-1">{error}</p>}
+            {error && <p className="text-error text-xs">{error}</p>}
+
+            {/* Mock OTP alert */}
+            {mockOtp && !verified && (
+                <div className="space-y-2">
+                    <div className="flex items-start gap-2 bg-warning/10 border border-warning/30 rounded-xl p-3 text-sm">
+                        <AlertTriangleIcon className="size-4 text-warning mt-0.5 shrink-0" />
+                        <p className="text-warning-content opacity-80 text-xs">
+                            <strong>⚠ Demo mode</strong> — No SMS was sent. Your verification code is: <strong className="font-mono text-base">{mockOtp}</strong>
+                        </p>
+                    </div>
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            className="input input-bordered flex-1 text-center font-mono tracking-widest"
+                            placeholder="Enter 6-digit code"
+                            value={otpInput}
+                            onChange={e => setOtpInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                            maxLength={6}
+                        />
+                        <button type="button" className="btn btn-primary" disabled={otpInput.length !== 6} onClick={verifyCode}>
+                            Verify
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

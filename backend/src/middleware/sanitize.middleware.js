@@ -7,7 +7,7 @@
 // operator injection via e.g. { email: { "$gt": "" } } can bypass auth queries.
 // Dropping '$'-prefixed keys at the boundary closes that vector.
 
-function sanitizeValue(value) {
+export function sanitizeValue(value) {
     if (typeof value === "string") {
         return value.replace(/<[^>]*>/g, "").trim();
     }
@@ -23,6 +23,15 @@ function sanitizeValue(value) {
         return cleaned;
     }
     return value;
+}
+
+export function sanitizeObject(obj) {
+    const result = {};
+    for (const [key, value] of Object.entries(obj)) {
+        if (key.startsWith("$")) continue;
+        result[key] = sanitizeValue(value);
+    }
+    return result;
 }
 
 export const sanitizeBody = (req, _res, next) => {

@@ -1,5 +1,8 @@
 # MedConnect — Claude Code Project Guide
 
+## Current Phase: Bug Hunting
+The project is in active bug hunting and refinement. The developer tests the app and reports issues or changes directly. Implement all requested changes without pushback unless the requirement **conflicts with an existing design decision, breaks a documented protocol, or would functionally break a feature**. In those cases, flag the conflict briefly before proceeding. Do not offer unsolicited refactors, cleanups, or scope expansions.
+
 ## Project Overview
 MedConnect is a Philippine telehealth platform (MERN stack) that connects patients with licensed healthcare providers — doctors, pharmacies, clinics, and hospitals — through a unified booking, communication, payment, and file-sharing system. It is designed for the Philippine healthcare context: doctors claim from 52 PRC-recognized specialties, pharmacies hold FDA and pharmacist PRC licenses, institutes hold business permits and operate diagnostic departments as sub-accounts, and all monetary amounts are in Philippine Pesos (PHP).
 
@@ -31,7 +34,7 @@ Student project — actively in development.
 
 **Current Features:**
 - **Expert System** (`/consultation`): 3-step wizard (body system → symptoms → duration/age group). Jaccard similarity against 71 diseases; top 5 matches shown with urgency badges. Generates pre-consultation markdown auto-attached as an `AppointmentFile` at booking time.
-- **Search** (`/search`): Multi-filter search (name, specialty, department type, language, location radius). Bipartite ranker surfaces top 3 symptom-matched doctors (`specialtyScore×0.5 + ratingScore×0.3 + proximityScore×0.2`). Multi-term `+` name search supported.
+- **Search** (`/search`): Multi-filter search with 3 modes — Doctors, Institutes, Departments. Bipartite ranker surfaces top 3 symptom-matched doctors (`specialtyScore×0.5 + ratingScore×0.3 + proximityScore×0.2`). Multi-term `+` name search supported. Department mode uses `GET /api/search/departments`.
 - **Appointment Booking**: `CreateBookingPopup` for doctors — 7-day slot lookahead, pricing fetch from `/api/pricing/appointment-price`. Institute booking path is deprioritized (flag #53).
 - **Payment**: 50% deposit via Demo Payment screen. For virtual appointments, 50% balance payment after appointment completes.
 - **Appointment Calendar** (`/`): Month grid with status dots; day-click shows detail; list view groups active vs. closed. Opens `ViewPendingAppointmentPatientPopup`.
@@ -76,14 +79,19 @@ Student project — actively in development.
 **Onboarding:** Submits FDA license and pharmacist PRC license → status `pending` → admin approves → `onBoarded`.
 
 **Current Features:**
-- **Home Dashboard** (`/`): Tabbed — **Orders** (placeholder, first tab) | **Manage Catalogue** (placeholder) | **Transactions** (`TransactionList`).
+- **Home Dashboard** (`/`): Full pharmacy order management — Order List (paid, awaiting prep), Shipping & Pickup queue, Completed orders, Order History. Prescription review modal (approve/reject with reason). Rejected prescriptions modal.
+- **Order lifecycle**: `paid → ready_for_shipping/ready_for_pickup → out_for_delivery/pickup_in_progress → completed`. Mock auto-complete after 10 minutes.
+- **Prescription review**: Orders containing prescription-only medicines are held for pharmacist review before payment. Pharmacist can approve or reject with a reason code and free-text notes.
+- **Customer-facing**: `CustomerPharmacyPage.jsx` — browse catalogue, add to cart, checkout, choose delivery/pickup.
+- **Catalogue management**: `PharmacyCataloguePage.jsx` — CRUD for pharmacy products (name, price, stock, OTC flag, image).
+- **Transactions**: `PharmacyIncomePage.jsx` — income tracking.
 - **Notifications**: Receives approval, rejection, and renewal notifications.
 - **Permit Renewal**: FDA license and pharmacist PRC license renewal via `PermitRenewal` flow in Settings.
 
 **Standards:**
-- Pharmacy has no appointment or booking involvement at this stage. Its transaction list will populate only when the Orders feature is built.
-- The Orders and Manage Catalogue tabs are intentional placeholders — do not replace or remove them without explicit instruction.
-- Onboarding requires two private S3 uploads: `fdaLicense` and `pharmacistLicenseImage`. Both must be present before submission.
+- Pharmacy order flow is implemented and functional. Do not overwrite teammate-built order management logic.
+- Prescription items (OTC=false) must go through `prescriptionReviews` queue before customer can pay.
+- Mock fulfillment (auto-complete after 10 min) is intentional for demo purposes.
 
 ---
 
@@ -113,7 +121,7 @@ Student project — actively in development.
 - **Service Claims** (`/services`): Claims services from 149 seeded entries across 36 department types. Each claim includes `durationMinutes`. Admin must approve before claims are `verified` and bookable.
 - **Appointment Calendar** (`/`): `AppointmentCalendar` with status dots and `ViewPendingAppointmentDoctorPopup` on click.
 - **Appointment Popup Actions**: Accept, reject, complete (in-person), dispute — same actions as doctor.
-- **Home Dashboard** (`/`): Tabbed — **Appointments** (service setup prompt or verified-services card, dept info, calendar) | **Transactions** (`TransactionList`).
+- **Home Dashboard** (`/`): Tabbed — **Appointments** (service setup prompt or verified-services card, dept info, **`QueuePanel`** above calendar, `AppointmentCalendar`) | **Transactions** (`TransactionList`).
 - **Appointment Files**: `AppointmentFilesPanel` embedded in the popup.
 - **Technologist License Renewal**: Via Settings → Licenses & Permits → Renew.
 
@@ -121,7 +129,7 @@ Student project — actively in development.
 - Department shares `ViewPendingAppointmentDoctorPopup` with the Doctor role. Any popup change affects both — always check both when modifying.
 - Department does not have a chat/video sidebar link. Only patients and doctors have the chat feature.
 - A department with no verified service claims must show a setup prompt on the home page — not an empty calendar.
-- Verified service claims (`institutedepartmentservices` with status `verified`) are required for the department to appear in institute search results.
+- Verified service claims (`institutedepartmentservices` with status `verified`) are required for the department to appear in search results. Valid statuses: `pending`, `verified`, `rejected`.
 
 ---
 
@@ -347,7 +355,7 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 `POST /renewal/request`, `GET /renewal/my-renewals`
 
 ### `/api/search`
-`GET /doctors`, `GET /institutes` — Haversine proximity + multi-filter + rating aggregation
+`GET /doctors`, `GET /institutes`, `GET /departments` — Haversine proximity + multi-filter + rating aggregation. `/departments` is behind `protectRoute`.
 
 ### `/api/users`
 `GET /doctors`, `GET /institutes`, `GET /:userId`
@@ -360,6 +368,15 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 
 ### `/api/app-reports`
 `POST /` (any authenticated user), `GET /` (admin), `PATCH /:id/status` (admin)
+
+### `/api/chatbot`
+`POST /message` — authenticated; body `{ message, history[] }`; rate-limited 20/hr per user; calls Groq API (llama3-8b-8192); returns `{ reply }`
+
+### `/api/admin/analytics`
+`GET /` — admin only; query params `?from=YYYY-MM-DD&to=YYYY-MM-DD` (default last 30 days); returns full analytics payload
+
+### `/api/queue`
+`POST /build`, `POST /walkin`, `GET /today`, `GET /position?appointmentId=`, `POST /advance`, `POST /no-show`
 
 ---
 
@@ -390,7 +407,7 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 | `/appointments` | ComingSoonPage | Doctor (pending build) |
 | `/specialty` | `SpecialtyPage` | Doctor |
 | `/setup-departments` | `OnboardingDepartment` | Institute |
-| `/services` | ComingSoonPage | Department (pending build) |
+| `/services` | `ServicesPage` | Department |
 | `/transactions` | `TransactionPage` | All except Admin |
 | `/notifications` | `NotificationsPage` | All except Admin |
 | `/settings` | `SettingsPage` | All |
@@ -411,7 +428,7 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 
 **Patient (`HomePageUser`)** — pending banner; Book Now card (→ /consultation or /search); `AppointmentCalendar` with calendar/list toggle + `ViewPendingAppointmentPatientPopup` on click.
 
-**Doctor (`HomePageDoctor`)** — pending banner; tabbed: **Appointments** (setup warning or success card, pricing card, schedule card, `AppointmentCalendar` + `ViewPendingAppointmentDoctorPopup`) | **Transactions** (`TransactionList`).
+**Doctor (`HomePageDoctor`)** — pending banner; Join Call banner (virtual, 30 min before / ongoing); tabbed: **Appointments** (setup warning or success card, pricing card, schedule card, max patients card, **`QueuePanel`** (today's queue with walk-in/advance/no-show), `AppointmentCalendar` + `ViewPendingAppointmentDoctorPopup`) | **Transactions** (`TransactionList`).
 
 **Pharmacy (`HomePagePharmacy`)** — pending banner; tabbed: **Manage Catalogue** (placeholder) | **Transactions** (`TransactionList`).
 
@@ -430,7 +447,7 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 | `AppointmentFilesPanel.jsx` | Upload (WebP auto-convert), list, download (signed URL), delete, PDF export; props: `appointmentId`, `participantRole`, `readOnly` |
 | `LinkifiedText.jsx` | Auto-links URLs and emails in plain text; click shows "Leaving MedConnect" confirmation modal before navigating |
 | `Sidebar.jsx` | Role-aware navigation links; disabled when `status === "pending"` |
-| `Navbar.jsx` | Notifications badge (polls unread-count every 30s) |
+| `Navbar.jsx` | Notifications badge (polls unread-count every 30s); "Add Service" button shown for department role on `/services` page (opens `SuggestServicePopup`) |
 | `Layout.jsx` | Wraps pages with Sidebar + Navbar |
 | `MapPinModal.jsx` | Leaflet map for address coordinate pinning |
 | `SpecialtyField.jsx` | Specialty + subspecialty search/add with pending local state |
@@ -445,6 +462,7 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 | `ViewPendingAppointmentDoctorPopup.jsx` | Doctor/department detail modal: accept/reject, complete, dispute |
 | `SetPricePopup.jsx` | Doctor consultation price form |
 | `SetSchedulePopup.jsx` | Doctor/department availability form |
+| `SuggestServicePopup.jsx` | Department modal to suggest a new service; posts to `POST /api/services/suggest` |
 
 ### Login Flow (LoginPage.jsx)
 Three steps via component state:
@@ -471,7 +489,7 @@ Three steps via component state:
 - `notifyAllAdmins(type, title, body)` — broadcasts to all `onBoarded` admins; looks up email in Admin collection
 
 ### Notification Types
-`role_approved`, `role_rejected`, `suggestion_approved`, `suggestion_rejected`, `claim_approved`, `claim_rejected`, `renewal_approved`, `renewal_rejected`, `license_expiring_soon`, `license_expired`, `appointment_booked`, `appointment_accepted`, `appointment_rejected`, `appointment_cancelled`, `appointment_started`, `appointment_completed`, `payment_received`, `dispute_filed`, `dispute_resolved`, `new_account_pending`, `account_deletion_requested`, `renewal_submitted`, `dispute_admin_alert`
+`role_approved`, `role_rejected`, `suggestion_approved`, `suggestion_rejected`, `claim_approved`, `claim_rejected`, `renewal_approved`, `renewal_rejected`, `license_expiring_soon`, `license_expired`, `appointment_booked`, `appointment_accepted`, `appointment_rejected`, `appointment_cancelled`, `appointment_started`, `appointment_completed`, `payment_received`, `dispute_filed`, `dispute_resolved`, `new_account_pending`, `account_deletion_requested`, `renewal_submitted`, `dispute_admin_alert`, `queue_position_update` (sent at 10/5/2 slots ahead), `appointment_emergency_bumped` (your slot was pushed back due to an emergency), `appointment_skipped_to_end` (no-show: moved to end of queue), `appointment_skipped_cancelled` (no-show refused: treated as cancellation, no refund)
 
 ### email.js (Brevo SDK)
 `sendVerificationCode(email, code)` — OTP email for auth flows  
@@ -514,6 +532,7 @@ STREAM_API_KEY
 STREAM_SECRET
 ENCRYPTION_KEY
 ADMIN_CODE
+GROQ_API_KEY        ← required for AI chatbot; free key at console.groq.com
 ```
 
 ---
@@ -533,6 +552,103 @@ ADMIN_CODE
 
 ### ForgotPasswordResetPage
 On success: clears Zustand store → `toast.success` → `navigate("/login")`. Already implemented correctly.
+
+### Hannah's Branch (2026-06-07) — Department Search, ServicesPage, Admin fixes
+
+**Backend:**
+- `search.controller.js`: Added `searchDepartments` — Haversine proximity + multi-filter ranking for departments
+- `search.route.js`: `GET /api/search/departments` (behind `protectRoute`)
+- `InstituteDepartmentService.js`: Added `"rejected"` to `status` enum — `rejectClaim` was throwing Mongoose ValidationError silently
+- `admin.controller.js`: Fixed `getPendingClaims` to `populate("departmentId", ...)` instead of `populate("instituteId", ...)` so service claims appear in admin panel; fixed `rejectRole` cleanup (`instituteId` → `departmentId`)
+- `service.controller.js`: Added `notifyAllAdmins` in `claimService` — admins now receive in-app + email when a department submits a service claim
+
+**Frontend:**
+- `ServicesPage.jsx` (NEW): Department services management at `/services` — lists claimed services grouped by status (Approved / Pending / Rejected) with duration badges; calls `GET /api/services/my-services`
+- `SuggestServicePopup.jsx` (NEW): Modal for department users to suggest a new service; posts to `POST /api/services/suggest`
+- `SearchPage.jsx`: Added department search mode as 3rd tab; updated `buildParams` and result rendering for departments using `GET /api/search/departments`
+- `ProviderCard.jsx`: Extended to support `department` provider type — shows services, price range, distance, Google Maps link
+- `HomePageAdmin.jsx`: Fixed `ClaimRow` — now shows department technologist name (from `departmentId`) for service claims instead of "Unknown"
+- `ViewPendingClaimPopup.jsx`: Department-aware — service claims show department name/email and duration; license number + approved specialties sections are hidden for service claims
+- `App.jsx`: Added `/services` route for `department` role pointing to `ServicesPage`
+- `Navbar.jsx`: Added "Add Service" button (department-only, visible on `/services` page) that opens `SuggestServicePopup`
+- `SignUpPage.jsx`: Added Terms & Privacy Policy scroll gate before allowing signup submission
+
+### Session 2026-06-07 Part 5 — Bayesian rating, files in list, phone cross-login + dual 2FA
+
+**#81 — Bayesian rating in bipartite ranker:** `SearchPage.jsx` — replaced `doc.averageRating / 5` with `(C * m + averageRating * reviewCount) / (C + reviewCount) / 5` where `C = 5` and `m` is the weighted platform mean computed from all doctors in the current result set. Falls back to 3 if no reviews exist.
+
+**#23 — AppointmentFilesPanel in DoctorAppointmentsPage list:** Each row now has a paperclip button. Clicking it expands `AppointmentFilesPanel` inline below the row (accordion style). State tracked per appointment ID via a `Set`. Clicking the card body still opens the detail popup; the paperclip click stops propagation.
+
+**#94 — normalizePhone consolidation:** Already done in Part 4 — `onboarding.controller.js` already imports from `validation.js`. CLAUDE.md was stale.
+
+**#89 — Settings phone verification:** `User.phoneVerified: Boolean (default false)` added to base schema. Backend: `POST /api/auth/phone/request-verify` (protectRoute) — generates 6-digit mock OTP stored in `verificationcodes`, returns `mockCode` in response. `POST /api/auth/phone/confirm-verify` — verifies OTP, sets `phoneVerified = true`, upserts `PhoneRegistry`. Frontend: "Phone Number" card in Settings (non-admin only). Modal: enter mobile number → Send Code → shows mock code with ⚠ demo warning → enter code → verified. `phoneVerified` exposed in `getMe` response.
+
+**#91 — Dual login (email OR phone):** `login` controller now tries `User.findOne({ email })` first, then falls back to `User.findOne({ phoneNumber: normalize(input), phoneVerified: true })`. Login form label changed to "Email or Phone", `type="text"` instead of `type="email"`. `normalizePhone` imported in `auth.controller.js`.
+
+**#92 — 2FA "Try another way":** `POST /api/auth/2fa/switch-channel` — takes `{ email, preferPhone }`. Invalidates existing OTP, generates new one, sends to email (real) or phone (mock, returns `mockCode` in response). Frontend: "Try another way (SMS)" / "Try email instead" link in the 2FA step. Mock code shown with ⚠ warning banner when phone channel active. `switch2FAChannel` API function added to `api.js`.
+
+**#93 — Forgot password via phone:** `forgotPassword` controller now tries email lookup first, then phone lookup (`User.findOne({ phoneNumber: normalize(input), phoneVerified: true })`). Frontend: no UI change needed — users can simply enter their phone number in the existing forgot-password email field (the backend now handles both).
+
+**Tests:** 42/42 pass unchanged.
+
+### Session 2026-06-07 Part 4 — Utility refactors + test cleanup
+
+Teammates extracted shared logic into proper utility modules:
+- `backend/src/utils/rateLimiter.js` — exports `makeRateLimiter()`, `RATE_LIMIT`, `WINDOW_MS`. Used by `chatbot.controller.js`. `makeRateLimiter()` returns a function and exposes `._rateLimits` map for test inspection. Includes automatic stale-entry cleanup via `setInterval`.
+- `backend/src/utils/validation.js` — exports `normalizePhone(phone)` and `isValidPersonName(value)`. NOTE: `onboarding.controller.js` still has an inline copy of `normalizePhone` — these should be consolidated to import from `validation.js` to avoid drift.
+
+Tests updated to import from proper modules:
+- `test/utils.test.js` imports from `../src/utils/validation.js`
+- `test/chatbotRateLimit.test.js` imports from `../src/utils/rateLimiter.js`
+- `test/response.test.js` imports directly from `../src/utils/response.js`
+
+`GROQ_API_KEY` confirmed added to `backend/.env` — chatbot is functional.
+
+### Session 2026-06-07 Part 3 — Analytics, Chatbot, PSGC, Phone Verification
+
+**Admin analytics (#75):** New `/api/admin/analytics` route (`analytics.route.js` + `analytics.controller.js`). Returns totalRevenue, platformRevenue, revenueByDay, revenueByDoctor (top 20), appointmentVolume breakdown, topProviders (top 10), cancellationRate, disputeRate. Frontend: `AdminAnalyticsPage.jsx` at `/admin/analytics` — date range filter, stat cards, tables, CSV + Excel export (.xlsx as CSV). "Analytics →" link added to HomePageAdmin tab row.
+
+**AI chatbot (#80):** `chatbot.controller.js` calls Groq API via fetch (no npm package — uses `fetch` directly with `llama3-8b-8192` model). Rate limit: 20 messages/hour per user (in-memory Map, server-side). System prompt constrains it to MedConnect feature help only. `GROQ_API_KEY` env var required. Frontend: `ChatbotWidget.jsx` — floating bottom-right button (fixed, z-50), chat panel with message thread, quick prompts on open, `/path` links rendered as `<Link>`. Added to `Layout.jsx` so it appears on all authenticated pages for all roles.
+
+**PSGC dropdowns (#86):** `PSGCAddressFields.jsx` fetches from `psgc.cloud` public API (no bundled data). Cascading Region → Province → City/Municipality. Integrated into `AddressFields` in `OnboardingShared.jsx` — replaces city/province free-text inputs. Falls back gracefully (shows message) if API unreachable.
+
+**Phone number verification:**
+- `PhoneRegistry` model added (same pattern as `EmailRegistry`).
+- `normalizePhone()` and `checkAndRegisterPhone()` helpers in `onboarding.controller.js`.
+- Phone uniqueness enforced on all 6 onboarding roles.
+- `PhoneField` in `OnboardingShared.jsx` now includes mock SMS OTP verification (demo: shows code inline with ⚠ warning). All onboarding forms require phone verified before step completion.
+- `phoneVerified` state in each onboarding form; `onVerified` prop wired to PhoneField.
+
+**Queue system (#71/#72/#87):** `AppointmentQueue` model + `queue.controller.js` + `queue.route.js`. Cron at 6AM Manila builds queues. Provider queue management page at `/queue`. Patient sees position banner on HomePageUser (polls 60s).
+
+### Session 2026-06-07 Part 2 — Cross-Login & Dual 2FA
+
+**New feature group: verified phone/email cross-login + dual 2FA channel.** Full spec added as open flags #89–#93.
+
+Key decisions:
+- Users who verify their phone in Settings can login with phone OR email (not both simultaneously as separate accounts).
+- 2FA codes can be sent to either verified channel; "Try another way" button switches between email and phone.
+- Forgot password and change password flows also support either channel.
+- Phone verification in Settings uses the same mock SMS OTP design as onboarding.
+- PSGC address dropdowns (#86): use `psgc.cloud` public API (free, no auth) instead of bundling — API fetches on component mount, cached per session.
+
+### Session 2026-06-07 — Feature Spec Clarification
+All flags #68–#88 were clarified and updated in the Open Flags section. Key decisions recorded:
+- #68: SMS OTP is mock (Brevo SMS = paid); `phoneregistry` collection for uniqueness.
+- #69: Block deletes all reviews by that patient on that doctor; no admin override.
+- #71/#72: Queue uses a new `appointmentqueues` collection — no new appointment statuses. Emergency mid-session reverts current appointment to `accepted`. No-show: skip to end (accepted) or cancelled/no-refund (refused).
+- #73: Month-view calendar, 3 months lookahead, switchable.
+- #74: Stream presence API for online status.
+- #75: All metrics, CSV + Excel (`xlsx` package).
+- #76: T&C as inline text + hyperlink only ("By clicking, you agree to our T&C"), no checkbox.
+- #80: Groq free tier (Llama 3), 20 msg/hr rate limit, site-content only; add `GROQ_API_KEY`.
+- #84: Flagged as partially implemented — not RA 10173 compliant, do not attempt full pass without instruction.
+- #85: Name sanitization for personal name fields only (not business names).
+- #86: PSGC JSON bundled, Region → Province → City/Municipality only (no barangay dropdown).
+- #87: Live queue position on patient dashboard for same-day appointments; polls every 60s.
+- Queue position alerts: 10, 5, and 2 slots ahead.
+- Walk-in button #79: shows when appointment is `ongoing` OR within 30 min of `accepted` start.
+- #78: `maxPatientsPerDay` per day total; no time-block logic (queue handles order).
 
 ### Session 2026-06-04 — Email Notification Toggle
 Added per-user opt-out for notification emails. Verification/security codes (OTP, 2FA, signup, password/email change) are always sent regardless of this setting.
@@ -623,47 +739,111 @@ Added per-user opt-out for notification emails. Verification/security codes (OTP
 
 ---
 
+## Queue System Architecture
+
+The queue system (#71/#72/#87) is a new collection and the most complex feature. Understand this fully before touching any queue code.
+
+### `appointmentqueues` Collection
+```
+{
+  doctorId: ObjectId (ref User/Doctor or Department),
+  date: Date (day-start, midnight Asia/Manila),
+  slots: [
+    {
+      appointmentId: ObjectId,
+      position: Number (1-based),
+      type: "booked" | "walkin" | "emergency",
+      status: "waiting" | "active" | "done" | "skipped" | "cancelled",
+      patientId: ObjectId,
+      originalStart: Date,
+      currentStart: Date (shifts on emergency bumps),
+    }
+  ],
+  isActive: Boolean,
+  createdAt: Date
+}
+```
+
+### Queue Rules
+- Queue is built each morning at day-start (cron) from all `accepted` appointments for that day. Initial order = ascending `start` time.
+- Walk-ins (type `walkin`) are appended to the end. Emergencies (type `emergency`) are inserted at position 1 and everyone else shifts down (+1 position). Both are doctor-created only — patients cannot create these.
+- The active slot (position 1 with status `active`) corresponds to the `ongoing` appointment in the main appointments collection.
+- **Advance to next**: Doctor can only call next when current appointment is `completed`, `awaiting_balance`, or `fully_paid`. Cannot skip manually — skip only triggers via the 5-minute no-show window.
+- **No-show / skip**: After 5 minutes with no activity (patient hasn't joined virtual or doctor hasn't marked started), system auto-prompts doctor. If doctor confirms skip:
+  - Patient accepts skip → moved to end of queue (position updates, `appointment.start` adjusted, notifications sent).
+  - Patient doesn't accept → treated as `cancelled`, no refund. Appointment status → `cancelled`.
+- **Emergency bump**: When doctor adds an emergency walk-in mid-session, the currently `ongoing` appointment reverts to `accepted` (current patient notified + all others notified they've been pushed back one slot). Emergency slot becomes `active` / `ongoing`.
+- **Position notifications**: Sent at 10, 5, and 2 slots ahead (in-app + email if `emailNotificationsEnabled`). Notification type: `queue_position_update`.
+- **Patient dashboard**: If the patient has an appointment today, their dashboard shows their live queue position ("You are #N in queue — N people ahead of you"). Polls every 60s.
+- No new appointment statuses are added. Queue state lives entirely in the `appointmentqueues` collection.
+
+### Queue T&C Disclosures (add to TermsOfServicePage)
+- Appointment times may shift by ±15 minutes due to queue dynamics.
+- Emergency cases may be prioritized and bump existing slots.
+- No-show (no activity after 5 minutes) may result in slot loss; accepting the skip moves you to end of queue; refusing is treated as cancellation with no refund.
+
+---
+
 ## Open Flags
 
-### Features — High Priority
+### Features — High Priority (Open)
 | # | Feature | Notes |
 |---|---|---|
-| 53 | Book appointment — institute path | Doctor booking rebuilt and working. Institute booking: pass `instituteId` + `serviceId` + `start` to `POST /api/booking/book` — needs a separate `CreateInstituteBookingPopup` similar to the doctor one (deprioritized) |
-| 68 | Mobile number uniqueness + verification | Phone numbers must be globally unique across all accounts (same mechanism as `emailregistry`). Add OTP verification step on signup/update. Applies to all roles. |
-| 69 | Doctor block patient | Doctors can block a patient: blocked patient becomes invisible in that doctor's search results and cannot book that doctor. Needs a `blockedPatients[]` field on Doctor model and filter in `search.controller.js`. |
-| 70 | Doctor delete review | Allow a doctor to delete a review left on their profile. Needs authorization check (only the reviewed doctor can delete). Consider audit trail. |
-| 71 | Appointment queue system | At day-start, all `ongoing` appointments for the day are moved into a queue. Doctor can advance to the next patient (bumps slot by 15 min). Patient sees their queue position ("X patients ahead"). T&C must disclose the 15-min variance. Needs careful status machine integration — do not add new statuses without explicit follow-up discussion. |
-| 72 | Walk-in appointments | Doctors can add a walk-in slot to their schedule for the current day. Also allow ad-hoc schedule adjustments (add/remove slots for a specific date without changing the recurring weekly schedule). Walk-ins fill queue same as booked appointments. |
-| 73 | Booking calendar view | Replace the 7-day slot grid in `CreateBookingPopup` with a switchable month-view calendar. Extend lookahead from 7 days to 3 months. Month navigation must respect timezone (Asia/Manila). |
-| 88 | Doctor cannot see own verified specialties/subspecialties | Bug: doctor's `SpecialtyPage` (`/specialty`) does not display their already-approved/verified specialty and subspecialty claims. Note: `ProfilePage` (#38) shows verified specialties on the public profile — this bug is specifically the doctor's own management view. Check `SpecialtyPage.jsx` and the `GET /api/specialties/doctor-specialties` endpoint response. |
+| 53 | Book appointment — institute path | Doctor booking done. Institute booking: needs `CreateInstituteBookingPopup` (pass `instituteId` + `serviceId` + `start` to `POST /api/booking/book`). Deprioritized. |
 
-### Features — Medium Priority
+### Features — Medium Priority (Open)
 | # | Feature | Notes |
 |---|---|---|
-| 24 | Expert system fuzzy logic | Jaccard + bipartite ranker done. Fuzzy membership scores still pending — needs severity data |
-| 23 | AppointmentFilesPanel in DoctorAppointmentsPage list | Panel is now in the detail popups. Consider embedding in the appointments list view too. |
-| 74 | Online status indicator | Show doctor online/offline status on patient-side booking and search. Needs a lightweight presence mechanism (e.g., Stream or a last-seen heartbeat). Display on doctor card and inside `CreateBookingPopup`. |
-| 75 | Admin sales report + analytics | Admin dashboard: revenue summary (total, by date range, by role/doctor), appointment volume, top providers. Export to CSV/Excel. Consider a new `/api/admin/analytics` route. |
-| 76 | T&C checkbox in booking + payment | Add a Terms & Conditions checkbox in `CreateBookingPopup` (before confirming) and on `MockGCashPage`/Demo Payment screen (before paying). Must be checked to proceed. Link to `/terms-of-service`. |
-| 77 | Deposit button UX | Change "Pay Deposit" button copy to "Click to Confirm Deposit" to reduce accidental taps. Optionally add a confirmation step. |
-| 78 | Doctor max patients per day | Add `maxPatientsPerDay` field to Doctor model. Enforce during booking — block new bookings if the day is full. Show remaining slots on doctor card/profile. |
-| 79 | Join call button on dashboard banner | For patients and doctors with an `ongoing` virtual appointment: show a prominent "Join Call" button in the home dashboard pending/active banner. Links to `/call/:id`. |
-| 80 | AI chatbot | In-app chatbot for simple queries (FAQs, how-to, appointment status). Rate-limited per user (e.g., 20 messages/hour). Must not expose PHI. Scope: UI help only, not medical advice. |
-| 81 | Bayesian rating in bipartite ranker | Replace `doc.averageRating / 5` in `SearchPage.jsx` with a Bayesian-smoothed score: `(C × m + Σratings) / (C + n)` where `C=5`, `m` = platform mean. Prevents a 1-review 5-star from outranking a 50-review 4.8-star. Requires `reviewCount` returned alongside `averageRating` from the search API. |
-| 82 | Specialties more visible on doctor card | In search results, doctor specialty tags are currently small/hidden. Make verified specialties more prominent on the doctor card (e.g., larger chips, shown by default without expand). |
-| 83 | Expert system checkbox-style symptom input | In `ConsultationPage` symptom step, add a searchable checkbox list (typeahead, like the languages field) alongside or replacing the current grid. Lets patients find symptoms by typing rather than scanning. |
-| 87 | Patient queue number display | Companion to #71. Patient sees "You are #3 in queue" on their dashboard appointment card. Updates in real time (polling or websocket). |
+| 24 | Expert system fuzzy logic | Jaccard + bipartite ranker done. Fuzzy membership scores need severity data — blocked. |
+
+### Completed Flags (reference)
+| # | Feature | When Done |
+|---|---|---|
+| Hannah | Department search (`GET /api/search/departments`) + `ServicesPage` + `SuggestServicePopup` | 2026-06-07 (Hannah) |
+| Hannah | Admin `getPendingClaims` departmentId fix + `rejectRole` cleanup fix | 2026-06-07 (Hannah) |
+| Hannah | `InstituteDepartmentService` — added `"rejected"` status enum | 2026-06-07 (Hannah) |
+| Hannah | `service.controller.js` — `notifyAllAdmins` on service claim submission | 2026-06-07 (Hannah) |
+| Hannah | `SignUpPage` — Terms & Privacy Policy scroll gate before submit | 2026-06-07 (Hannah) |
+| Hannah | `ProviderCard` + `ViewPendingClaimPopup` — department-aware rendering | 2026-06-07 (Hannah) |
+| 68 | Mobile number uniqueness + mock SMS OTP | 2026-06-07 |
+| 69 | Doctor block patient | 2026-06-07 |
+| 70 | Doctor delete review | 2026-06-07 |
+| 71/72/87 | Queue system (incl. walk-ins, emergencies, patient position) | 2026-06-07 |
+| 73 | Booking calendar view (3-month, switchable) | 2026-06-07 |
+| 74 | Online status (lastSeen heartbeat) | 2026-06-07 |
+| 75 | Admin analytics + CSV/Excel export | 2026-06-07 |
+| 76 | T&C inline text on all payment buttons | 2026-06-07 |
+| 77 | Deposit button copy | 2026-06-07 |
+| 78 | Max patients per day (model + enforcement + UI) | 2026-06-07 |
+| 79 | Join Call banner | 2026-06-07 |
+| 80 | AI chatbot (Groq, floating bottom-right) | 2026-06-07 |
+| 82 | Specialties visible on doctor card | 2026-06-07 |
+| 83 | Symptom typeahead in ConsultationPage | 2026-06-07 |
+| 84 | T&C queue disclosures + RA 10173 notice | 2026-06-07 |
+| 85 | Name field sanitization | 2026-06-07 |
+| 86 | PSGC address dropdowns (psgc.cloud API) | 2026-06-07 |
+| 88 | Fix SpecialtyPage Column anti-pattern | 2026-06-07 |
+| 81 | Bayesian rating in bipartite ranker | 2026-06-07 (Part 5) |
+| 23 | AppointmentFilesPanel expandable in DoctorAppointmentsPage rows | 2026-06-07 (Part 5) |
+| 89 | Settings: Verify phone number (mock SMS OTP, phoneVerified field) | 2026-06-07 (Part 5) |
+| 91 | Dual login: email OR verified phone | 2026-06-07 (Part 5) |
+| 92 | 2FA: "Try another way" — switch between email and phone | 2026-06-07 (Part 5) |
+| 93 | Forgot password: phone lookup fallback | 2026-06-07 (Part 5) |
+| 94 | Consolidate normalizePhone utility | 2026-06-07 (Part 5) — already done; CLAUDE.md was stale |
 
 ### Low Priority / Post-Development
 | # | Flag | Notes |
 |---|---|---|
-| 7 | Update Render env vars | After development only |
+| 7 | Update Render env vars | After development only — add GROQ_API_KEY and all others |
 | 11 | Transaction for email update | Needs replica set confirmation on Atlas |
 | 18 | Package version sync | After development — audit `package.json` |
 | 22 | Dual permit renewal endpoints | Old role-specific endpoints in `permits.controller.js` still write directly to User; remove once new `PermitRenewal` flow confirmed |
-| 84 | Data privacy compliance | Audit against Philippine Data Privacy Act (RA 10173). Items: consent banner on signup, data retention policy enforcement, right-to-erasure flow (extend current soft-delete), DPA officer contact in Privacy Policy. |
-| 85 | Name field sanitization | `firstName`, `lastName`, and equivalent name fields on all roles must only accept letters, spaces, hyphens, and apostrophes. Add validator at model level and in `sanitize.middleware.js`. |
-| 86 | Cascading address dropdowns | Replace free-text address fields with cascading dropdowns: Region → Province → City/Municipality → Barangay (PSGC data). Limit choices by parent selection. Free-text for street/unit only. Affects onboarding forms and profile edit for all roles. |
+| 84 | Data privacy compliance | **Partially done.** T&C + Privacy Policy pages updated. Still missing: consent banner on signup, formal data retention policy, DPA officer contact. Do not attempt full compliance pass without explicit instruction. |
+
+### Remaining Flags — Cross-Login & Dual 2FA
+| # | Feature | Notes |
+|---|---|---|
+| 90 | Settings: Verify email (for phone-based accounts) | Not currently applicable — all accounts are email-based at signup. Reserved for future phone-first signup. |
 
 ---
 

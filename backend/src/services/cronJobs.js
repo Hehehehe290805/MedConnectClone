@@ -13,6 +13,7 @@ import { logError } from "../utils/logger.js";
 import { deleteFromS3 } from "../services/s3.js";
 import { notify } from "./notification.service.js";
 import { completeDuePharmacyOrders } from "../controllers/pharmacyOrder.controller.js";
+import { buildQueueForProvider } from "../controllers/queue.controller.js";
 import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone.js";
 import utc from "dayjs/plugin/utc.js";
@@ -422,6 +423,51 @@ export function startCronJobs() {
             }
         } catch (err) {
             console.error("[CRON] Error in notification cleanup:", err);
+            await logError("CRON", err);
+        }
+    });
+
+    // ── CRON: daily queue build at 6 AM Asia/Manila ───────────────────────
+    // Builds the appointment queue for every doctor and department that has
+    // accepted appointments today. Uses "0 22 * * *" UTC = 6:00 AM Asia/Manila
+    // (UTC+8, so 6 AM PHT = 22:00 UTC previous day).
+    // node-cron runs in server timezone (UTC on most hosts); the schedule is
+    // adjusted here to fire at 6 AM PHT.
+    cron.schedule("0 22 * * *", async () => {
+        try {
+            console.log("[CRON] Building daily appointment queues");
+            const todayPH   = dayjs().tz("Asia/Manila").startOf("day");
+            const tomorrowPH = todayPH.add(1, "day");
+
+            // Find all doctors with accepted appointments today
+            const doctorAppointments = await Appointment.find({
+                status: "accepted",
+                doctorId: { $exists: true, $ne: null },
+                start: { $gte: todayPH.utc().toDate(), $lt: tomorrowPH.utc().toDate() },
+            }).distinct("doctorId");
+
+            for (const docId of doctorAppointments) {
+                try { await buildQueueForProvider(docId, "doctor"); } catch (e) {
+                    console.error(`[CRON] Queue build failed for doctor ${docId}:`, e.message);
+                }
+            }
+
+            // Find all departments with accepted appointments today
+            const deptAppointments = await Appointment.find({
+                status: "accepted",
+                instituteId: { $exists: true, $ne: null },
+                start: { $gte: todayPH.utc().toDate(), $lt: tomorrowPH.utc().toDate() },
+            }).distinct("instituteId");
+
+            for (const deptId of deptAppointments) {
+                try { await buildQueueForProvider(deptId, "department"); } catch (e) {
+                    console.error(`[CRON] Queue build failed for department ${deptId}:`, e.message);
+                }
+            }
+
+            console.log(`[CRON] Queues built for ${doctorAppointments.length} doctor(s) and ${deptAppointments.length} department(s)`);
+        } catch (err) {
+            console.error("[CRON] Error in daily queue build:", err);
             await logError("CRON", err);
         }
     });

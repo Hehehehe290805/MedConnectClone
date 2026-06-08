@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useSearchParams, useNavigate } from "react-router";
+import { useSearchParams, useNavigate, Link } from "react-router";
 import { useMutation } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios";
@@ -109,8 +109,12 @@ const MockGCashPage = () => {
                     >
                         {isPending
                             ? <><span className="loading loading-spinner loading-sm" />Processing…</>
-                            : "Confirm Payment"}
+                            : `Confirm & Complete ${type === "deposit" ? "Deposit" : "Balance"} Payment`}
                     </button>
+                    <p className="text-xs text-center opacity-50">
+                        By clicking this button, you agree to our{" "}
+                        <Link to="/terms-of-service" target="_blank" className="link link-primary">Terms &amp; Conditions</Link>.
+                    </p>
 
                     <button className="btn btn-ghost btn-sm w-full" onClick={() => navigate(-1)} disabled={isPending}>
                         Cancel

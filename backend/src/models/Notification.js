@@ -52,6 +52,9 @@ const NotificationSchema = new mongoose.Schema(
                 "dispute_filed",
                 "dispute_resolved",
                 "dispute_admin_alert",    // admin alert: a dispute was filed and needs review
+
+                // Queue
+                "queue_position_update",  // patient's queue position has changed
             ],
         },
         title:  { type: String, required: true },

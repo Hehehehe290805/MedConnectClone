@@ -97,6 +97,27 @@ export const bookAppointment = asyncHandler(async (req, res) => {
     if (patientAppts.some((a) => hasOverlap(a, startTimeUTC, endTimeUTC)))
         return sendError(res, 400, "You already have a booking that overlaps.");
 
+    // Check if the doctor has blocked this patient
+    if (doctorId) {
+        const doctor = await User.findById(doctorId).select("blockedPatients maxPatientsPerDay").lean();
+        if (doctor?.blockedPatients?.some(id => id.toString() === patientId.toString())) {
+            return sendError(res, 403, "You are unable to book with this provider.");
+        }
+        // Check max patients per day
+        if (doctor?.maxPatientsPerDay) {
+            const dayStart = toPhTime(start).startOf("day").utc().toDate();
+            const dayEnd = toPhTime(start).endOf("day").utc().toDate();
+            const dayCount = await Appointment.countDocuments({
+                doctorId,
+                status: { $in: ACTIVE_STATUSES },
+                start: { $gte: dayStart, $lte: dayEnd },
+            });
+            if (dayCount >= doctor.maxPatientsPerDay) {
+                return sendError(res, 400, "This doctor has reached their maximum patient limit for the day.");
+            }
+        }
+    }
+
     const pricing = await Pricing.findOne({ providerId: doctorId || instituteId, serviceId });
     if (!pricing) return sendError(res, 400, "Pricing not found for this service.");
 
@@ -499,6 +520,7 @@ export const getProviderReviews = asyncHandler(async (req, res) => {
     for (const a of appointments) distribution[a.rating] = (distribution[a.rating] || 0) + 1;
 
     const reviews = appointments.map((a) => ({
+        _id: a._id,
         rating: a.rating,
         review: a.review || "",
         // first name + last initial for privacy
@@ -514,6 +536,22 @@ export const getProviderReviews = asyncHandler(async (req, res) => {
         distribution,
         reviews,
     });
+});
+
+// ── DELETE REVIEW (doctor removes a review from their profile) ────────────────
+export const deleteReview = asyncHandler(async (req, res) => {
+    const doctorId = req.user._id;
+    const { appointmentId } = req.params;
+
+    const appointment = await Appointment.findOne({ _id: appointmentId, doctorId });
+    if (!appointment) return sendError(res, 404, "Appointment not found");
+    if (!appointment.rating) return sendError(res, 400, "No review on this appointment");
+
+    appointment.rating = undefined;
+    appointment.review = undefined;
+    await appointment.save();
+
+    return sendSuccess(res, 200, "Review deleted.");
 });
 
 // ── TRANSACTION HISTORY ───────────────────────────────────────────────────────

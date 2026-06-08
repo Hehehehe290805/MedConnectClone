@@ -5,6 +5,37 @@ import SuggestPopup from "./SuggestPopup";
 import toast from "react-hot-toast";
 import { XIcon, PlusIcon, LightbulbIcon, Trash2Icon } from "lucide-react";
 
+const Column = ({ title, items, emptyText, loading, showEdit, deleting, onDelete }) => (
+    <div className="flex-1 min-w-0 bg-base-200 rounded-xl p-4 space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide opacity-50 mb-3">{title}</p>
+        {loading ? (
+            <div className="flex justify-center py-4">
+                <span className="loading loading-spinner loading-sm" />
+            </div>
+        ) : items.length === 0 ? (
+            <p className="text-sm opacity-40 text-center py-4">{emptyText}</p>
+        ) : (
+            items.map(item => (
+                <div key={item._id} className="flex items-center justify-between bg-base-100 rounded-lg px-3 py-2 gap-2">
+                    <span className="text-sm font-medium truncate">{item.name}</span>
+                    {showEdit && (
+                        <button
+                            className="btn btn-ghost btn-xs text-error shrink-0"
+                            onClick={() => onDelete(item._id, item.name)}
+                            disabled={deleting === item._id}
+                        >
+                            {deleting === item._id
+                                ? <span className="loading loading-spinner loading-xs" />
+                                : <Trash2Icon className="size-3" />
+                            }
+                        </button>
+                    )}
+                </div>
+            ))
+        )}
+    </div>
+);
+
 const SpecialtyPage = () => {
     const [verified, setVerified] = useState([]);
     const [pending, setPending] = useState([]);
@@ -48,37 +79,6 @@ const SpecialtyPage = () => {
     const handleClaimClose = () => { setShowClaim(false); fetchSpecialties(); };
     const handleSuggestClose = () => { setShowSuggest(false); fetchSpecialties(); };
 
-    const Column = ({ title, items, emptyText }) => (
-        <div className="flex-1 min-w-0 bg-base-200 rounded-xl p-4 space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide opacity-50 mb-3">{title}</p>
-            {loading ? (
-                <div className="flex justify-center py-4">
-                    <span className="loading loading-spinner loading-sm" />
-                </div>
-            ) : items.length === 0 ? (
-                <p className="text-sm opacity-40 text-center py-4">{emptyText}</p>
-            ) : (
-                items.map(item => (
-                    <div key={item._id} className="flex items-center justify-between bg-base-100 rounded-lg px-3 py-2 gap-2">
-                        <span className="text-sm font-medium truncate">{item.name}</span>
-                        {showEdit && (
-                            <button
-                                className="btn btn-ghost btn-xs text-error shrink-0"
-                                onClick={() => handleDelete(item._id, item.name)}
-                                disabled={deleting === item._id}
-                            >
-                                {deleting === item._id
-                                    ? <span className="loading loading-spinner loading-xs" />
-                                    : <Trash2Icon className="size-3" />
-                                }
-                            </button>
-                        )}
-                    </div>
-                ))
-            )}
-        </div>
-    );
-
     return (
         <div className="p-6 max-w-5xl mx-auto space-y-6">
             <h1 className="text-2xl font-bold">My Specialties</h1>
@@ -89,16 +89,28 @@ const SpecialtyPage = () => {
                     title="Approved Specialties"
                     items={approvedSpecialties}
                     emptyText="No approved specialties"
+                    loading={loading}
+                    showEdit={showEdit}
+                    deleting={deleting}
+                    onDelete={handleDelete}
                 />
                 <Column
                     title="Approved Subspecialties"
                     items={approvedSubspecialties}
                     emptyText="No approved subspecialties"
+                    loading={loading}
+                    showEdit={showEdit}
+                    deleting={deleting}
+                    onDelete={handleDelete}
                 />
                 <Column
                     title="Pending Claims"
                     items={pending}
                     emptyText="No pending claims"
+                    loading={loading}
+                    showEdit={false}
+                    deleting={deleting}
+                    onDelete={handleDelete}
                 />
             </div>
 

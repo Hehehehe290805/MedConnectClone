@@ -6,6 +6,7 @@ import TransactionList from "../components/TransactionList.jsx";
 import ViewPendingAppointmentDoctorPopup from "./ViewPendingAppointmentDoctorPopup.jsx";
 import { ClockIcon, StethoscopeIcon, ClipboardListIcon, ArrowRightIcon, CalendarIcon, ReceiptIcon } from "lucide-react";
 import useAuthUser from "../hooks/useAuthUser";
+import QueuePanel from "../components/QueuePanel";
 
 const HomePageDepartment = () => {
     const { authUser } = useAuthUser();
@@ -147,6 +148,9 @@ const HomePageDepartment = () => {
                     </div>
 
                     {error && <div className="alert alert-error"><span>{error}</span></div>}
+
+                    {/* Queue panel — shown first, above the calendar */}
+                    <QueuePanel />
 
                     <AppointmentCalendar
                         appointments={appointments}

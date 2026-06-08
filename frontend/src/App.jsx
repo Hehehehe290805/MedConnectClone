@@ -22,6 +22,7 @@ import SearchPage from "./pages/SearchPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import SpecialtyPage from "./pages/SpecialtyPage.jsx";
 import DoctorAppointmentsPage from "./pages/DoctorAppointmentsPage.jsx";
+import QueueManagementPage from "./pages/QueueManagementPage.jsx";
 import PatientAppointmentsPage from "./pages/PatientAppointmentsPage.jsx";
 import TermsOfServicePage from "./pages/TermsOfServicePage.jsx";
 import PrivacyPolicyPage from "./pages/PrivacyPolicyPage.jsx";
@@ -32,7 +33,11 @@ import ConsultationPage from "./pages/ConsultationPage.jsx";
 import UserManagementPage from "./pages/UserManagementPage.jsx";
 import AdminSpecialtiesPage from "./pages/AdminSpecialtiesPage.jsx";
 import AdminReportsPage from "./pages/AdminReportsPage.jsx";
+<<<<<<< HEAD
 import AdminServiceClaimsPage from "./pages/AdminServiceClaimsPage.jsx";
+=======
+import AdminAnalyticsPage from "./pages/AdminAnalyticsPage.jsx";
+>>>>>>> 901f75f47db0b175a71fb88b7d6b409ae6d08016
 
 // Onboarding & Auth flow
 import OnboardingPage from "./pages/OnboardingPage.jsx";
@@ -162,9 +167,12 @@ const App = () => {
                         <ProtectedRoute allowedRoles={["pharmacy"]}><PharmacyIncomePage /></ProtectedRoute>
                     } />
 
-                    {/* Doctor */}
+                    {/* Doctor / Department */}
                     <Route path="/specialty" element={
                         <ProtectedRoute allowedRoles={["doctor"]}><SpecialtyPage /></ProtectedRoute>
+                    } />
+                    <Route path="/queue" element={
+                        <ProtectedRoute allowedRoles={["doctor", "department"]}><QueueManagementPage /></ProtectedRoute>
                     } />
 
                     {/* Institute */}
@@ -199,8 +207,13 @@ const App = () => {
                     <Route path="/admin/reports" element={
                         <ProtectedRoute allowedRoles={["admin"]}><AdminReportsPage /></ProtectedRoute>
                     } />
+<<<<<<< HEAD
                     <Route path="/admin/services" element={
                         <ProtectedRoute allowedRoles={["admin"]}><AdminServiceClaimsPage /></ProtectedRoute>
+=======
+                    <Route path="/admin/analytics" element={
+                        <ProtectedRoute allowedRoles={["admin"]}><AdminAnalyticsPage /></ProtectedRoute>
+>>>>>>> 901f75f47db0b175a71fb88b7d6b409ae6d08016
                     } />
                 </Route>
 

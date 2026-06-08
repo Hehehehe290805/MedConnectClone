@@ -26,6 +26,11 @@ export const protectRoute = async (req, res, next) => {
 
     req.user = user;
 
+    // Update lastSeen non-fatally for regular users (not admins — Admin model is separate)
+    if (user.constructor.modelName !== "Admin") {
+        User.findByIdAndUpdate(user._id, { lastSeen: new Date() }).catch(() => {});
+    }
+
     next();
   } catch (error) {
     console.log("Error in protectRoute middleware", error);

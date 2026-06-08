@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { MapPinIcon, StarIcon } from "lucide-react";
+import { MapPinIcon, StarIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import CreateBookingPopup from "../pages/CreateBookingPopup";
 import CreateDepartmentBookingPopup from "../pages/CreateDepartmentBookingPopup";
 
@@ -17,6 +17,7 @@ const StarRating = ({ value, count }) => {
 
 const ProviderCard = ({ provider }) => {
     const [showBooking, setShowBooking] = useState(false);
+    const [showAllSpecialties, setShowAllSpecialties] = useState(false);
     const isDoctor = provider.role === "doctor";
     const isDepartment = provider.role === "department";
     const location = [provider.city, provider.province].filter(Boolean).join(", ") || null;
@@ -37,15 +38,23 @@ const ProviderCard = ({ provider }) => {
                 {/* Header */}
                 <div className="flex items-start gap-3 mb-2">
                     <Link to={`/profile/${provider._id}`} className="shrink-0">
-                        <div className="w-12 h-12 rounded-full overflow-hidden bg-base-300 flex items-center justify-center">
-                            {provider.profilePic?.url ? (
-                                <img
-                                    src={provider.profilePic.url}
-                                    alt={isDoctor ? `Dr. ${provider.firstName} ${provider.lastName}` : isDepartment ? `${provider.rootInstitute?.instituteName} - ${provider.departmentTypeName}` : provider.instituteName}
-                                    className="w-full h-full object-cover"
+                        <div className="relative w-12 h-12">
+                            <div className="w-12 h-12 rounded-full overflow-hidden bg-base-300 flex items-center justify-center">
+                                {provider.profilePic?.url ? (
+                                    <img
+                                        src={provider.profilePic.url}
+                                        alt={isDoctor ? `Dr. ${provider.firstName} ${provider.lastName}` : isDepartment ? `${provider.rootInstitute?.instituteName} - ${provider.departmentTypeName}` : provider.instituteName}
+                                        className="w-full h-full object-cover"
+                                    />
+                                ) : (
+                                    <span className="text-lg">{isDoctor ? "👨‍⚕️" : isDepartment ? "🔬" : "🏥"}</span>
+                                )}
+                            </div>
+                            {isDoctor && (
+                                <span
+                                    className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-base-200 ${provider.isOnline ? "bg-success" : "bg-base-content/30"}`}
+                                    title={provider.isOnline ? "Online" : "Offline"}
                                 />
-                            ) : (
-                                <span className="text-lg">{isDoctor ? "👨‍⚕️" : isDepartment ? "🔬" : "🏥"}</span>
                             )}
                         </div>
                     </Link>
@@ -74,12 +83,22 @@ const ProviderCard = ({ provider }) => {
 
                 {/* Specialties / Department Types */}
                 {isDoctor && provider.specialties?.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-2">
-                        {provider.specialties.slice(0, 3).map((s) => (
-                            <span key={s} className="badge badge-primary badge-xs">{s}</span>
-                        ))}
+                    <div className="mb-2">
+                        <div className="flex flex-wrap gap-1.5">
+                            {(showAllSpecialties ? provider.specialties : provider.specialties.slice(0, 3)).map((s) => (
+                                <span key={s} className="badge badge-primary badge-sm font-medium text-xs">{s}</span>
+                            ))}
+                        </div>
                         {provider.specialties.length > 3 && (
-                            <span className="badge badge-ghost badge-xs">+{provider.specialties.length - 3}</span>
+                            <button
+                                className="btn btn-ghost btn-xs mt-1 gap-1 opacity-60 px-0 h-auto min-h-0 py-0.5"
+                                onClick={(e) => { e.preventDefault(); setShowAllSpecialties(p => !p); }}
+                            >
+                                {showAllSpecialties
+                                    ? <><ChevronUpIcon className="size-3" /> Show less</>
+                                    : <><ChevronDownIcon className="size-3" /> +{provider.specialties.length - 3} more</>
+                                }
+                            </button>
                         )}
                     </div>
                 )}
@@ -145,10 +164,12 @@ const ProviderCard = ({ provider }) => {
 
                     {(isDoctor || isDepartment) && (
                         <button
-                            className="btn btn-primary btn-sm w-full mt-2"
-                            onClick={() => setShowBooking(true)}
+                            className={`btn btn-sm w-full mt-2 ${provider.isFullToday ? "btn-disabled opacity-50 cursor-not-allowed" : "btn-primary"}`}
+                            onClick={() => !provider.isFullToday && setShowBooking(true)}
+                            disabled={provider.isFullToday}
+                            title={provider.isFullToday ? "This doctor has reached their patient limit for today" : ""}
                         >
-                            Book Now
+                            {provider.isFullToday ? "Fully Booked Today" : "Book Now"}
                         </button>
                     )}
                     {directionsUrl && (

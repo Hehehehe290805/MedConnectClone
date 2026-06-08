@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { Link } from "react-router";
 import { axiosInstance } from "../lib/axios.js";
 import {
     rejectRole, approveRoleWithItems, editSuggestion, rejectSuggestion, rejectClaim,
@@ -639,6 +640,12 @@ const HomePageAdmin = () => {
                         )}
                     </div>
                 ))}
+                <Link
+                    to="/admin/analytics"
+                    className="btn btn-sm btn-ghost border border-base-300 gap-1"
+                >
+                    Analytics →
+                </Link>
             </div>
 
             {/* ── ACCOUNTS TAB ────────────────────────────────────────── */}

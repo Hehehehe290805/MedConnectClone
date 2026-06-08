@@ -1,6 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
-import { StarIcon } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { StarIcon, Trash2Icon } from "lucide-react";
 import { axiosInstance } from "../lib/axios";
+import toast from "react-hot-toast";
 import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
@@ -36,12 +37,22 @@ const DistributionBar = ({ count, total, star }) => {
     );
 };
 
-const ReviewsSection = ({ providerId }) => {
+const ReviewsSection = ({ providerId, isOwner = false }) => {
+    const queryClient = useQueryClient();
     const { data, isLoading } = useQuery({
         queryKey: ["providerReviews", providerId],
         queryFn: () => axiosInstance.get(`/booking/reviews/${providerId}`).then(r => r.data?.data),
         enabled: Boolean(providerId),
         staleTime: 2 * 60 * 1000,
+    });
+
+    const { mutate: deleteReview, isPending: isDeleting } = useMutation({
+        mutationFn: (appointmentId) => axiosInstance.delete(`/booking/review/${appointmentId}`),
+        onSuccess: () => {
+            toast.success("Review removed.");
+            queryClient.invalidateQueries({ queryKey: ["providerReviews", providerId] });
+        },
+        onError: (err) => toast.error(err?.response?.data?.message || "Failed to remove review."),
     });
 
     if (isLoading) {
@@ -95,7 +106,7 @@ const ReviewsSection = ({ providerId }) => {
                         {/* Individual reviews */}
                         <div className="space-y-4">
                             {reviews.map((r, i) => (
-                                <div key={i} className="bg-base-100 rounded-xl p-4 space-y-2">
+                                <div key={r._id || i} className="bg-base-100 rounded-xl p-4 space-y-2">
                                     <div className="flex items-center justify-between flex-wrap gap-2">
                                         <div className="flex items-center gap-2">
                                             <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
@@ -108,6 +119,16 @@ const ReviewsSection = ({ providerId }) => {
                                             <span className="text-xs opacity-50">
                                                 {dayjs(r.date).tz(PH_TZ).format("MMM D, YYYY")}
                                             </span>
+                                            {isOwner && r._id && (
+                                                <button
+                                                    className="btn btn-ghost btn-xs text-error"
+                                                    disabled={isDeleting}
+                                                    onClick={() => deleteReview(r._id)}
+                                                    title="Remove this review"
+                                                >
+                                                    <Trash2Icon className="size-3.5" />
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                     {r.review && (
