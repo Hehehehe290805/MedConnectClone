@@ -415,6 +415,8 @@ export const onboardAsDepartment = asyncHandler(async (req, res) => {
                     serviceId: s.serviceId,
                     claimType: "service",
                     durationMinutes: parseInt(s.durationMinutes),
+                    ...(s.maxPatientsPerDay ? { maxPatientsPerDay: parseInt(s.maxPatientsPerDay) } : {}),
+                    ...(s.price ? { price: parseFloat(s.price) } : {}),
                     status: "pending",
                 }));
             if (serviceDocs.length > 0) {

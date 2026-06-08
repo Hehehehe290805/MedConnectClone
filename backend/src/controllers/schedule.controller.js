@@ -1,5 +1,6 @@
 import Schedule from "../models/Schedule.js";
 import Appointment from "../models/Appointment.js";
+import InstituteDepartmentService from "../models/InstituteDepartmentService.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import dayjs from "dayjs";
@@ -156,9 +157,10 @@ export const setAvailability = asyncHandler(async (req, res) => {
     const providerType = req.user.role;
     const { startHour, endHour, daysOfWeek, isActive } = req.body;
 
-    if (!["doctor", "institute"].includes(providerType))
+    if (!["doctor", "institute", "department"].includes(providerType))
         return sendError(res, 400, "Invalid provider type");
 
+    // departments store their schedule with instituteId field (same as institutes)
     const query = providerType === "doctor" ? { doctorId: providerId } : { instituteId: providerId };
     const availability = await Schedule.findOneAndUpdate(
         query,
@@ -173,11 +175,77 @@ export const getAvailability = asyncHandler(async (req, res) => {
     const providerId = req.user._id;
     const providerType = req.user.role;
 
-    if (!["doctor", "institute"].includes(providerType))
+    if (!["doctor", "institute", "department"].includes(providerType))
         return sendError(res, 400, "Invalid provider type");
 
     const query = providerType === "doctor" ? { doctorId: providerId } : { instituteId: providerId };
     const availability = await Schedule.findOne(query);
 
     return sendSuccess(res, 200, "Availability retrieved", { availability: availability || null });
+});
+
+// Public endpoint: returns available queue slots for a department+service combo
+export const getDepartmentAvailability = asyncHandler(async (req, res) => {
+    const { departmentId, serviceId, daysAhead = 14 } = req.query;
+    if (!departmentId) return sendError(res, 400, "departmentId is required");
+    if (!serviceId) return sendError(res, 400, "serviceId is required");
+
+    const [schedule, serviceClaim] = await Promise.all([
+        Schedule.findOne({ instituteId: departmentId }),
+        InstituteDepartmentService.findOne({ departmentId, serviceId, status: "verified" }),
+    ]);
+
+    if (!schedule || !schedule.isActive)
+        return sendError(res, 400, "This department has no active schedule.");
+    if (!serviceClaim)
+        return sendError(res, 404, "Service not found or not yet approved for this department.");
+
+    const { maxPatientsPerDay, durationMinutes } = serviceClaim;
+    const now = nowPhTime();
+
+    const startHourNum = Number(schedule.startHour.split(":")[0]);
+    const startMinNum = Number(schedule.startHour.split(":")[1]);
+
+    const availableDates = [];
+
+    for (let i = 0; i < Number(daysAhead); i++) {
+        const day = now.add(i, "day").startOf("day");
+        const weekday = day.day();
+        if (!schedule.daysOfWeek.includes(weekday)) continue;
+
+        const dayStart = day.hour(startHourNum).minute(startMinNum).second(0);
+        if (dayStart.isBefore(now)) continue;
+
+        const dateStr = day.format("YYYY-MM-DD");
+
+        const bookingsCount = await Appointment.countDocuments({
+            instituteId: departmentId,
+            serviceId,
+            status: { $in: ["pending_payment", "deposit_paid", "accepted", "ongoing"] },
+            start: { $gte: day.toDate(), $lt: day.add(1, "day").toDate() },
+        });
+
+        if (maxPatientsPerDay && bookingsCount >= maxPatientsPerDay) continue;
+
+        const nextQueueNumber = bookingsCount + 1;
+        const estimatedMinutes = startHourNum * 60 + startMinNum + bookingsCount * durationMinutes;
+        const estimatedHour = Math.floor(estimatedMinutes / 60) % 24;
+        const estimatedMin = estimatedMinutes % 60;
+        const estimatedStartDt = day.hour(estimatedHour).minute(estimatedMin).second(0);
+
+        availableDates.push({
+            date: dateStr,
+            bookingsCount,
+            remainingSlots: maxPatientsPerDay ? maxPatientsPerDay - bookingsCount : null,
+            nextQueueNumber,
+            estimatedStartISO: estimatedStartDt.toISOString(),
+            estimatedStartDisplay: estimatedStartDt.format("h:mm A"),
+        });
+    }
+
+    return sendSuccess(res, 200, "Department availability fetched", {
+        schedule: { startHour: schedule.startHour, endHour: schedule.endHour, daysOfWeek: schedule.daysOfWeek },
+        service: { durationMinutes, maxPatientsPerDay },
+        availableDates,
+    });
 });

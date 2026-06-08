@@ -57,8 +57,10 @@ const OnboardingDepartment = () => {
     // Step 4 — service claim state
     const [availableServices, setAvailableServices] = useState([]);
     const [servicesLoading, setServicesLoading] = useState(false);
-    const [selectedServices, setSelectedServices] = useState([]); // [{ serviceId, serviceName, durationMinutes }]
-    const [durations, setDurations] = useState({});               // serviceId → duration string (pre-add input)
+    const [selectedServices, setSelectedServices] = useState([]); // [{ serviceId, serviceName, durationMinutes, maxPatientsPerDay, price }]
+    const [durations, setDurations] = useState({});      // serviceId → duration string
+    const [maxPatients, setMaxPatients] = useState({});  // serviceId → max patients string
+    const [prices, setPrices] = useState({});            // serviceId → price string
 
     const isClinic = authUser?.instituteType === "clinic";
     const isHospital = authUser?.instituteType === "hospital";
@@ -131,12 +133,21 @@ const OnboardingDepartment = () => {
 
     const handleAddService = (service) => {
         const duration = parseInt(durations[service._id]);
-        if (!duration || duration < 1) {
-            toast.error("Enter a valid duration in minutes.");
-            return;
-        }
-        setSelectedServices(prev => [...prev, { serviceId: service._id, serviceName: service.name, durationMinutes: duration }]);
+        if (!duration || duration < 1) { toast.error("Enter a valid duration in minutes."); return; }
+        const max = maxPatients[service._id] ? parseInt(maxPatients[service._id]) : undefined;
+        const price = prices[service._id] ? parseFloat(prices[service._id]) : undefined;
+        if (max !== undefined && (isNaN(max) || max < 1)) { toast.error("Enter a valid max patients per day."); return; }
+        if (price !== undefined && (isNaN(price) || price < 0)) { toast.error("Enter a valid price."); return; }
+        setSelectedServices(prev => [...prev, {
+            serviceId: service._id,
+            serviceName: service.name,
+            durationMinutes: duration,
+            maxPatientsPerDay: max,
+            price,
+        }]);
         setDurations(prev => { const next = { ...prev }; delete next[service._id]; return next; });
+        setMaxPatients(prev => { const next = { ...prev }; delete next[service._id]; return next; });
+        setPrices(prev => { const next = { ...prev }; delete next[service._id]; return next; });
     };
 
     const handleRemoveService = (serviceId) => {
@@ -156,7 +167,12 @@ const OnboardingDepartment = () => {
             ...finalForm,
             departmentTypeId: selectedDeptType._id || undefined,
             customDepartmentName: selectedDeptType.isCustom ? selectedDeptType.name : undefined,
-            initialServices: selectedServices.map(s => ({ serviceId: s.serviceId, durationMinutes: s.durationMinutes })),
+            initialServices: selectedServices.map(s => ({
+                serviceId: s.serviceId,
+                durationMinutes: s.durationMinutes,
+                ...(s.maxPatientsPerDay ? { maxPatientsPerDay: s.maxPatientsPerDay } : {}),
+                ...(s.price !== undefined ? { price: s.price } : {}),
+            })),
         });
     };
 
@@ -433,6 +449,8 @@ const OnboardingDepartment = () => {
                                 });
                                 setSelectedServices([]);
                                 setDurations({});
+                                setMaxPatients({});
+                                setPrices({});
                                 setAvailableServices([]);
                                 if (departments.length > 1) setSelectedDeptType(null);
                             }}
@@ -698,7 +716,11 @@ const OnboardingDepartment = () => {
                                         <div key={s.serviceId} className="flex items-center justify-between bg-base-100 rounded-lg px-3 py-2 border border-base-300">
                                             <div className="min-w-0">
                                                 <p className="text-sm font-medium truncate">{s.serviceName}</p>
-                                                <p className="text-xs opacity-50">{s.durationMinutes} min</p>
+                                                <p className="text-xs opacity-50">
+                                                    {s.durationMinutes} min
+                                                    {s.maxPatientsPerDay ? ` · ${s.maxPatientsPerDay}/day` : ""}
+                                                    {s.price !== undefined ? ` · ₱${s.price}` : ""}
+                                                </p>
                                             </div>
                                             <button
                                                 className="btn btn-ghost btn-xs text-error shrink-0"
@@ -730,28 +752,42 @@ const OnboardingDepartment = () => {
                                     {availableServices
                                         .filter(s => !selectedServiceIds.has(s._id))
                                         .map(service => (
-                                            <div key={service._id} className="flex items-center gap-3 bg-base-100 rounded-lg px-3 py-3 border border-base-300">
-                                                <span className="text-sm flex-1 truncate">{service.name}</span>
-                                                <div className="flex items-center gap-2 shrink-0">
-                                                    <ClockIcon className="size-4 opacity-40" />
+                                            <div key={service._id} className="bg-base-100 rounded-lg px-3 py-3 border border-base-300 space-y-2">
+                                                <p className="text-sm font-medium">{service.name}</p>
+                                                <div className="flex flex-wrap gap-2 items-center">
                                                     <input
                                                         type="text"
                                                         placeholder="min"
+                                                        title="Duration (minutes)"
                                                         className="input input-bordered input-sm w-20 text-center"
                                                         value={durations[service._id] || ""}
-                                                        onChange={e => {
-                                                            const val = e.target.value;
-                                                            if (/^\d*$/.test(val)) setDurations(prev => ({ ...prev, [service._id]: val }));
-                                                        }}
+                                                        onChange={e => { if (/^\d*$/.test(e.target.value)) setDurations(p => ({ ...p, [service._id]: e.target.value })); }}
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="max/day"
+                                                        title="Max patients per day"
+                                                        className="input input-bordered input-sm w-24 text-center"
+                                                        value={maxPatients[service._id] || ""}
+                                                        onChange={e => { if (/^\d*$/.test(e.target.value)) setMaxPatients(p => ({ ...p, [service._id]: e.target.value })); }}
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="₱ price"
+                                                        title="Service price (PHP)"
+                                                        className="input input-bordered input-sm w-24 text-center"
+                                                        value={prices[service._id] || ""}
+                                                        onChange={e => { if (/^\d*\.?\d*$/.test(e.target.value)) setPrices(p => ({ ...p, [service._id]: e.target.value })); }}
                                                     />
                                                     <button
-                                                        className="btn btn-primary btn-sm gap-1"
+                                                        className="btn btn-primary btn-sm gap-1 ml-auto"
                                                         onClick={() => handleAddService(service)}
                                                         disabled={!durations[service._id]}
                                                     >
                                                         <PlusIcon className="size-3" /> Add
                                                     </button>
                                                 </div>
+                                                <p className="text-xs opacity-40">Duration · Max patients/day · Price (₱)</p>
                                             </div>
                                         ))}
                                     {availableServices.filter(s => !selectedServiceIds.has(s._id)).length === 0 && selectedServices.length > 0 && (

@@ -15,7 +15,8 @@ const ViewPendingClaimPopup = ({ claim, onClose, onClaimApproved, onClaimRejecte
 
     if (!claim) return null;
 
-    const isServiceClaim = claim.claimType === "service";
+    // Fall back to field presence for old records that pre-date the claimType field
+    const isServiceClaim = claim.claimType === "service" || Boolean(claim.departmentId);
     const doctorId = claim.doctorId?._id || claim.doctorId;
 
     useEffect(() => {
@@ -87,6 +88,7 @@ const ViewPendingClaimPopup = ({ claim, onClose, onClaimApproved, onClaimRejecte
         ? `${claim.departmentId.technologistFirstName} ${claim.departmentId.technologistLastName || ""}`.trim()
         : claim.departmentId?.email || "Department";
     const deptEmail = claim.departmentId?.email || "";
+    const instituteName = claim.departmentId?.rootInstitute?.instituteName || "";
     const claimerName = isServiceClaim ? deptName : doctorName;
     const claimerEmail = isServiceClaim ? deptEmail : doctorEmail;
 
@@ -116,7 +118,8 @@ const ViewPendingClaimPopup = ({ claim, onClose, onClaimApproved, onClaimRejecte
                     <div className="bg-base-200 rounded-lg p-3 space-y-1">
                         <p className="text-xs font-semibold opacity-50 uppercase tracking-wide">Claimed By</p>
                         <p className="font-semibold">{claimerName}</p>
-                        {claimerEmail && <p className="text-xs opacity-60">{claimerEmail}</p>}
+                        {instituteName && <p className="text-xs opacity-60">{instituteName}</p>}
+                        {claimerEmail && <p className="text-xs opacity-50">{claimerEmail}</p>}
                         {!isServiceClaim && (
                             licenseLoading ? (
                                 <p className="text-xs opacity-50">Loading license…</p>
@@ -124,8 +127,27 @@ const ViewPendingClaimPopup = ({ claim, onClose, onClaimApproved, onClaimRejecte
                                 <p className="text-xs font-mono">License: {licenseNumber}</p>
                             ) : null
                         )}
-                        {isServiceClaim && claim.durationMinutes && (
-                            <p className="text-xs opacity-60">Duration: {claim.durationMinutes} min</p>
+                        {isServiceClaim && (
+                            <div className="space-y-1 mt-2 pt-2 border-t border-base-300">
+                                {claim.durationMinutes && (
+                                    <div className="flex justify-between text-xs">
+                                        <span className="opacity-50">Duration</span>
+                                        <span className="font-medium">{claim.durationMinutes} min</span>
+                                    </div>
+                                )}
+                                {claim.maxPatientsPerDay && (
+                                    <div className="flex justify-between text-xs">
+                                        <span className="opacity-50">Max patients/day</span>
+                                        <span className="font-medium">{claim.maxPatientsPerDay}</span>
+                                    </div>
+                                )}
+                                {claim.price != null && (
+                                    <div className="flex justify-between text-xs">
+                                        <span className="opacity-50">Price</span>
+                                        <span className="font-medium text-primary">₱{Number(claim.price).toLocaleString("en-PH")}</span>
+                                    </div>
+                                )}
+                            </div>
                         )}
                     </div>
 
