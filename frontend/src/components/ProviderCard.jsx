@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { MapPinIcon, StarIcon } from "lucide-react";
 import CreateBookingPopup from "../pages/CreateBookingPopup";
+import CreateDepartmentBookingPopup from "../pages/CreateDepartmentBookingPopup";
 
 const StarRating = ({ value, count }) => {
     if (!value) return null;
@@ -142,7 +143,7 @@ const ProviderCard = ({ provider }) => {
                         </p>
                     )}
 
-                    {isDoctor && (
+                    {(isDoctor || isDepartment) && (
                         <button
                             className="btn btn-primary btn-sm w-full mt-2"
                             onClick={() => setShowBooking(true)}
@@ -164,8 +165,11 @@ const ProviderCard = ({ provider }) => {
                 </div>
             </div>
 
-            {showBooking && (
+            {showBooking && isDoctor && (
                 <CreateBookingPopup provider={provider} onClose={() => setShowBooking(false)} />
+            )}
+            {showBooking && isDepartment && (
+                <CreateDepartmentBookingPopup provider={provider} onClose={() => setShowBooking(false)} />
             )}
         </div>
     );

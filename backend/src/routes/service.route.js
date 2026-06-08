@@ -6,6 +6,7 @@ import {
     claimService,
     getMyDepartmentServices,
     deleteServiceClaim,
+    getDepartmentPublicServices,
 } from "../controllers/service.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
@@ -25,6 +26,7 @@ const claimValidator = [
 
 router.get("/", protectRoute, getDepartmentTypes);
 router.get("/my-services", protectRoute, getMyDepartmentServices);
+router.get("/department/:departmentId", protectRoute, getDepartmentPublicServices);
 router.get("/:departmentTypeId/services", protectRoute, getServicesByDepartmentType);
 router.post("/suggest", protectRoute, suggestValidator, validate, suggestService);
 router.post("/claim", protectRoute, claimValidator, validate, claimService);

@@ -21,6 +21,12 @@ const InstituteDepartmentServiceSchema = new mongoose.Schema(
             type: Number,
             required: true,
         },
+        maxPatientsPerDay: {
+            type: Number,
+        },
+        price: {
+            type: Number,
+        },
         status: {
             type: String,
             enum: ["pending", "verified", "rejected"],

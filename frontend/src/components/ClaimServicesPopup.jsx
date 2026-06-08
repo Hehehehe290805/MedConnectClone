@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { axiosInstance } from "../lib/axios";
 import useAuthUser from "../hooks/useAuthUser";
 import toast from "react-hot-toast";
-import { SearchIcon, ClockIcon } from "lucide-react";
+import { SearchIcon, ClockIcon, UsersIcon, PhilippinePesoIcon } from "lucide-react";
 
 const ClaimServicesPopup = ({ onClose }) => {
     const { authUser } = useAuthUser();
@@ -11,6 +11,8 @@ const ClaimServicesPopup = ({ onClose }) => {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
     const [durations, setDurations] = useState({});
+    const [maxPatients, setMaxPatients] = useState({});
+    const [prices, setPrices] = useState({});
     const [claiming, setClaiming] = useState(null);
 
     useEffect(() => {
@@ -46,14 +48,18 @@ const ClaimServicesPopup = ({ onClose }) => {
 
     const handleClaim = async (serviceId, serviceName) => {
         const duration = parseInt(durations[serviceId]);
-        if (!duration || duration < 1) {
-            return toast.error("Enter a valid duration in minutes.");
-        }
+        if (!duration || duration < 1) return toast.error("Enter a valid duration in minutes.");
+        const max = maxPatients[serviceId] ? parseInt(maxPatients[serviceId]) : undefined;
+        const price = prices[serviceId] ? parseFloat(prices[serviceId]) : undefined;
+        if (max !== undefined && (isNaN(max) || max < 1)) return toast.error("Enter a valid max patients per day.");
+        if (price !== undefined && (isNaN(price) || price < 0)) return toast.error("Enter a valid price.");
         setClaiming(serviceId);
         try {
             await axiosInstance.post("/services/claim", {
                 targetId: serviceId,
                 durationMinutes: duration,
+                ...(max ? { maxPatientsPerDay: max } : {}),
+                ...(price !== undefined ? { price } : {}),
             });
             toast.success(`"${serviceName}" claimed. Waiting for admin approval.`);
             setClaimed(prev => [...prev, { serviceId: { _id: serviceId }, status: "pending" }]);
@@ -103,21 +109,45 @@ const ClaimServicesPopup = ({ onClose }) => {
                         filtered.map(service => (
                             <div
                                 key={service._id}
-                                className="flex items-center gap-3 bg-base-200 rounded-xl px-4 py-3"
+                                className="bg-base-200 rounded-xl px-4 py-3 space-y-2"
                             >
-                                <span className="text-sm font-medium flex-1 truncate">{service.name}</span>
-                                <div className="flex items-center gap-2 shrink-0">
-                                    <ClockIcon className="size-4 opacity-40" />
-                                    <input
-                                        type="text"
-                                        placeholder="min"
-                                        className="input input-bordered input-sm w-20 text-center"
-                                        value={durations[service._id] || ""}
-                                        onChange={e => handleDurationChange(service._id, e.target.value)}
-                                        disabled={claiming === service._id}
-                                    />
+                                <p className="text-sm font-medium">{service.name}</p>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <div className="flex items-center gap-1">
+                                        <ClockIcon className="size-3.5 opacity-40 shrink-0" />
+                                        <input
+                                            type="text"
+                                            placeholder="min"
+                                            className="input input-bordered input-sm w-20 text-center"
+                                            value={durations[service._id] || ""}
+                                            onChange={e => { if (/^\d*$/.test(e.target.value)) setDurations(p => ({ ...p, [service._id]: e.target.value })); }}
+                                            disabled={claiming === service._id}
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <UsersIcon className="size-3.5 opacity-40 shrink-0" />
+                                        <input
+                                            type="text"
+                                            placeholder="max/day"
+                                            className="input input-bordered input-sm w-24 text-center"
+                                            value={maxPatients[service._id] || ""}
+                                            onChange={e => { if (/^\d*$/.test(e.target.value)) setMaxPatients(p => ({ ...p, [service._id]: e.target.value })); }}
+                                            disabled={claiming === service._id}
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <PhilippinePesoIcon className="size-3.5 opacity-40 shrink-0" />
+                                        <input
+                                            type="text"
+                                            placeholder="price"
+                                            className="input input-bordered input-sm w-24 text-center"
+                                            value={prices[service._id] || ""}
+                                            onChange={e => { if (/^\d*\.?\d*$/.test(e.target.value)) setPrices(p => ({ ...p, [service._id]: e.target.value })); }}
+                                            disabled={claiming === service._id}
+                                        />
+                                    </div>
                                     <button
-                                        className="btn btn-primary btn-sm"
+                                        className="btn btn-primary btn-sm ml-auto"
                                         onClick={() => handleClaim(service._id, service.name)}
                                         disabled={claiming === service._id}
                                     >
@@ -126,6 +156,7 @@ const ClaimServicesPopup = ({ onClose }) => {
                                             : "Claim"}
                                     </button>
                                 </div>
+                                <p className="text-xs opacity-40">Duration (min) · Max patients/day · Price (₱)</p>
                             </div>
                         ))
                     )}

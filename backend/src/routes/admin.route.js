@@ -3,7 +3,7 @@ import {
     getPendingUsers, getAdmins, approveRole, rejectRole, approveRoleWithItems,
     getPendingSuggestions, approveSuggestion, rejectSuggestion, editSuggestion,
     getLicenseNumber,
-    getPendingClaims, approveClaim, rejectClaim,
+    getPendingClaims, approveClaim, rejectClaim, getServiceClaims,
     bulkApprove, bulkReject,
     viewAllComplaints, viewComplaintByComplaintId, resolveComplaint,
     getPendingRenewals, approveRenewal, rejectRenewal,
@@ -40,6 +40,7 @@ router.patch("/edit-suggestion", validate, editSuggestion);
 
 // claims
 router.get("/pending-claims", getPendingClaims);
+router.get("/service-claims", getServiceClaims);
 router.patch("/approve-claim", approveClaimValidator, validate, approveClaim);
 router.patch("/reject-claim", validate, rejectClaim);
 

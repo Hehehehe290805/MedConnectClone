@@ -59,9 +59,18 @@ export const getMyDepartmentServices = asyncHandler(async (req, res) => {
     return sendSuccess(res, 200, "Services fetched", { services: claims });
 });
 
+export const getDepartmentPublicServices = asyncHandler(async (req, res) => {
+    const { departmentId } = req.params;
+    if (!departmentId) return sendError(res, 400, "departmentId is required");
+    const claims = await InstituteDepartmentService.find({ departmentId, status: "verified" })
+        .populate("serviceId", "name")
+        .select("serviceId durationMinutes maxPatientsPerDay price");
+    return sendSuccess(res, 200, "Services fetched", { services: claims });
+});
+
 export const claimService = asyncHandler(async (req, res) => {
     const userId = req.user._id;
-    const { targetId, durationMinutes } = req.body;
+    const { targetId, durationMinutes, maxPatientsPerDay, price } = req.body;
 
     if (!durationMinutes) return sendError(res, 400, "durationMinutes is required");
 
@@ -77,11 +86,13 @@ export const claimService = asyncHandler(async (req, res) => {
         serviceId: targetId,
         claimType: "service",
         durationMinutes,
+        ...(maxPatientsPerDay ? { maxPatientsPerDay: parseInt(maxPatientsPerDay) } : {}),
+        ...(price ? { price: parseFloat(price) } : {}),
         status: "pending",
     });
 
     try {
-        notifyAllAdmins("new_account_pending", "New Service Claim",
+        await notifyAllAdmins("new_account_pending", "New Service Claim",
             `A department has submitted a service claim for "${service.name}" — pending review.`);
     } catch { /* non-fatal */ }
 

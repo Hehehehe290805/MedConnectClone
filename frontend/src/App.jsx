@@ -32,6 +32,7 @@ import ConsultationPage from "./pages/ConsultationPage.jsx";
 import UserManagementPage from "./pages/UserManagementPage.jsx";
 import AdminSpecialtiesPage from "./pages/AdminSpecialtiesPage.jsx";
 import AdminReportsPage from "./pages/AdminReportsPage.jsx";
+import AdminServiceClaimsPage from "./pages/AdminServiceClaimsPage.jsx";
 
 // Onboarding & Auth flow
 import OnboardingPage from "./pages/OnboardingPage.jsx";
@@ -197,6 +198,9 @@ const App = () => {
                     } />
                     <Route path="/admin/reports" element={
                         <ProtectedRoute allowedRoles={["admin"]}><AdminReportsPage /></ProtectedRoute>
+                    } />
+                    <Route path="/admin/services" element={
+                        <ProtectedRoute allowedRoles={["admin"]}><AdminServiceClaimsPage /></ProtectedRoute>
                     } />
                 </Route>
 
