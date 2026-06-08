@@ -8,7 +8,10 @@ import { SpecialtyField, SubspecialtyField, suggestSpecialty, suggestSubspecialt
 
 const TOTAL_STEPS = 3;
 
-const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const OnboardingDoctor = ({ email, signupMethod, phoneNumber: signupPhone, role, onBack, onSuccess }) => {
+    const isPhoneSignup = signupMethod === "phone" || !email;
     const queryClient = useQueryClient();
     const [step, setStep] = useState(1);
     const [uploadingFields, setUploadingFields] = useState({});
@@ -21,6 +24,7 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
     const licenseExpirationRef = useRef(null);
 
     const [form, setForm] = useState({
+        email: "",
         profilePic: {},
         firstName: "",
         lastName: "",
@@ -82,7 +86,16 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
         form.birthDate &&
         form.sex;
 
-    const step2Complete =
+    const step2Complete = isPhoneSignup ? (
+        EMAIL_REGEX.test(form.email) &&
+        form.languages.length > 0 &&
+        form.address.buildingNumber.trim() &&
+        form.address.street.trim() &&
+        form.address.barangay.trim() &&
+        form.address.city.trim() &&
+        form.address.province.trim() &&
+        /^\d{4}$/.test(form.address.postalCode)
+    ) : (
         form.languages.length > 0 &&
         phoneVerified &&
         form.phoneNumber.length === 10 &&
@@ -91,7 +104,8 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
         form.address.barangay.trim() &&
         form.address.city.trim() &&
         form.address.province.trim() &&
-        /^\d{4}$/.test(form.address.postalCode);
+        /^\d{4}$/.test(form.address.postalCode)
+    );
 
     const step3Complete =
         form.specialty.length > 0 &&
@@ -165,6 +179,7 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
                     subtitle={step === 1 ? "Tell us about yourself" : step === 2 ? "How can we reach you?" : "Your credentials and specialties"}
                     role={role}
                     email={email}
+                    phoneNumber={signupPhone}
                     onBack={step === 1 ? onBack : () => setStep(step - 1)}
                     isFirstStep={step === 1}
                 />
@@ -252,13 +267,26 @@ const OnboardingDoctor = ({ email, role, onBack, onSuccess }) => {
                         setStep(3);
                     }} className="space-y-4">
                         <LanguagesField value={form.languages} onChange={(val) => update("languages", val)} />
-                        <PhoneField
-                            phoneNumber={form.phoneNumber}
-                            phoneType={form.phoneType}
-                            onNumberChange={(val) => update("phoneNumber", val)}
-                            onTypeChange={(val) => update("phoneType", val)}
-                            onVerified={setPhoneVerified}
-                        />
+                        {isPhoneSignup ? (
+                            <div className="form-control">
+                                <label className="label"><span className="label-text">Email Address <span className="text-error">*</span></span></label>
+                                <input
+                                    type="email"
+                                    className="input input-bordered w-full"
+                                    placeholder="name@example.com"
+                                    value={form.email}
+                                    onChange={(e) => update("email", e.target.value)}
+                                />
+                            </div>
+                        ) : (
+                            <PhoneField
+                                phoneNumber={form.phoneNumber}
+                                phoneType={form.phoneType}
+                                onNumberChange={(val) => update("phoneNumber", val)}
+                                onTypeChange={(val) => update("phoneType", val)}
+                                onVerified={setPhoneVerified}
+                            />
+                        )}
                         <AddressFields value={form.address} onChange={(val) => update("address", val)} errors={{}} cityRef={cityRef} label="Business Address" />
                         <button className="btn btn-primary w-full" type="submit" disabled={!step2Complete}>Next →</button>
                     </form>

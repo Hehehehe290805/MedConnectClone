@@ -4,7 +4,7 @@
 import mongoose from "mongoose";
 import User from "../models/User.js";
 import Admin from "../models/Admin.js";
-import EmailRegistry from "../models/EmailRegistry.js";
+import AccountRegistry from "../models/AccountRegistry.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 
@@ -37,8 +37,8 @@ export const convertToAdmin = asyncHandler(async (req, res) => {
         admin.unmarkModified("password");
         await admin.save({ session });
 
-        await EmailRegistry.findOneAndUpdate(
-            { email: existing.email },
+        await AccountRegistry.findOneAndUpdate(
+            { type: "email", value: existing.email.toLowerCase() },
             { registrantModel: "Admin" },
             { session }
         );

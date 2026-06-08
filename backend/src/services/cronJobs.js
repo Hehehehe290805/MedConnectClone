@@ -8,7 +8,7 @@ import Schedule from "../models/Schedule.js";
 import Pricing from "../models/Pricing.js";
 import DoctorSpecialty from "../models/DoctorSpecialty.js";
 import InstituteDepartmentService from "../models/InstituteDepartmentService.js";
-import EmailRegistry from "../models/EmailRegistry.js";
+import AccountRegistry from "../models/AccountRegistry.js";
 import { logError } from "../utils/logger.js";
 import { deleteFromS3 } from "../services/s3.js";
 import { notify } from "./notification.service.js";
@@ -237,7 +237,7 @@ export function startCronJobs() {
                     try { await deleteFromS3(key); } catch { /* non-fatal */ }
                 }
                 await Promise.all([
-                    EmailRegistry.deleteOne({ email: user.email }),
+                    AccountRegistry.deleteMany({ registrant: user._id }),
                     Schedule.deleteOne({ $or: [{ doctorId: user._id }, { instituteId: user._id }] }),
                     Pricing.deleteMany({ providerId: user._id }),
                     DoctorSpecialty.deleteMany({ doctorId: user._id }),
@@ -288,7 +288,7 @@ export function startCronJobs() {
                 for (const key of s3Keys) await deleteFromS3(key);
 
                 await Promise.all([
-                    EmailRegistry.deleteOne({ email: user.email }),
+                    AccountRegistry.deleteMany({ registrant: user._id }),
                     Schedule.deleteOne({ $or: [{ doctorId: user._id }, { instituteId: user._id }] }),
                     Pricing.deleteMany({ providerId: user._id }),
                     DoctorSpecialty.deleteMany({ doctorId: user._id }),
@@ -301,7 +301,7 @@ export function startCronJobs() {
             for (const admin of adminsToDelete) {
                 // Admin profilePic is in a separate collection — delete S3 object here
                 if (admin.profilePic?.key) await deleteFromS3(admin.profilePic.key);
-                await EmailRegistry.deleteOne({ email: admin.email });
+                await AccountRegistry.deleteMany({ registrant: admin._id });
                 await Admin.findByIdAndDelete(admin._id);
             }
 

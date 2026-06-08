@@ -43,8 +43,11 @@ const LoginPage = () => {
   const { mutate: doUserLogin, isPending: isUserLogging } = useMutation({
     mutationFn: login,
     onSuccess: (data) => {
-      if (data?.data?.requires2FA) setStep("twoFactor");
-      else invalidate();
+      if (data?.data?.requires2FA) {
+        setStep("twoFactor");
+        if (data.data.channel) setTwoFAChannel(data.data.channel);
+        if (data.data.mockCode) setTwoFAMockCode(data.data.mockCode);
+      } else invalidate();
     },
     onError: (err) => {
       if (err?.response?.status === 429) { setStep("locked"); setFormError(""); return; }

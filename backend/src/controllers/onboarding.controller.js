@@ -1,8 +1,7 @@
 import mongoose from "mongoose";
 import User, { Patient, Doctor, Pharmacy, Institute, Department } from "../models/User.js";
 import Admin from "../models/Admin.js";
-import EmailRegistry from "../models/EmailRegistry.js";
-import PhoneRegistry from "../models/PhoneRegistry.js";
+import AccountRegistry from "../models/AccountRegistry.js";
 import DepartmentType from "../models/DepartmentType.js";
 import InstituteDepartmentService from "../models/InstituteDepartmentService.js";
 import { upsertStreamUser } from "../lib/stream.js";
@@ -17,9 +16,9 @@ async function checkAndRegisterPhone(phone, userId, session, registrantModel = "
     if (!normalized) return;
 
     try {
-        const result = await PhoneRegistry.findOneAndUpdate(
-            { phone: normalized },
-            { $setOnInsert: { phone: normalized, registrant: userId, registrantModel } },
+        const result = await AccountRegistry.findOneAndUpdate(
+            { type: "phone", value: normalized },
+            { $setOnInsert: { type: "phone", value: normalized, registrant: userId, registrantModel } },
             { upsert: true, new: true, returnDocument: "after", session }
         ).lean();
 
@@ -28,7 +27,7 @@ async function checkAndRegisterPhone(phone, userId, session, registrantModel = "
         }
     } catch (err) {
         if (err.code === 11000) {
-            const existing = await PhoneRegistry.findOne({ phone: normalized }).lean();
+            const existing = await AccountRegistry.findOne({ type: "phone", value: normalized }).lean();
             if (existing && existing.registrant.toString() !== userId.toString()) {
                 throw Object.assign(new Error("Phone number is already in use by another account."), { status: 400 });
             }
@@ -41,7 +40,7 @@ async function checkAndRegisterPhone(phone, userId, session, registrantModel = "
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
 // Promotes a base User doc to a discriminator model by deleting and recreating
-// with the same _id. EmailRegistry is untouched — ref stays valid.
+// with the same _id. AccountRegistry email entry is upserted to stay consistent.
 async function promoteUser(userId, TargetModel, fields, session, registrantModel = "User") {
     await User.deleteOne({ _id: userId }, { session });
 
@@ -52,11 +51,14 @@ async function promoteUser(userId, TargetModel, fields, session, registrantModel
 
     await doc.save({ session });
 
-    await EmailRegistry.findOneAndUpdate(
-        { email: fields.email },
-        { registrantModel },
-        { session }
-    );
+    // Upsert email entry: update if exists (email-signup), create if new (phone-signup setting email for first time)
+    if (fields.email) {
+        await AccountRegistry.findOneAndUpdate(
+            { type: "email", value: fields.email.toLowerCase() },
+            { registrant: userId, registrantModel },
+            { upsert: true, session }
+        );
+    }
     return doc;
 }
 
@@ -78,7 +80,7 @@ const streamUpsert = async (user) => {
 
 export const onboardAsPatient = asyncHandler(async (req, res) => {
     const userId = req.user._id;
-    const existing = await User.findById(userId).select("status role email password");
+    const existing = await User.findById(userId).select("status role email password signupMethod phoneNumber phoneType phoneVerified emailVerified twoFactorEnabled emailNotificationsEnabled");
     if (!existing) return sendError(res, 404, "User not found");
     if (existing.status !== "notOnBoarded") return sendError(res, 400, "User is already onboarded or pending");
     if (existing.role !== "user") return sendError(res, 400, "Account has already been assigned a role");
@@ -88,17 +90,32 @@ export const onboardAsPatient = asyncHandler(async (req, res) => {
         profilePic, languages, address, phoneNumber, phoneType,
     } = req.body;
 
+    const isPhoneSignup = existing.signupMethod === "phone";
+    const onboardingEmail = existing.email || req.body.email?.toLowerCase();
+    if (!onboardingEmail) return sendError(res, 400, "Email is required");
+    if (!existing.email && req.body.email) {
+        const taken = await AccountRegistry.findOne({ type: "email", value: onboardingEmail });
+        if (taken) return sendError(res, 400, "Email already in use by another account");
+    }
+
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-        await checkAndRegisterPhone(phoneNumber, userId, session);
+        if (!isPhoneSignup) await checkAndRegisterPhone(phoneNumber, userId, session);
 
         const promoted = await promoteUser(userId, Patient, {
-            email: existing.email,
+            email: onboardingEmail,
             password: existing.password,
             role: "patient",
             status: "onBoarded",
+            signupMethod: existing.signupMethod || "email",
+            phoneNumber: isPhoneSignup ? existing.phoneNumber : phoneNumber,
+            phoneType: isPhoneSignup ? existing.phoneType : phoneType,
+            phoneVerified: existing.phoneVerified || false,
+            emailVerified: isPhoneSignup ? !!req.body.email : (existing.emailVerified ?? false),
+            twoFactorEnabled: existing.twoFactorEnabled || false,
+            emailNotificationsEnabled: existing.emailNotificationsEnabled ?? true,
             firstName,
             lastName,
             birthDate,
@@ -107,8 +124,6 @@ export const onboardAsPatient = asyncHandler(async (req, res) => {
             profilePic,
             languages,
             address,
-            phoneNumber,
-            phoneType,
         }, session);
 
         await session.commitTransaction();
@@ -126,7 +141,7 @@ export const onboardAsPatient = asyncHandler(async (req, res) => {
 
 export const onboardAsDoctor = asyncHandler(async (req, res) => {
     const userId = req.user._id;
-    const existing = await User.findById(userId).select("status role email password");
+    const existing = await User.findById(userId).select("status role email password signupMethod phoneNumber phoneType phoneVerified emailVerified twoFactorEnabled emailNotificationsEnabled");
     if (!existing) return sendError(res, 404, "User not found");
     if (existing.status !== "notOnBoarded") return sendError(res, 400, "User is already onboarded or pending");
     if (existing.role !== "user") return sendError(res, 400, "Account has already been assigned a role");
@@ -138,17 +153,32 @@ export const onboardAsDoctor = asyncHandler(async (req, res) => {
         licenseNumber, licenseExpiration, licenseImage, legalIDImage,
     } = req.body;
 
+    const isPhoneSignup = existing.signupMethod === "phone";
+    const onboardingEmail = existing.email || req.body.email?.toLowerCase();
+    if (!onboardingEmail) return sendError(res, 400, "Email is required");
+    if (!existing.email && req.body.email) {
+        const taken = await AccountRegistry.findOne({ type: "email", value: onboardingEmail });
+        if (taken) return sendError(res, 400, "Email already in use by another account");
+    }
+
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-        await checkAndRegisterPhone(phoneNumber, userId, session);
+        if (!isPhoneSignup) await checkAndRegisterPhone(phoneNumber, userId, session);
 
         const promoted = await promoteUser(userId, Doctor, {
-            email: existing.email,
+            email: onboardingEmail,
             password: existing.password,
             role: "doctor",
             status: "pending",
+            signupMethod: existing.signupMethod || "email",
+            phoneNumber: isPhoneSignup ? existing.phoneNumber : phoneNumber,
+            phoneType: isPhoneSignup ? existing.phoneType : phoneType,
+            phoneVerified: existing.phoneVerified || false,
+            emailVerified: isPhoneSignup ? !!req.body.email : (existing.emailVerified ?? false),
+            twoFactorEnabled: existing.twoFactorEnabled || false,
+            emailNotificationsEnabled: existing.emailNotificationsEnabled ?? true,
             firstName,
             lastName,
             birthDate,
@@ -157,8 +187,6 @@ export const onboardAsDoctor = asyncHandler(async (req, res) => {
             profilePic,
             languages,
             address,
-            phoneNumber,
-            phoneType,
             specialty,
             subSpecialty,
             licenseNumber,
@@ -187,7 +215,7 @@ export const onboardAsDoctor = asyncHandler(async (req, res) => {
 
 export const onboardAsPharmacy = asyncHandler(async (req, res) => {
     const userId = req.user._id;
-    const existing = await User.findById(userId).select("status role email password");
+    const existing = await User.findById(userId).select("status role email password signupMethod phoneNumber phoneType phoneVerified emailVerified twoFactorEnabled emailNotificationsEnabled");
     if (!existing) return sendError(res, 404, "User not found");
     if (existing.status !== "notOnBoarded") return sendError(res, 400, "User is already onboarded or pending");
     if (existing.role !== "user") return sendError(res, 400, "Account has already been assigned a role");
@@ -200,17 +228,32 @@ export const onboardAsPharmacy = asyncHandler(async (req, res) => {
         pharmacistLicenseImage, pharmacistLegalIDImage,
     } = req.body;
 
+    const isPhoneSignup = existing.signupMethod === "phone";
+    const onboardingEmail = existing.email || req.body.email?.toLowerCase();
+    if (!onboardingEmail) return sendError(res, 400, "Email is required");
+    if (!existing.email && req.body.email) {
+        const taken = await AccountRegistry.findOne({ type: "email", value: onboardingEmail });
+        if (taken) return sendError(res, 400, "Email already in use by another account");
+    }
+
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-        await checkAndRegisterPhone(phoneNumber, userId, session);
+        if (!isPhoneSignup) await checkAndRegisterPhone(phoneNumber, userId, session);
 
         const promoted = await promoteUser(userId, Pharmacy, {
-            email: existing.email,
+            email: onboardingEmail,
             password: existing.password,
             role: "pharmacy",
             status: "pending",
+            signupMethod: existing.signupMethod || "email",
+            phoneNumber: isPhoneSignup ? existing.phoneNumber : phoneNumber,
+            phoneType: isPhoneSignup ? existing.phoneType : phoneType,
+            phoneVerified: existing.phoneVerified || false,
+            emailVerified: isPhoneSignup ? !!req.body.email : (existing.emailVerified ?? false),
+            twoFactorEnabled: existing.twoFactorEnabled || false,
+            emailNotificationsEnabled: existing.emailNotificationsEnabled ?? true,
             pharmacyName,
             pharmacistFirstName,
             pharmacistLastName,
@@ -219,8 +262,6 @@ export const onboardAsPharmacy = asyncHandler(async (req, res) => {
             bio,
             profilePic,
             address,
-            phoneNumber,
-            phoneType,
             businessPermit,
             businessPermitExpiration,
             fdaLicense,
@@ -251,7 +292,7 @@ export const onboardAsPharmacy = asyncHandler(async (req, res) => {
 
 export const onboardAsInstitute = asyncHandler(async (req, res) => {
     const userId = req.user._id;
-    const existing = await User.findById(userId).select("status role email password");
+    const existing = await User.findById(userId).select("status role email password signupMethod phoneNumber phoneType phoneVerified emailVerified twoFactorEnabled emailNotificationsEnabled");
     if (!existing) return sendError(res, 404, "User not found");
     if (existing.status !== "notOnBoarded") return sendError(res, 400, "User is already onboarded or pending");
     if (existing.role !== "user") return sendError(res, 400, "Account has already been assigned a role");
@@ -272,25 +313,38 @@ export const onboardAsInstitute = asyncHandler(async (req, res) => {
         if (!constructionPermitExpiration) return sendError(res, 400, "Construction permit expiration is required for hospitals");
     }
 
+    const isPhoneSignup = existing.signupMethod === "phone";
+    const onboardingEmail = existing.email || req.body.email?.toLowerCase();
+    if (!onboardingEmail) return sendError(res, 400, "Email is required");
+    if (!existing.email && req.body.email) {
+        const taken = await AccountRegistry.findOne({ type: "email", value: onboardingEmail });
+        if (taken) return sendError(res, 400, "Email already in use by another account");
+    }
+
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-        await checkAndRegisterPhone(phoneNumber, userId, session);
+        if (!isPhoneSignup) await checkAndRegisterPhone(phoneNumber, userId, session);
 
         const promoted = await promoteUser(userId, Institute, {
-            email: existing.email,
+            email: onboardingEmail,
             password: existing.password,
             role: "institute",
             status: "pending",
+            signupMethod: existing.signupMethod || "email",
+            phoneNumber: isPhoneSignup ? existing.phoneNumber : phoneNumber,
+            phoneType: isPhoneSignup ? existing.phoneType : phoneType,
+            phoneVerified: existing.phoneVerified || false,
+            emailVerified: isPhoneSignup ? !!req.body.email : (existing.emailVerified ?? false),
+            twoFactorEnabled: existing.twoFactorEnabled || false,
+            emailNotificationsEnabled: existing.emailNotificationsEnabled ?? true,
             instituteName,
             instituteType,
             bio,
             profilePic,
             contactFirstName,
             contactLastName,
-            phoneNumber,
-            phoneType,
             address,
             departments,
             businessPermit,
@@ -365,7 +419,7 @@ export const onboardAsDepartment = asyncHandler(async (req, res) => {
         if (!hasDeptType) return sendError(res, 400, "Department type is not in this institute's registered departments");
     }
 
-    const existingEmail = await EmailRegistry.findOne({ email: deptEmail });
+    const existingEmail = await AccountRegistry.findOne({ type: "email", value: deptEmail?.toLowerCase() });
     if (existingEmail) return sendError(res, 400, "Email already registered");
 
     const deptType = await DepartmentType.findById(finalDeptTypeId);
@@ -379,13 +433,13 @@ export const onboardAsDepartment = asyncHandler(async (req, res) => {
     session.startTransaction();
 
     try {
-        await checkAndRegisterPhone(phoneNumber, instituteUser._id, session);
-
         const deptUser = new Department({
             email: deptEmail,
             password: deptPassword,
             role: "department",
             status: "onBoarded",
+            signupMethod: "email",
+            emailVerified: true,
             rootInstitute: instituteUser._id,
             departmentType: finalDeptTypeId,
             departmentId,
@@ -404,6 +458,7 @@ export const onboardAsDepartment = asyncHandler(async (req, res) => {
             technologistLegalIDImage,
         });
         await deptUser.save({ session });
+        await checkAndRegisterPhone(phoneNumber, deptUser._id, session);
 
         // Create initial service claims if provided
         let claimedServiceCount = 0;
@@ -423,8 +478,9 @@ export const onboardAsDepartment = asyncHandler(async (req, res) => {
             }
         }
 
-        await EmailRegistry.create([{
-            email: deptEmail,
+        await AccountRegistry.create([{
+            type: "email",
+            value: deptEmail.toLowerCase(),
             registrant: deptUser._id,
             registrantModel: "User",
         }], { session });
@@ -525,8 +581,8 @@ export const deleteDepartmentAccount = asyncHandler(async (req, res) => {
         try { await deleteFromS3(key); } catch {}
     }
 
-    // Remove from EmailRegistry
-    await EmailRegistry.deleteOne({ email: dept.email });
+    // Remove all account registry entries for this department
+    await AccountRegistry.deleteMany({ registrant: dept._id });
 
     // Delete the department user
     await User.deleteOne({ _id: deptId });

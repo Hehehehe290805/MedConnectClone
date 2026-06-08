@@ -530,6 +530,35 @@ const SettingsPage = () => {
           </div>
         )}
 
+        {/* Email Status (shown for phone-signup users so they can see their verified email) */}
+        {!isAdmin && authUser?.signupMethod === "phone" && (
+          <div className="card bg-base-200 shadow-xl">
+            <div className="card-body">
+              <h2 className="card-title text-xl"><MailIcon className="w-5 h-5" />Email Address</h2>
+              <p className="text-sm opacity-70 mt-1">
+                Your email was set during onboarding and can be used for login and 2FA.
+              </p>
+              <div className="flex items-center gap-3 mt-3">
+                {authUser?.email && authUser?.emailVerified ? (
+                  <span className="flex items-center gap-1.5 text-success text-sm font-medium">
+                    <CheckCircleIcon className="size-4" />
+                    {authUser.email} — Verified
+                  </span>
+                ) : authUser?.email ? (
+                  <span className="text-sm opacity-60">{authUser.email} — Not verified</span>
+                ) : (
+                  <span className="text-sm opacity-60">No email on file — complete onboarding to add one</span>
+                )}
+                {authUser?.email && (
+                  <button className="btn btn-outline btn-sm" onClick={() => { setCredMode("email"); setShowCredModal(true); }}>
+                    Change Email
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Edit Profile */}
         {canEditBio && (
           <div className="card bg-base-200 shadow-xl">

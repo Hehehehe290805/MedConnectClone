@@ -4,13 +4,21 @@ import { useSignUpStore } from "../store/useSignUpStore";
 
 const useSignUp = () => {
   const queryClient = useQueryClient();
-  const { setEmail, setStep } = useSignUpStore();
+  const { setEmail, setStep, setSignupMethod, setMockCode } = useSignUpStore();
 
-  // step 1 — send verification code
+  // step 1 — send verification code (email or phone)
   const { mutate: signupMutation, isPending: isSigningUp } = useMutation({
     mutationFn: signup,
-    onSuccess: (_, variables) => {
-      setEmail(variables.email);
+    onSuccess: (data, variables) => {
+      if (variables.phone) {
+        setEmail(variables.phone);
+        setSignupMethod("phone");
+        setMockCode(data?.data?.mockCode ?? null);
+      } else {
+        setEmail(variables.email);
+        setSignupMethod("email");
+        setMockCode(null);
+      }
       setStep("verify");
     },
   });

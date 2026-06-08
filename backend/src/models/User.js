@@ -36,8 +36,6 @@ const addressSchema = new mongoose.Schema({
 const baseUserSchema = new mongoose.Schema({
   email: {
     type: String,
-    required: true,
-    unique: true,
     lowercase: true,
     trim: true,
   },
@@ -79,6 +77,8 @@ const baseUserSchema = new mongoose.Schema({
   resetPasswordCodeExpiry: { type: Date, default: null },
   twoFactorEnabled: { type: Boolean, default: false },
   phoneVerified: { type: Boolean, default: false },
+  emailVerified: { type: Boolean, default: false },
+  signupMethod: { type: String, enum: ["email", "phone"], default: "email" },
   emailNotificationsEnabled: { type: Boolean, default: true },
   loginAttempts: { type: Number, default: 0 },
   loginLockedAt: { type: Date, default: null },
@@ -97,6 +97,12 @@ const baseUserSchema = new mongoose.Schema({
     },
   },
 }, { timestamps: true, discriminatorKey: "__t" });
+
+// Sparse unique index: allows multiple documents with no email (phone-signup users),
+// while still enforcing uniqueness among documents that DO have an email.
+// NOTE: the old non-sparse unique index on email must be dropped in MongoDB before
+// this takes effect. Run: db.users.dropIndex("email_1") in Atlas/Compass.
+baseUserSchema.index({ email: 1 }, { unique: true, sparse: true });
 
 baseUserSchema.pre("save", async function (next) {
   if (this.isModified("password")) {

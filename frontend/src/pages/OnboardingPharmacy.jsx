@@ -35,7 +35,10 @@ const ExpirationField = ({ label, field, inputRef, form, update, minExpiration, 
   </div>
 );
 
-const OnboardingPharmacy = ({ email, role, onBack, onSuccess }) => {
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const OnboardingPharmacy = ({ email, signupMethod, phoneNumber: signupPhone, role, onBack, onSuccess }) => {
+  const isPhoneSignup = signupMethod === "phone" || !email;
   const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
   const [uploadingFields, setUploadingFields] = useState({});
@@ -50,6 +53,7 @@ const OnboardingPharmacy = ({ email, role, onBack, onSuccess }) => {
   const pharmacistLicenseExpirationRef = useRef(null);
 
   const [form, setForm] = useState({
+    email: "",
     pharmacyName: "", pharmacistFirstName: "", pharmacistLastName: "",
     birthDate: "", sex: "", bio: "",
     profilePic: {}, phoneNumber: "", phoneType: "mobile",
@@ -89,7 +93,15 @@ const OnboardingPharmacy = ({ email, role, onBack, onSuccess }) => {
     form.birthDate &&
     form.sex;
 
-  const step2Complete =
+  const step2Complete = isPhoneSignup ? (
+    EMAIL_REGEX.test(form.email) &&
+    form.address.buildingNumber?.trim() &&
+    form.address.street?.trim() &&
+    form.address.barangay?.trim() &&
+    form.address.city?.trim() &&
+    form.address.province?.trim() &&
+    /^\d{4}$/.test(form.address.postalCode)
+  ) : (
     phoneVerified &&
     form.phoneNumber.length === 10 &&
     form.address.buildingNumber.trim() &&
@@ -97,7 +109,8 @@ const OnboardingPharmacy = ({ email, role, onBack, onSuccess }) => {
     form.address.barangay.trim() &&
     form.address.city.trim() &&
     form.address.province.trim() &&
-    /^\d{4}$/.test(form.address.postalCode);
+    /^\d{4}$/.test(form.address.postalCode)
+  );
 
   const step3Complete =
     (form.businessPermit.file || form.businessPermit.key) &&
@@ -138,7 +151,7 @@ const OnboardingPharmacy = ({ email, role, onBack, onSuccess }) => {
         <StepHeader
           title={step === 1 ? "Pharmacy Information" : step === 2 ? "Contact & Location" : "Permits & Licenses"}
           subtitle={step === 1 ? "Tell us about your pharmacy" : step === 2 ? "Where is your pharmacy located?" : "Upload required documents"}
-          role={role} email={email}
+          role={role} email={email} phoneNumber={signupPhone}
           onBack={step === 1 ? onBack : () => setStep(step - 1)}
           isFirstStep={step === 1}
         />
@@ -209,7 +222,20 @@ const OnboardingPharmacy = ({ email, role, onBack, onSuccess }) => {
             setForm(finalForm);
             setStep(3);
           }} className="space-y-4">
-            <PhoneField phoneNumber={form.phoneNumber} phoneType={form.phoneType} onNumberChange={(val) => update("phoneNumber", val)} onTypeChange={(val) => update("phoneType", val)} onVerified={setPhoneVerified} />
+            {isPhoneSignup ? (
+              <div className="form-control">
+                <label className="label"><span className="label-text">Email Address <span className="text-error">*</span></span></label>
+                <input
+                  type="email"
+                  className="input input-bordered w-full"
+                  placeholder="name@example.com"
+                  value={form.email}
+                  onChange={(e) => update("email", e.target.value)}
+                />
+              </div>
+            ) : (
+              <PhoneField phoneNumber={form.phoneNumber} phoneType={form.phoneType} onNumberChange={(val) => update("phoneNumber", val)} onTypeChange={(val) => update("phoneType", val)} onVerified={setPhoneVerified} />
+            )}
             <AddressFields value={form.address} onChange={(val) => update("address", val)} errors={{}} cityRef={cityRef} label="Business Address" />
             <button className="btn btn-primary w-full" type="submit" disabled={!step2Complete}>Next →</button>
           </form>

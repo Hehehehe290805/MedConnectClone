@@ -21,7 +21,7 @@ export const StepProgress = ({ currentStep, totalSteps }) => (
 );
 
 // --- STEP HEADER ---
-export const StepHeader = ({ title, subtitle, role, email, onBack, isFirstStep }) => (
+export const StepHeader = ({ title, subtitle, role, email, phoneNumber, onBack, isFirstStep }) => (
     <div className="mb-6">
         <div className="flex items-center gap-3 mb-4">
             <button
@@ -42,10 +42,12 @@ export const StepHeader = ({ title, subtitle, role, email, onBack, isFirstStep }
         {subtitle && <p className="text-sm opacity-70 mt-1">{subtitle}</p>}
         <div className="mt-3 flex gap-4">
             <div className="form-control flex-1">
-                <label className="label py-0"><span className="label-text text-xs">Email</span></label>
+                <label className="label py-0">
+                    <span className="label-text text-xs">{email ? "Email" : "Phone"}</span>
+                </label>
                 <input
-                    type="email"
-                    value={email || ""}
+                    type="text"
+                    value={email || phoneNumber || ""}
                     readOnly
                     disabled
                     className="input input-bordered input-sm bg-base-200 cursor-not-allowed opacity-60"
