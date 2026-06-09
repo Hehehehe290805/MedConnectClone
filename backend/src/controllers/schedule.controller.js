@@ -205,6 +205,8 @@ export const getDepartmentAvailability = asyncHandler(async (req, res) => {
 
     const startHourNum = Number(schedule.startHour.split(":")[0]);
     const startMinNum = Number(schedule.startHour.split(":")[1]);
+    const endHourNum = Number(schedule.endHour.split(":")[0]);
+    const endMinNum = Number(schedule.endHour.split(":")[1]);
 
     const availableDates = [];
 
@@ -229,9 +231,14 @@ export const getDepartmentAvailability = asyncHandler(async (req, res) => {
 
         const nextQueueNumber = bookingsCount + 1;
         const estimatedMinutes = startHourNum * 60 + startMinNum + bookingsCount * durationMinutes;
-        const estimatedHour = Math.floor(estimatedMinutes / 60) % 24;
+        const estimatedHour = Math.floor(estimatedMinutes / 60);
         const estimatedMin = estimatedMinutes % 60;
         const estimatedStartDt = day.hour(estimatedHour).minute(estimatedMin).second(0);
+
+        // Skip this date if the estimated booking would run past the schedule's end hour
+        const scheduleEndDt = day.hour(endHourNum).minute(endMinNum).second(0);
+        const estimatedEndDt = estimatedStartDt.add(durationMinutes, "minute");
+        if (estimatedEndDt.isAfter(scheduleEndDt)) continue;
 
         availableDates.push({
             date: dateStr,
