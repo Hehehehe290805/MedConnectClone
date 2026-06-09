@@ -61,7 +61,7 @@ import {
   requestPasswordUpdate, verifyPasswordUpdate,
   requestPermitRenewal, getMyRenewals,
   toggle2FA, toggleEmailNotifications,
-  requestPhoneVerify, confirmPhoneVerify,
+  requestPhoneVerify, confirmPhoneVerify, requestPhoneChange,
 } from "../lib/api.js";
 import { uploadFile } from "../lib/api.js";
 import useLogout from "../hooks/useLogout.js";
@@ -277,9 +277,9 @@ const SettingsPage = () => {
   const removeLanguage = (lang) => setEditLanguages(prev => prev.filter(l => l !== lang));
 
   // ── credentials: state machine ──────────────────────────────────────────
-  const [credMode, setCredMode] = useState("password"); // "email" | "password"
+  const [credMode, setCredMode] = useState("password"); // "email" | "password" | "phone"
   const [credStep, setCredStep] = useState("form");     // "form" | "otp1" | "otp2"
-  const [credForm, setCredForm] = useState({ currentPassword: "", newEmail: "", newPassword: "", confirmPassword: "", adminCode: "" });
+  const [credForm, setCredForm] = useState({ currentPassword: "", newEmail: "", newPassword: "", confirmPassword: "", adminCode: "", newPhone: "", newPhoneType: "mobile" });
   const [credError, setCredError] = useState("");
   const [otp1, setOtp1] = useState(["","","","","",""]);
   const [otp1Invalid, setOtp1Invalid] = useState(false);
@@ -299,7 +299,7 @@ const SettingsPage = () => {
 
   const resetCred = () => {
     setCredStep("form");
-    setCredForm({ currentPassword: "", newEmail: "", newPassword: "", confirmPassword: "", adminCode: "" });
+    setCredForm({ currentPassword: "", newEmail: "", newPassword: "", confirmPassword: "", adminCode: "", newPhone: "", newPhoneType: "mobile" });
     setCredError("");
     setOtp1(["","","","","",""]); setOtp1Invalid(false); setOtp1Error("");
     setOtp2(["","","","","",""]); setOtp2Invalid(false); setOtp2Error("");
@@ -326,6 +326,23 @@ const SettingsPage = () => {
     onSuccess: () => { setCredStep("otp1"); setCredError(""); setResendCooldown(60); },
     onError: (err) => setCredError(err?.response?.data?.message || "Failed to send code."),
   });
+  const [phoneChangeMockCode, setPhoneChangeMockCode] = useState(null);
+  const { mutate: requestPhone, isPending: isRequestingPhoneChange } = useMutation({
+    mutationFn: requestPhoneChange,
+    onSuccess: (data) => { setPhoneChangeMockCode(data?.data?.mockCode || null); setCredStep("otp1"); setCredError(""); },
+    onError: (err) => setCredError(err?.response?.data?.message || "Failed to send code."),
+  });
+  const { mutate: confirmPhone, isPending: isConfirmingPhoneChange } = useMutation({
+    mutationFn: (data) => confirmPhoneVerify(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["authUser"] });
+      toast.success("Phone number updated and verified.");
+      setShowCredModal(false);
+      resetCred();
+      setPhoneChangeMockCode(null);
+    },
+    onError: (err) => { setOtp1Invalid(true); setOtp1Error(err?.response?.data?.message || "Incorrect code."); setOtp1(["","","","","",""]); },
+  });
   const { mutate: verifyPw, isPending: isVerifyingPw } = useMutation({
     mutationFn: verifyPasswordUpdate,
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["authUser"] }); toast.success("Password updated. Please log in again."); navigate("/login"); },
@@ -337,6 +354,10 @@ const SettingsPage = () => {
     setCredError("");
     if (credMode === "email") {
       requestEmail({ currentEmail: authUser?.email, currentPassword: credForm.currentPassword, newEmail: credForm.newEmail, ...(isAdmin && { adminCode: credForm.adminCode }) });
+    } else if (credMode === "phone") {
+      const digits = credForm.newPhone.replace(/\D/g, "");
+      if (digits.length !== 10) { setCredError("Enter a valid 10-digit mobile number."); return; }
+      requestPhone({ currentPassword: credForm.currentPassword, phoneNumber: "0" + digits, phoneType: credForm.newPhoneType });
     } else {
       const msg = getPasswordValidity(credForm.newPassword);
       if (msg) { newPasswordRef.current?.setCustomValidity(msg); newPasswordRef.current?.reportValidity(); return; }
@@ -350,6 +371,7 @@ const SettingsPage = () => {
     const code = otp1.join("");
     if (code.length !== 6) return;
     if (credMode === "email") verifyCurrentEmail({ code });
+    else if (credMode === "phone") confirmPhone({ code });
     else verifyPw({ code });
   };
 
@@ -366,7 +388,7 @@ const SettingsPage = () => {
     else requestPw({ currentEmail: authUser?.email, currentPassword: credForm.currentPassword, newPassword: credForm.newPassword, confirmPassword: credForm.confirmPassword, ...(isAdmin && { adminCode: credForm.adminCode }) });
   };
 
-  const isCredPending = isRequestingEmail || isVerifying1 || isVerifying2 || isRequestingPw || isVerifyingPw;
+  const isCredPending = isRequestingEmail || isVerifying1 || isVerifying2 || isRequestingPw || isVerifyingPw || isRequestingPhoneChange || isConfirmingPhoneChange;
 
   // ── credentials modal ───────────────────────────────────────────────────
   const [showCredModal, setShowCredModal] = useState(false);
@@ -503,32 +525,6 @@ const SettingsPage = () => {
           </div>
         </div>
 
-        {/* Phone Number Verification (non-admin only) */}
-        {!isAdmin && (
-          <div className="card bg-base-200 shadow-xl">
-            <div className="card-body">
-              <h2 className="card-title text-xl"><SmartphoneIcon className="w-5 h-5" />Phone Number</h2>
-              <p className="text-sm opacity-70 mt-1">
-                Verify a phone number to enable login with phone or email, and as a 2FA fallback channel.
-              </p>
-              <div className="flex items-center gap-3 mt-3">
-                {authUser?.phoneVerified ? (
-                  <span className="flex items-center gap-1.5 text-success text-sm font-medium">
-                    <CheckCircleIcon className="size-4" />
-                    {authUser.phoneNumber} — Verified
-                  </span>
-                ) : authUser?.phoneNumber ? (
-                  <span className="text-sm opacity-60">{authUser.phoneNumber} — Not verified</span>
-                ) : (
-                  <span className="text-sm opacity-60">No phone number on file</span>
-                )}
-                <button className="btn btn-primary btn-sm" onClick={openPhoneModal}>
-                  {authUser?.phoneVerified ? "Update Phone" : "Verify Phone"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Edit Profile */}
         {canEditBio && (
@@ -564,11 +560,16 @@ const SettingsPage = () => {
           <div className="card bg-base-200 shadow-xl">
             <div className="card-body">
               <h2 className="card-title text-xl"><KeyRoundIcon className="w-5 h-5" />Update Account Credentials</h2>
-              <p className="text-sm opacity-70 mt-1">Change your email address or password. Limited to once per month.</p>
-              <div className="mt-4">
+              <p className="text-sm opacity-70 mt-1">Change your email address, phone number, or password. Limited to once per month.</p>
+              <div className="mt-4 flex flex-wrap gap-2">
                 <button className="btn btn-primary btn-sm" onClick={() => setShowCredModal(true)}>
                   Update Credentials
                 </button>
+                {!authUser?.phoneVerified && (
+                  <button className="btn btn-outline btn-sm" onClick={openPhoneModal}>
+                    {authUser?.phoneNumber ? "Verify Phone" : "Add & Verify Phone"}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -789,7 +790,7 @@ const SettingsPage = () => {
         <div className="modal modal-open">
           <div className="modal-box max-w-md">
             <button
-              onClick={() => { setShowCredModal(false); resetCred(); }}
+              onClick={() => { setShowCredModal(false); resetCred(); setPhoneChangeMockCode(null); }}
               className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
             >
               <XIcon className="w-4 h-4" />
@@ -799,11 +800,11 @@ const SettingsPage = () => {
 
             {credStep === "form" && (
               <form onSubmit={handleCredSubmit} className="space-y-4">
-                <div className="flex gap-4">
-                  {["password", "email"].map((m) => (
+                <div className="flex flex-wrap gap-4">
+                  {["password", "email", "phone"].map((m) => (
                     <label key={m} className="flex items-center gap-2 cursor-pointer">
                       <input type="radio" className="radio radio-primary radio-sm" checked={credMode === m} onChange={() => { setCredMode(m); setCredError(""); }} />
-                      <span className="text-sm capitalize">Change {m}</span>
+                      <span className="text-sm capitalize">Change {m === "phone" ? "Phone Number" : m}</span>
                     </label>
                   ))}
                 </div>
@@ -815,6 +816,29 @@ const SettingsPage = () => {
                   <div className="form-control">
                     <label className="label"><span className="label-text">New Email</span></label>
                     <input type="email" className="input input-bordered w-full" placeholder="new@email.com" value={credForm.newEmail} required onChange={(e) => setCredForm(p => ({ ...p, newEmail: e.target.value }))} />
+                  </div>
+                ) : credMode === "phone" ? (
+                  <div className="form-control">
+                    <label className="label"><span className="label-text">New Phone Number</span></label>
+                    <div className="flex gap-2">
+                      <select className="select select-bordered w-32 flex-shrink-0" value={credForm.newPhoneType} onChange={(e) => setCredForm(p => ({ ...p, newPhoneType: e.target.value }))}>
+                        <option value="mobile">Mobile</option>
+                        <option value="telephone">Telephone</option>
+                      </select>
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm opacity-60 pointer-events-none">+63</span>
+                        <input
+                          type="tel"
+                          className="input input-bordered w-full pl-12"
+                          placeholder="9171234567"
+                          value={credForm.newPhone.replace(/^0/, "")}
+                          required
+                          maxLength={10}
+                          onChange={(e) => setCredForm(p => ({ ...p, newPhone: e.target.value.replace(/\D/g, "").slice(0, 10) }))}
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs opacity-50 mt-1">A verification code will be sent to confirm your new number.</p>
                   </div>
                 ) : (
                   <>
@@ -851,17 +875,29 @@ const SettingsPage = () => {
 
             {credStep === "otp1" && (
               <form onSubmit={handleOtp1Submit} className="space-y-4">
-                <p className="text-sm opacity-70">Enter the 6-digit code sent to <span className="font-medium text-primary">{authUser?.email}</span>.</p>
+                {credMode === "phone" && phoneChangeMockCode ? (
+                  <div className="flex items-start gap-2 bg-warning/10 border border-warning/30 rounded-xl p-3 text-sm">
+                    <AlertTriangleIcon className="size-4 text-warning mt-0.5 shrink-0" />
+                    <p className="text-xs opacity-80">
+                      <strong>⚠ Demo mode</strong> — No SMS was sent. Your code is:{" "}
+                      <strong className="font-mono text-base">{phoneChangeMockCode}</strong>
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm opacity-70">Enter the 6-digit code sent to <span className="font-medium text-primary">{authUser?.email}</span>.</p>
+                )}
                 <OtpInput code={otp1} setCode={setOtp1} invalid={otp1Invalid} setInvalid={setOtp1Invalid} error={otp1Error} setError={setOtp1Error} />
                 {otp1Error && <p className="text-error text-xs text-center">{otp1Error}</p>}
                 <button type="submit" className="btn btn-primary w-full" disabled={isCredPending || otp1.join("").length !== 6}>
-                  {isCredPending ? <><span className="loading loading-spinner loading-xs" />Verifying...</> : credMode === "email" ? "Verify & Continue" : "Update Password"}
+                  {isCredPending ? <><span className="loading loading-spinner loading-xs" />Verifying...</> : credMode === "email" ? "Verify & Continue" : credMode === "phone" ? "Confirm & Update Phone" : "Update Password"}
                 </button>
-                <div className="text-center text-sm text-base-content/70">
-                  <button type="button" onClick={handleResend} disabled={resendCooldown > 0 || isCredPending} className="text-primary hover:underline disabled:opacity-50 font-medium">
-                    {resendCooldown > 0 ? `Resend (${resendCooldown}s)` : "Resend Code"}
-                  </button>
-                </div>
+                {credMode !== "phone" && (
+                  <div className="text-center text-sm text-base-content/70">
+                    <button type="button" onClick={handleResend} disabled={resendCooldown > 0 || isCredPending} className="text-primary hover:underline disabled:opacity-50 font-medium">
+                      {resendCooldown > 0 ? `Resend (${resendCooldown}s)` : "Resend Code"}
+                    </button>
+                  </div>
+                )}
                 <button type="button" className="btn btn-ghost btn-sm w-full" onClick={resetCred}>Cancel</button>
               </form>
             )}
@@ -878,7 +914,7 @@ const SettingsPage = () => {
               </form>
             )}
           </div>
-          <div className="modal-backdrop" onClick={() => { if (credStep === "form") { setShowCredModal(false); resetCred(); } }} />
+          <div className="modal-backdrop" onClick={() => { if (credStep === "form") { setShowCredModal(false); resetCred(); setPhoneChangeMockCode(null); } }} />
         </div>
       )}
 

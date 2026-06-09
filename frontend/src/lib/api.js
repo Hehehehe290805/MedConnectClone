@@ -46,6 +46,21 @@ export const requestPhoneVerify = async (data) => {
   return response.data;
 };
 
+export const requestPhoneChange = async (data) => {
+  const response = await axiosInstance.post("/auth/phone/request-change", data);
+  return response.data;
+};
+
+export const requestOnboardingEmailVerify = async (data) => {
+  const response = await axiosInstance.post("/auth/onboarding/request-email-verify", data);
+  return response.data;
+};
+
+export const confirmOnboardingEmailVerify = async (data) => {
+  const response = await axiosInstance.post("/auth/onboarding/confirm-email-verify", data);
+  return response.data;
+};
+
 export const confirmPhoneVerify = async (data) => {
   const response = await axiosInstance.post("/auth/phone/confirm-verify", data);
   return response.data;
@@ -102,6 +117,11 @@ export const requestPasswordUpdate = async (data) => {
 
 export const verifyPasswordUpdate = async (data) => {
   const response = await axiosInstance.post("/auth/update-password/verify", data);
+  return response.data;
+};
+
+export const lookupForgotPasswordAccount = async (data) => {
+  const response = await axiosInstance.post("/auth/forgot-password/lookup", data);
   return response.data;
 };
 

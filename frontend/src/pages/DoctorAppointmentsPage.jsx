@@ -84,7 +84,6 @@ const DoctorAppointmentsPage = () => {
         <div className="p-4 sm:p-8 max-w-4xl mx-auto space-y-6">
             <div>
                 <h1 className="text-2xl font-bold">Appointments</h1>
-                <p className="text-sm opacity-50">{appointments.length} total</p>
             </div>
 
             <div role="tablist" className="tabs tabs-bordered">

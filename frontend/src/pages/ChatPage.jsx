@@ -4,6 +4,12 @@ import useAuthUser from "../hooks/useAuthUser";
 import { useQuery } from "@tanstack/react-query";
 import { getStreamToken } from "../lib/api";
 import { axiosInstance } from "../lib/axios";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+dayjs.extend(utc);
+dayjs.extend(timezone);
+const PH_TZ = "Asia/Manila";
 import {
   Channel,
   ChannelHeader,
@@ -64,13 +70,20 @@ const ChatPage = () => {
         staleTime: 15_000,
     });
 
+    // Enable the call button when the appointment is ongoing OR accepted and starting within 30 min.
     const hasOngoingCall = useMemo(() => {
         if (!appointments || !targetUserId) return false;
         return appointments.some(a => {
-            if (a.status !== "ongoing" || !a.virtual) return false;
+            if (!a.virtual) return false;
             const doctorId  = a.doctorId?._id  || a.doctorId;
             const patientId = a.patientId?._id || a.patientId;
-            return doctorId === targetUserId || patientId === targetUserId;
+            if (doctorId !== targetUserId && patientId !== targetUserId) return false;
+            if (a.status === "ongoing") return true;
+            if (a.status === "accepted") {
+                const minsUntil = dayjs(a.start).tz(PH_TZ).diff(dayjs().tz(PH_TZ), "minute");
+                return minsUntil <= 30 && minsUntil >= -5;
+            }
+            return false;
         });
     }, [appointments, targetUserId]);
 

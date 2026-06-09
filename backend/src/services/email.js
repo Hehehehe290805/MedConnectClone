@@ -28,9 +28,8 @@ export async function sendVerificationCode(email, code) {
                 </div>
             `,
                     });
-        console.log("[Brevo] Send result:", JSON.stringify(result));
     } catch (err) {
-        console.error("[Brevo] Send error:", err);
+        console.error("[Brevo] Send error:", err.message);
         throw err;
     }
 }
@@ -60,7 +59,7 @@ export async function sendNotificationEmail(to, subject, bodyText) {
             `,
         });
     } catch (err) {
+        console.error("[Brevo] Notification error:", err.message);
         // intentionally swallowed — notification email failure must never block the caller
-        console.error("[Brevo] Notification email error:", err);
     }
 }

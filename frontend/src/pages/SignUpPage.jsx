@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { BriefcaseMedicalIcon, XIcon } from "lucide-react";
+import { BriefcaseMedicalIcon, XIcon, AlertTriangleIcon } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 import toast from "react-hot-toast";
 import useSignUp from "../hooks/useSignUp";
@@ -119,13 +119,13 @@ const TermsPopup = ({ onAccept, onClose }) => {
 
 const SignUpPage = () => {
     const navigate = useNavigate();
-    const { email, step, setEmail, reset } = useSignUpStore();
+    const { email, step, signupMethod, mockCode, setEmail, reset } = useSignUpStore();
 
     const [formData, setFormData] = useState({ email: "", password: "" });
+    const [signupMode, setSignupMode] = useState("email"); // "email" | "phone"
+    const [phoneDigits, setPhoneDigits] = useState("");    // 10 digits after +63
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [showTermsPopup, setShowTermsPopup] = useState(false);
-    const [isAdminMode, setIsAdminMode] = useState(false);
-    const [adminCode, setAdminCode] = useState("");
 
     const [code, setCode] = useState(["", "", "", "", "", ""]);
     const [resendCooldown, setResendCooldown] = useState(0);
@@ -136,8 +136,6 @@ const SignUpPage = () => {
     const emailRef = useRef(null);
     const passwordRef = useRef(null);
     const termsCheckboxRef = useRef(null);
-    const adminCodeRef = useRef(null);
-
     const { signupMutation, isSigningUp, verifyMutation, isVerifying, resendMutation, isResending } = useSignUp();
 
     useEffect(() => { reset(); }, []);
@@ -182,14 +180,28 @@ const SignUpPage = () => {
     const handleSignup = (e) => {
         e.preventDefault();
 
-        // check terms first
         if (!termsAccepted) {
             termsCheckboxRef.current?.setCustomValidity("Please accept the Terms of Service and Privacy Policy.");
             termsCheckboxRef.current?.reportValidity();
             return;
         }
 
-        // validate email
+        if (signupMode === "phone") {
+            if (phoneDigits.length !== 10) {
+                emailRef.current?.setCustomValidity("Enter your 10-digit mobile number after +63");
+                emailRef.current?.reportValidity();
+                return;
+            }
+            const pwMsg = getPasswordValidity(formData.password);
+            if (pwMsg) { passwordRef.current?.setCustomValidity(pwMsg); passwordRef.current?.reportValidity(); return; }
+            signupMutation(
+                { phone: `+63${phoneDigits}`, password: formData.password },
+                { onError: (err) => toast.error(err?.response?.data?.message || "Something went wrong.") }
+            );
+            return;
+        }
+
+        // Email mode
         if (!formData.email) {
             emailRef.current?.setCustomValidity("Email is required");
             emailRef.current?.reportValidity();
@@ -201,22 +213,10 @@ const SignUpPage = () => {
             return;
         }
 
-        // validate password
         const pwMsg = getPasswordValidity(formData.password);
-        if (pwMsg) {
-            passwordRef.current?.setCustomValidity(pwMsg);
-            passwordRef.current?.reportValidity();
-            return;
-        }
-
-        if (isAdminMode && !adminCode.trim()) {
-            adminCodeRef.current?.setCustomValidity("Admin code is required");
-            adminCodeRef.current?.reportValidity();
-            return;
-        }
+        if (pwMsg) { passwordRef.current?.setCustomValidity(pwMsg); passwordRef.current?.reportValidity(); return; }
 
         const payload = { email: formData.email, password: formData.password };
-        if (isAdminMode) payload.adminCode = adminCode;
 
         signupMutation(
             payload,
@@ -253,7 +253,8 @@ const SignUpPage = () => {
         if (fullCode.length !== 6) return;
         setCodeError("");
         setCodeInvalid(false);
-        verifyMutation({ email, code: fullCode }, {
+        const payload = signupMethod === "phone" ? { phone: email, code: fullCode } : { email, code: fullCode };
+        verifyMutation(payload, {
             onSuccess: () => navigate("/onboarding"),
             onError: (err) => {
                 setCodeInvalid(true);
@@ -266,13 +267,19 @@ const SignUpPage = () => {
 
     const handleResend = () => {
         if (resendCooldown > 0) return;
-        resendMutation({ email }, {
-            onSuccess: () => {
-                setResendMessage("A new code has been sent to your email.");
+        const payload = signupMethod === "phone" ? { phone: email } : { email };
+        resendMutation(payload, {
+            onSuccess: (data) => {
+                setResendMessage(signupMethod === "phone" ? "A new code has been generated." : "A new code has been sent to your email.");
                 setResendCooldown(60);
                 setCode(["", "", "", "", "", ""]);
                 setCodeInvalid(false);
                 setCodeError("");
+                // Update mockCode if phone signup returned a new one
+                if (data?.data?.mockCode) {
+                    const { setMockCode } = useSignUpStore.getState();
+                    setMockCode(data.data.mockCode);
+                }
                 codeRefs.current[0]?.focus();
                 setTimeout(() => setResendMessage(""), 5000);
             },
@@ -302,28 +309,59 @@ const SignUpPage = () => {
                                 </div>
                                 <div className="space-y-3">
 
-                                    {/* EMAIL */}
+                                    {/* EMAIL / PHONE TOGGLE */}
                                     <div className="form-control w-full">
-                                        <label className="label"><span className="label-text">Email</span></label>
-                                        <input
-                                            ref={emailRef}
-                                            type="email"
-                                            autoComplete="email"
-                                            placeholder="john@gmail.com"
-                                            className="input input-bordered w-full"
-                                            value={formData.email}
-                                            required
-                                            onChange={(e) => {
-                                                setFormData({ ...formData, email: e.target.value });
-                                                e.target.setCustomValidity("");
-                                            }}
-                                            onBlur={(e) => {
-                                                const val = e.target.value;
-                                                if (!val) e.target.setCustomValidity("Email is required");
-                                                else if (!EMAIL_REGEX.test(val)) e.target.setCustomValidity("Please enter a valid email address (e.g. name@example.com)");
-                                                else e.target.setCustomValidity("");
-                                            }}
-                                        />
+                                        {signupMode === "email" ? (
+                                            <>
+                                                <label className="label"><span className="label-text">Email</span></label>
+                                                <input
+                                                    ref={emailRef}
+                                                    type="email"
+                                                    autoComplete="email"
+                                                    placeholder="john@gmail.com"
+                                                    className="input input-bordered w-full"
+                                                    value={formData.email}
+                                                    required
+                                                    onChange={(e) => { setFormData({ ...formData, email: e.target.value }); e.target.setCustomValidity(""); }}
+                                                    onBlur={(e) => {
+                                                        const val = e.target.value;
+                                                        if (!val) e.target.setCustomValidity("Email is required");
+                                                        else if (!EMAIL_REGEX.test(val)) e.target.setCustomValidity("Please enter a valid email address (e.g. name@example.com)");
+                                                        else e.target.setCustomValidity("");
+                                                    }}
+                                                />
+                                                <button type="button" className="text-xs text-primary hover:underline text-left mt-1 w-fit" onClick={() => { setSignupMode("phone"); setFormData({ ...formData, email: "" }); emailRef.current?.setCustomValidity(""); }}>
+                                                    Signup using mobile number
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <label className="label"><span className="label-text">Mobile Number</span></label>
+                                                <div className="flex">
+                                                    <span className="input input-bordered rounded-r-none flex items-center px-3 bg-base-200 text-sm font-mono select-none border-r-0">+63</span>
+                                                    <input
+                                                        ref={emailRef}
+                                                        type="text"
+                                                        inputMode="numeric"
+                                                        maxLength={12}
+                                                        placeholder="917 123 4567"
+                                                        className="input input-bordered rounded-l-none flex-1 w-0"
+                                                        value={phoneDigits.replace(/^(\d{3})(\d{3})(\d{0,4})$/, (_, a, b, c) => c ? `${a} ${b} ${c}` : b ? `${a} ${b}` : a)}
+                                                        required
+                                                        onChange={(e) => { const d = e.target.value.replace(/\D/g, "").slice(0, 10); setPhoneDigits(d); e.target.setCustomValidity(""); }}
+                                                        onBlur={(e) => {
+                                                            const raw = e.target.value.replace(/\D/g, "");
+                                                            if (!raw) e.target.setCustomValidity("Mobile number is required");
+                                                            else if (raw.length !== 10) e.target.setCustomValidity("Enter 10 digits after +63");
+                                                            else e.target.setCustomValidity("");
+                                                        }}
+                                                    />
+                                                </div>
+                                                <button type="button" className="text-xs text-primary hover:underline text-left mt-1 w-fit" onClick={() => { setSignupMode("email"); setPhoneDigits(""); emailRef.current?.setCustomValidity(""); }}>
+                                                    Signup using email
+                                                </button>
+                                            </>
+                                        )}
                                     </div>
 
                                     {/* PASSWORD */}
@@ -353,24 +391,6 @@ const SignUpPage = () => {
                                         )}
                                     </div>
 
-                                    {/* ADMIN CODE */}
-                                    {isAdminMode && (
-                                        <div className="form-control w-full">
-                                            <label className="label"><span className="label-text">Admin Code</span></label>
-                                            <input
-                                                ref={adminCodeRef}
-                                                type="text"
-                                                placeholder="Enter admin code"
-                                                className="input input-bordered w-full"
-                                                value={adminCode}
-                                                required
-                                                onChange={(e) => {
-                                                    setAdminCode(e.target.value);
-                                                    e.target.setCustomValidity("");
-                                                }}
-                                            />
-                                        </div>
-                                    )}
 
                                     {/* TERMS */}
                                     <div className="form-control">
@@ -413,15 +433,6 @@ const SignUpPage = () => {
                                         </p>
                                     </div>
                                     
-                                    <div className="text-center mt-3 pt-3 border-t border-base-300">
-                                        <button
-                                            type="button"
-                                            className="text-xs opacity-40 hover:opacity-70 transition-opacity"
-                                            onClick={() => setIsAdminMode(!isAdminMode)}
-                                        >
-                                            {isAdminMode ? "<- Back to User Sign Up" : "Admin Sign Up ->"}
-                                        </button>
-                                    </div>
                                 </div>
                             </div>
                         </form>
@@ -454,18 +465,30 @@ const SignUpPage = () => {
                 />
             )}
 
-            {/* EMAIL VERIFY POPUP */}
+            {/* VERIFY POPUP */}
             {step === "verify" && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                     <div className="bg-base-100 rounded-xl shadow-xl p-8 w-full max-w-md">
                         <div className="text-center mb-6">
                             <BriefcaseMedicalIcon className="size-10 text-primary mx-auto mb-3" />
-                            <h2 className="text-xl font-bold">Verify Your Email</h2>
-                            <p className="text-sm opacity-70 mt-1">
-                                We sent a 6-digit code to{" "}
-                                <span className="font-medium text-primary">{email}</span>
-                            </p>
+                            <h2 className="text-xl font-bold">{signupMethod === "phone" ? "Verify Your Phone" : "Verify Your Email"}</h2>
+                            {signupMethod === "phone" ? (
+                                <p className="text-sm opacity-70 mt-1">Enter the code below to confirm your mobile number.</p>
+                            ) : (
+                                <p className="text-sm opacity-70 mt-1">We sent a 6-digit code to <span className="font-medium text-primary">{email}</span></p>
+                            )}
                         </div>
+
+                        {/* Demo mock code banner for phone signup */}
+                        {signupMethod === "phone" && mockCode && (
+                            <div className="flex items-start gap-2 bg-warning/10 border border-warning/30 rounded-xl p-3 text-sm mb-4">
+                                <AlertTriangleIcon className="size-4 text-warning mt-0.5 shrink-0" />
+                                <p className="text-xs opacity-80">
+                                    <strong>⚠ Demo mode</strong> — No SMS sent. Your code: <strong className="font-mono text-base">{mockCode}</strong>
+                                </p>
+                            </div>
+                        )}
+
 
                         <form onSubmit={handleVerify} className="space-y-6">
                             <div className="flex flex-col items-center gap-2">
@@ -495,12 +518,12 @@ const SignUpPage = () => {
                             </div>
 
                             <button className="btn btn-primary w-full" type="submit" disabled={isVerifying || code.join("").length !== 6}>
-                                {isVerifying ? <><span className="loading loading-spinner loading-xs" />Verifying...</> : "Verify Email"}
+                                {isVerifying ? <><span className="loading loading-spinner loading-xs" />Verifying...</> : signupMethod === "phone" ? "Verify Phone" : "Verify Email"}
                             </button>
 
                             <div className="text-center space-y-1">
                                 <p className="text-sm text-base-content/70">
-                                    Did not receive an email?{" "}
+                                    {signupMethod === "phone" ? "Need a new code?" : "Did not receive an email?"}{" "}
                                     <button
                                         type="button"
                                         onClick={handleResend}

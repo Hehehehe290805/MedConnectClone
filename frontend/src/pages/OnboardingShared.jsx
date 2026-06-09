@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { UploadCloudIcon, XIcon, ArrowLeftIcon, MapPinIcon, AlertTriangleIcon, CheckCircleIcon } from "lucide-react";
 import imageCompression from "browser-image-compression";
-import { uploadFile } from "../lib/api";
+import { uploadFile, requestPhoneVerify, confirmPhoneVerify, requestOnboardingEmailVerify, confirmOnboardingEmailVerify } from "../lib/api";
 import toast from "react-hot-toast";
 import { LANGUAGES } from "../constants";
 import MapPinModal from "../components/MapPinModal";
@@ -21,7 +21,7 @@ export const StepProgress = ({ currentStep, totalSteps }) => (
 );
 
 // --- STEP HEADER ---
-export const StepHeader = ({ title, subtitle, role, email, onBack, isFirstStep }) => (
+export const StepHeader = ({ title, subtitle, role, email, phoneNumber, onBack, isFirstStep }) => (
     <div className="mb-6">
         <div className="flex items-center gap-3 mb-4">
             <button
@@ -42,10 +42,12 @@ export const StepHeader = ({ title, subtitle, role, email, onBack, isFirstStep }
         {subtitle && <p className="text-sm opacity-70 mt-1">{subtitle}</p>}
         <div className="mt-3 flex gap-4">
             <div className="form-control flex-1">
-                <label className="label py-0"><span className="label-text text-xs">Email</span></label>
+                <label className="label py-0">
+                    <span className="label-text text-xs">{email ? "Email" : "Phone"}</span>
+                </label>
                 <input
-                    type="email"
-                    value={email || ""}
+                    type="text"
+                    value={email || phoneNumber || ""}
                     readOnly
                     disabled
                     className="input input-bordered input-sm bg-base-200 cursor-not-allowed opacity-60"
@@ -281,7 +283,7 @@ export const LanguagesField = ({ value = [], onChange, error }) => {
 const AddressFieldItem = ({ label, fieldKey, placeholder, required, type = "text", maxLength, value, onChange, error, inputRef, disabled = false }) => (
     <div className="form-control">
         <label className="label py-0">
-            <span className="label-text text-xs">
+            <span className="label-text text-sm">
                 {label}{required && <span className="text-error ml-1">*</span>}
             </span>
         </label>
@@ -289,7 +291,7 @@ const AddressFieldItem = ({ label, fieldKey, placeholder, required, type = "text
             ref={inputRef}
             type={type}
             disabled={disabled}
-            className={`input input-bordered w-full input-sm ${error ? "input-error" : ""} ${disabled ? "cursor-not-allowed" : ""}`}
+            className={`input input-bordered w-full ${error ? "input-error" : ""} ${disabled ? "cursor-not-allowed" : ""}`}
             placeholder={placeholder}
             value={value}
             maxLength={maxLength}
@@ -328,7 +330,7 @@ export const AddressFields = ({ value = {}, onChange, errors = {}, cityRef, labe
                 />
             )}
             <div className="space-y-3">
-                <label className="label">
+                <label className="label pb-0">
                     <span className="label-text font-medium">
                         {label}{!disabled && <span className="text-error"> *</span>}
                     </span>
@@ -344,29 +346,163 @@ export const AddressFields = ({ value = {}, onChange, errors = {}, cityRef, labe
                         Pin Location on Map
                     </button>
                 )}
+
+                {/* Unified 2-column grid — order: building, street, barangay, city, province, postal code */}
                 <div className={`grid grid-cols-2 gap-3 ${disabled ? "opacity-60" : ""}`}>
                     <AddressFieldItem label="Building / House No." fieldKey="buildingNumber" placeholder="Unit 4B" required={!disabled} value={value.buildingNumber || ""} onChange={update} error={errors["address.buildingNumber"]} disabled={disabled} />
                     <AddressFieldItem label="Street" fieldKey="street" placeholder="Rizal Street" required={!disabled} value={value.street || ""} onChange={update} error={errors["address.street"]} disabled={disabled} />
+
+                    {/* PSGC fields: Barangay | City / Province | [Postal Code follows] */}
+                    {!disabled ? (
+                        <PSGCAddressFields
+                            required
+                            value={{
+                                province: value.province || "",
+                                city: value.city || "",
+                                barangay: value.barangay || "",
+                                postalCode: value.postalCode || "",
+                            }}
+                            onChange={({ province, city, barangay, postalCode }) =>
+                                onChange({ ...value, province, city, barangay, ...(postalCode ? { postalCode } : {}) })
+                            }
+                        />
+                    ) : (
+                        <>
+                            <AddressFieldItem label="Barangay" fieldKey="barangay" placeholder="Barangay 1" required={false} value={value.barangay || ""} onChange={update} disabled />
+                            <AddressFieldItem label="City / Municipality" fieldKey="city" placeholder="Manila" required={false} value={value.city || ""} onChange={update} disabled />
+                            <AddressFieldItem label="Province" fieldKey="province" placeholder="Metro Manila" required={false} value={value.province || ""} onChange={update} disabled />
+                        </>
+                    )}
+
+                    <AddressFieldItem label="Postal Code" fieldKey="postalCode" placeholder="1000" required={!disabled} value={value.postalCode || ""} onChange={update} error={errors["address.postalCode"]} maxLength={4} disabled={disabled} />
                 </div>
-                <AddressFieldItem label="Barangay" fieldKey="barangay" placeholder="Barangay 1" required={!disabled} value={value.barangay || ""} onChange={update} error={errors["address.barangay"]} disabled={disabled} />
-
-                {/* PSGC cascading dropdowns — Region → Province → City/Municipality */}
-                {!disabled ? (
-                    <PSGCAddressFields
-                        required
-                        value={{ province: value.province || "", city: value.city || "" }}
-                        onChange={({ province, city }) => onChange({ ...value, province, city })}
-                    />
-                ) : (
-                    <div className="grid grid-cols-2 gap-3 opacity-60">
-                        <AddressFieldItem label="City" fieldKey="city" placeholder="Manila" required={false} value={value.city || ""} onChange={update} disabled />
-                        <AddressFieldItem label="Province" fieldKey="province" placeholder="Metro Manila" required={false} value={value.province || ""} onChange={update} disabled />
-                    </div>
-                )}
-
-                <AddressFieldItem label="Postal Code" fieldKey="postalCode" placeholder="1000" required={!disabled} value={value.postalCode || ""} onChange={update} error={errors["address.postalCode"]} maxLength={4} disabled={disabled} />
             </div>
         </>
+    );
+};
+
+// Formats 10 raw digits for display: "9171234567" → "917 123 4567"
+export const formatPhoneDisplay = (digits = "") => {
+    const d = digits.replace(/\D/g, "").slice(0, 10);
+    if (d.length <= 3) return d;
+    if (d.length <= 6) return `${d.slice(0, 3)} ${d.slice(3)}`;
+    return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}`;
+};
+
+// --- EMAIL VERIFICATION FIELD (phone-signup onboarding only) ---
+const EMAIL_REGEX_FIELD = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export const EmailVerificationField = ({ email, onEmailChange, onVerified, error }) => {
+    const [otpInput, setOtpInput] = useState("");
+    const [verified, setVerified] = useState(false);
+    const [showModal, setShowModal] = useState(false);
+    const [requestError, setRequestError] = useState("");
+    const [isRequesting, setIsRequesting] = useState(false);
+    const [isConfirming, setIsConfirming] = useState(false);
+
+    const handleEmailChange = (e) => {
+        onEmailChange(e.target.value);
+        setVerified(false);
+        setOtpInput("");
+        setRequestError("");
+        onVerified?.(false);
+    };
+
+    const openVerifyModal = async () => {
+        setRequestError("");
+        setIsRequesting(true);
+        try {
+            await requestOnboardingEmailVerify({ email });
+            setOtpInput("");
+            setShowModal(true);
+        } catch (err) {
+            setRequestError(err?.response?.data?.message || "Failed to send code.");
+        } finally {
+            setIsRequesting(false);
+        }
+    };
+
+    const verifyCode = async () => {
+        setIsConfirming(true);
+        try {
+            await confirmOnboardingEmailVerify({ code: otpInput });
+            setVerified(true);
+            onVerified?.(true);
+            setShowModal(false);
+        } catch (err) {
+            setOtpInput("");
+            toast.error(err?.response?.data?.message || "Incorrect code. Try again.");
+        } finally {
+            setIsConfirming(false);
+        }
+    };
+
+    const canSend = EMAIL_REGEX_FIELD.test(email) && !isRequesting;
+
+    return (
+        <div className="form-control space-y-2">
+            <label className="label pb-0">
+                <span className="label-text">
+                    Email Address <span className="text-error">*</span>
+                </span>
+                {verified && (
+                    <span className="flex items-center gap-1 text-success text-xs font-medium">
+                        <CheckCircleIcon className="size-3.5" /> Verified
+                    </span>
+                )}
+            </label>
+            <div className="flex gap-2">
+                <input
+                    type="email"
+                    className={`input input-bordered flex-1 ${error ? "input-error" : ""} ${verified ? "input-success" : ""}`}
+                    placeholder="name@example.com"
+                    value={email}
+                    onChange={handleEmailChange}
+                    disabled={verified}
+                />
+                {!verified && (
+                    <button type="button" className="btn btn-outline btn-sm h-12" disabled={!canSend} onClick={openVerifyModal}>
+                        {isRequesting ? <span className="loading loading-spinner loading-xs" /> : "Verify"}
+                    </button>
+                )}
+            </div>
+            {error && <p className="text-error text-xs">{error}</p>}
+            {requestError && <p className="text-error text-xs">{requestError}</p>}
+            {!verified && EMAIL_REGEX_FIELD.test(email) && (
+                <p className="text-xs opacity-50">
+                    Verify your email to enable login with email and 2FA.
+                </p>
+            )}
+
+            {showModal && (
+                <div className="modal modal-open">
+                    <div className="modal-box max-w-sm">
+                        <button type="button" className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onClick={() => setShowModal(false)}>
+                            <XIcon className="size-4" />
+                        </button>
+                        <h3 className="font-bold text-lg mb-1">Verify Email Address</h3>
+                        <p className="text-sm opacity-60 mb-4">
+                            Enter the 6-digit code sent to <span className="font-medium text-primary">{email}</span>.
+                        </p>
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                className="input input-bordered flex-1 text-center font-mono tracking-widest"
+                                placeholder="Enter 6-digit code"
+                                value={otpInput}
+                                onChange={e => setOtpInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                                maxLength={6}
+                                autoFocus
+                            />
+                            <button type="button" className="btn btn-primary" disabled={otpInput.length !== 6 || isConfirming} onClick={verifyCode}>
+                                {isConfirming ? <span className="loading loading-spinner loading-xs" /> : "Verify"}
+                            </button>
+                        </div>
+                    </div>
+                    <div className="modal-backdrop" onClick={() => setShowModal(false)} />
+                </div>
+            )}
+        </div>
     );
 };
 
@@ -376,6 +512,10 @@ export const PhoneField = ({ phoneNumber, phoneType, onNumberChange, onTypeChang
     const [mockOtp, setMockOtp] = useState(null);
     const [otpInput, setOtpInput] = useState("");
     const [verified, setVerified] = useState(false);
+    const [showModal, setShowModal] = useState(false);
+    const [requestError, setRequestError] = useState("");
+    const [isRequesting, setIsRequesting] = useState(false);
+    const [isConfirming, setIsConfirming] = useState(false);
 
     const handleNumberInput = (e) => {
         const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
@@ -383,26 +523,41 @@ export const PhoneField = ({ phoneNumber, phoneType, onNumberChange, onTypeChang
         setMockOtp(null);
         setOtpInput("");
         setVerified(false);
+        setRequestError("");
         onVerified?.(false);
     };
 
-    const sendCode = () => {
-        const code = String(Math.floor(100000 + Math.random() * 900000));
-        setMockOtp(code);
-        setOtpInput("");
-    };
-
-    const verifyCode = () => {
-        if (otpInput === mockOtp) {
-            setVerified(true);
-            onVerified?.(true);
-        } else {
+    const openVerifyModal = async () => {
+        setRequestError("");
+        setIsRequesting(true);
+        try {
+            const data = await requestPhoneVerify({ phoneNumber: "0" + phoneNumber, phoneType });
+            setMockOtp(data?.data?.mockCode || null);
             setOtpInput("");
-            toast.error("Incorrect code. Try again.");
+            setShowModal(true);
+        } catch (err) {
+            setRequestError(err?.response?.data?.message || "Failed to send verification code.");
+        } finally {
+            setIsRequesting(false);
         }
     };
 
-    const canSend = isMobile && phoneNumber.length === 10;
+    const verifyCode = async () => {
+        setIsConfirming(true);
+        try {
+            await confirmPhoneVerify({ code: otpInput });
+            setVerified(true);
+            onVerified?.(true);
+            setShowModal(false);
+        } catch (err) {
+            setOtpInput("");
+            toast.error(err?.response?.data?.message || "Incorrect code. Try again.");
+        } finally {
+            setIsConfirming(false);
+        }
+    };
+
+    const canSend = isMobile && phoneNumber.length === 10 && !isRequesting;
 
     return (
         <div className="form-control space-y-2">
@@ -433,43 +588,67 @@ export const PhoneField = ({ phoneNumber, phoneType, onNumberChange, onTypeChang
                     <input
                         type="tel"
                         className={`input input-bordered w-full ${isMobile ? "pl-12" : ""} ${error ? "input-error" : ""} ${verified ? "input-success" : ""}`}
-                        placeholder={isMobile ? "9171234567" : "028123456"}
-                        value={phoneNumber}
+                        placeholder={isMobile ? "917 123 4567" : "028123456"}
+                        value={isMobile ? formatPhoneDisplay(phoneNumber) : phoneNumber}
                         onChange={handleNumberInput}
-                        maxLength={10}
+                        maxLength={isMobile ? 12 : 10}
                         disabled={verified}
                     />
                 </div>
                 {!verified && (
-                    <button type="button" className="btn btn-outline btn-sm h-12" disabled={!canSend} onClick={sendCode}>
-                        {mockOtp ? "Resend" : "Send Code"}
+                    <button type="button" className="btn btn-outline btn-sm h-12" disabled={!canSend} onClick={openVerifyModal}>
+                        {isRequesting ? <span className="loading loading-spinner loading-xs" /> : "Verify"}
                     </button>
                 )}
             </div>
             {error && <p className="text-error text-xs">{error}</p>}
+            {requestError && <p className="text-error text-xs">{requestError}</p>}
 
-            {/* Mock OTP alert */}
-            {mockOtp && !verified && (
-                <div className="space-y-2">
-                    <div className="flex items-start gap-2 bg-warning/10 border border-warning/30 rounded-xl p-3 text-sm">
-                        <AlertTriangleIcon className="size-4 text-warning mt-0.5 shrink-0" />
-                        <p className="text-warning-content opacity-80 text-xs">
-                            <strong>⚠ Demo mode</strong> — No SMS was sent. Your verification code is: <strong className="font-mono text-base">{mockOtp}</strong>
-                        </p>
-                    </div>
-                    <div className="flex gap-2">
-                        <input
-                            type="text"
-                            className="input input-bordered flex-1 text-center font-mono tracking-widest"
-                            placeholder="Enter 6-digit code"
-                            value={otpInput}
-                            onChange={e => setOtpInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                            maxLength={6}
-                        />
-                        <button type="button" className="btn btn-primary" disabled={otpInput.length !== 6} onClick={verifyCode}>
-                            Verify
+            {/* Note for unverified phone */}
+            {!verified && phoneNumber.length === 10 && isMobile && (
+                <p className="text-xs opacity-50">
+                    Without verification, this number cannot be used for login or 2FA. You can verify later in Settings.
+                </p>
+            )}
+
+            {/* Verification popup */}
+            {showModal && (
+                <div className="modal modal-open">
+                    <div className="modal-box max-w-sm">
+                        <button
+                            type="button"
+                            className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+                            onClick={() => setShowModal(false)}
+                        >
+                            <XIcon className="size-4" />
                         </button>
+                        <h3 className="font-bold text-lg mb-1">Verify Phone Number</h3>
+                        <p className="text-sm opacity-60 mb-4">Enter the 6-digit code to confirm your mobile number.</p>
+
+                        <div className="flex items-start gap-2 bg-warning/10 border border-warning/30 rounded-xl p-3 mb-4">
+                            <AlertTriangleIcon className="size-4 text-warning mt-0.5 shrink-0" />
+                            <p className="text-xs opacity-80">
+                                <strong>⚠ Demo mode</strong> — No SMS sent. Your code:{" "}
+                                <strong className="font-mono text-base">{mockOtp}</strong>
+                            </p>
+                        </div>
+
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                className="input input-bordered flex-1 text-center font-mono tracking-widest"
+                                placeholder="Enter 6-digit code"
+                                value={otpInput}
+                                onChange={e => setOtpInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                                maxLength={6}
+                                autoFocus
+                            />
+                            <button type="button" className="btn btn-primary" disabled={otpInput.length !== 6 || isConfirming} onClick={verifyCode}>
+                                {isConfirming ? <span className="loading loading-spinner loading-xs" /> : "Verify"}
+                            </button>
+                        </div>
                     </div>
+                    <div className="modal-backdrop" onClick={() => setShowModal(false)} />
                 </div>
             )}
         </div>

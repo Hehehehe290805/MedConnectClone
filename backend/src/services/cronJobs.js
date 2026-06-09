@@ -8,7 +8,7 @@ import Schedule from "../models/Schedule.js";
 import Pricing from "../models/Pricing.js";
 import DoctorSpecialty from "../models/DoctorSpecialty.js";
 import InstituteDepartmentService from "../models/InstituteDepartmentService.js";
-import EmailRegistry from "../models/EmailRegistry.js";
+import AccountRegistry from "../models/AccountRegistry.js";
 import { logError } from "../utils/logger.js";
 import { deleteFromS3 } from "../services/s3.js";
 import { notify } from "./notification.service.js";
@@ -185,7 +185,7 @@ export function startCronJobs() {
             await checkStartedAppointments();
             await checkVirtualNoJoin();
         } catch (err) {
-            console.error("[CRON] Error in appointment start checker:", err);
+            console.error("[CRON] Appointment start checker:", err.message);
             await logError("CRON", err);
         }
     });
@@ -196,7 +196,7 @@ export function startCronJobs() {
             await sendPreAppointmentReminders();
             await completeDuePharmacyOrders();
         } catch (err) {
-            console.error("[CRON] Error in minute cron:", err);
+            console.error("[CRON] Minute cron:", err.message);
             await logError("CRON", err);
         }
     });
@@ -206,7 +206,7 @@ export function startCronJobs() {
         try {
             await checkEndedAppointments();
         } catch (err) {
-            console.error("[CRON] Error in appointment end checker:", err);
+            console.error("[CRON] Appointment end checker:", err.message);
             await logError("CRON", err);
         }
     });
@@ -217,7 +217,7 @@ export function startCronJobs() {
     // cancel accidental deletions by simply logging back in (see auth.controller deleteMe).
     cron.schedule("0 0 * * *", async () => {
         try {
-            console.log("[CRON] Running account deletion sweep");
+
             const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
             // Also hard-delete rejected accounts older than 30 days
@@ -237,7 +237,7 @@ export function startCronJobs() {
                     try { await deleteFromS3(key); } catch { /* non-fatal */ }
                 }
                 await Promise.all([
-                    EmailRegistry.deleteOne({ email: user.email }),
+                    AccountRegistry.deleteMany({ registrant: user._id }),
                     Schedule.deleteOne({ $or: [{ doctorId: user._id }, { instituteId: user._id }] }),
                     Pricing.deleteMany({ providerId: user._id }),
                     DoctorSpecialty.deleteMany({ doctorId: user._id }),
@@ -247,7 +247,7 @@ export function startCronJobs() {
                 await User.findByIdAndDelete(user._id);
             }
             if (rejectedUsers.length) {
-                console.log(`[CRON] Deleted ${rejectedUsers.length} rejected account(s) older than 30 days`);
+
             }
 
             const usersToDelete = await User.find({
@@ -288,7 +288,7 @@ export function startCronJobs() {
                 for (const key of s3Keys) await deleteFromS3(key);
 
                 await Promise.all([
-                    EmailRegistry.deleteOne({ email: user.email }),
+                    AccountRegistry.deleteMany({ registrant: user._id }),
                     Schedule.deleteOne({ $or: [{ doctorId: user._id }, { instituteId: user._id }] }),
                     Pricing.deleteMany({ providerId: user._id }),
                     DoctorSpecialty.deleteMany({ doctorId: user._id }),
@@ -301,13 +301,13 @@ export function startCronJobs() {
             for (const admin of adminsToDelete) {
                 // Admin profilePic is in a separate collection — delete S3 object here
                 if (admin.profilePic?.key) await deleteFromS3(admin.profilePic.key);
-                await EmailRegistry.deleteOne({ email: admin.email });
+                await AccountRegistry.deleteMany({ registrant: admin._id });
                 await Admin.findByIdAndDelete(admin._id);
             }
 
-            console.log(`[CRON] Deleted ${usersToDelete.length} users and ${adminsToDelete.length} admins`);
+
         } catch (err) {
-            console.error("[CRON] Error running account deletion sweep:", err);
+            console.error("[CRON] Deletion sweep error:", err.message);
             await logError("CRON", err);
         }
     });
@@ -318,7 +318,7 @@ export function startCronJobs() {
     //              needsRenewal → suspended (if expiry has now passed without renewal).
     cron.schedule("0 1 * * *", async () => {
         try {
-            console.log("[CRON] Running license expiry checker");
+
             const now = new Date();
             const in60Days = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
     
@@ -401,9 +401,9 @@ export function startCronJobs() {
                 await User.findByIdAndUpdate(doc._id, { status: "pendingRenewalExpired" });
             }
 
-            console.log("[CRON] License expiry check complete");
+
         } catch (err) {
-            console.error("[CRON] Error in license expiry checker:", err);
+            console.error("[CRON] License expiry checker error:", err.message);
             await logError("CRON", err);
         }
     });
@@ -419,27 +419,20 @@ export function startCronJobs() {
                 updatedAt: { $lte: cutoff },
             });
             if (result.deletedCount > 0) {
-                console.log(`[CRON] Deleted ${result.deletedCount} stale read notification(s)`);
+
             }
         } catch (err) {
-            console.error("[CRON] Error in notification cleanup:", err);
+
             await logError("CRON", err);
         }
     });
 
     // ── CRON: daily queue build at 6 AM Asia/Manila ───────────────────────
-    // Builds the appointment queue for every doctor and department that has
-    // accepted appointments today. Uses "0 22 * * *" UTC = 6:00 AM Asia/Manila
-    // (UTC+8, so 6 AM PHT = 22:00 UTC previous day).
-    // node-cron runs in server timezone (UTC on most hosts); the schedule is
-    // adjusted here to fire at 6 AM PHT.
     cron.schedule("0 22 * * *", async () => {
         try {
-            console.log("[CRON] Building daily appointment queues");
             const todayPH   = dayjs().tz("Asia/Manila").startOf("day");
             const tomorrowPH = todayPH.add(1, "day");
 
-            // Find all doctors with accepted appointments today
             const doctorAppointments = await Appointment.find({
                 status: "accepted",
                 doctorId: { $exists: true, $ne: null },
@@ -448,11 +441,10 @@ export function startCronJobs() {
 
             for (const docId of doctorAppointments) {
                 try { await buildQueueForProvider(docId, "doctor"); } catch (e) {
-                    console.error(`[CRON] Queue build failed for doctor ${docId}:`, e.message);
+                    console.error("[CRON] Queue build failed for doctor:", e.message);
                 }
             }
 
-            // Find all departments with accepted appointments today
             const deptAppointments = await Appointment.find({
                 status: "accepted",
                 instituteId: { $exists: true, $ne: null },
@@ -461,13 +453,11 @@ export function startCronJobs() {
 
             for (const deptId of deptAppointments) {
                 try { await buildQueueForProvider(deptId, "department"); } catch (e) {
-                    console.error(`[CRON] Queue build failed for department ${deptId}:`, e.message);
+                    console.error("[CRON] Queue build failed for department:", e.message);
                 }
             }
-
-            console.log(`[CRON] Queues built for ${doctorAppointments.length} doctor(s) and ${deptAppointments.length} department(s)`);
         } catch (err) {
-            console.error("[CRON] Error in daily queue build:", err);
+            console.error("[CRON] Daily queue build error:", err.message);
             await logError("CRON", err);
         }
     });

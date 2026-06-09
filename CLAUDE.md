@@ -3,6 +3,22 @@
 ## Current Phase: Bug Hunting
 The project is in active bug hunting and refinement. The developer tests the app and reports issues or changes directly. Implement all requested changes without pushback unless the requirement **conflicts with an existing design decision, breaks a documented protocol, or would functionally break a feature**. In those cases, flag the conflict briefly before proceeding. Do not offer unsolicited refactors, cleanups, or scope expansions.
 
+## Stabilized Areas — Require Programmer Confirmation Before Editing
+
+The following flows have been deliberately built, tested, and fixed. They must **not** be modified without explicit programmer confirmation, even if a change seems minor or related:
+
+| Area | Files | Reason |
+|---|---|---|
+| Signup flow | `auth.controller.js` (signup, verifySignup, resendSignupCode), `SignUpPage.jsx`, `useSignUp.js` | Fully tested email + phone signup; admin code removed from signup intentionally |
+| Login flow | `auth.controller.js` (login, adminLogin), `LoginPage.jsx` | Email/phone mode switching, brute-force lockout, 2FA, locked-account recovery all working |
+| Forgot password | `auth.controller.js` (lookupForgotPasswordAccount, forgotPassword, verifyForgotPasswordCode, resetForgotPassword), `ForgotPasswordPage.jsx`, `useForgotPasswordStore.js` | 3-step flow: lookup → choose channel → send code; phone + email channels |
+| Onboarding | All `Onboarding*.jsx` pages, `onboarding.controller.js`, `adminConvert.controller.js` | Email verification for phone-signup users; admin code uniqueness via HMAC; phone verification required for admin |
+| Phone & email verification | `auth.controller.js` (requestPhoneVerify, confirmPhoneVerify, requestPhoneChange, requestOnboardingEmailVerify, confirmOnboardingEmailVerify), `OnboardingShared.jsx` (PhoneField, EmailVerificationField) | Admin + user phone verify working; onboarding email verify sends real Brevo OTP |
+| Settings credentials | `SettingsPage.jsx` credentials modal + phone modal | Email / phone / password change; verify phone button visible for all roles |
+| Auth middleware & JWT | `auth.middleware.js`, cookie setup | Do not touch without explicit instruction |
+
+**Rule:** If a bug report or feature request touches any file in the table above, **stop and confirm the exact change with the programmer before writing any code.** State what you plan to modify and why.
+
 ## Project Overview
 MedConnect is a Philippine telehealth platform (MERN stack) that connects patients with licensed healthcare providers — doctors, pharmacies, clinics, and hospitals — through a unified booking, communication, payment, and file-sharing system. It is designed for the Philippine healthcare context: doctors claim from 52 PRC-recognized specialties, pharmacies hold FDA and pharmacist PRC licenses, institutes hold business permits and operate diagnostic departments as sub-accounts, and all monetary amounts are in Philippine Pesos (PHP).
 
@@ -33,15 +49,17 @@ Student project — actively in development.
 **Onboarding:** Immediately set to `onBoarded` — no admin approval required.
 
 **Current Features:**
-- **Expert System** (`/consultation`): 3-step wizard (body system → symptoms → duration/age group). Jaccard similarity against 71 diseases; top 5 matches shown with urgency badges. Generates pre-consultation markdown auto-attached as an `AppointmentFile` at booking time.
-- **Search** (`/search`): Multi-filter search with 3 modes — Doctors, Institutes, Departments. Bipartite ranker surfaces top 3 symptom-matched doctors (`specialtyScore×0.5 + ratingScore×0.3 + proximityScore×0.2`). Multi-term `+` name search supported. Department mode uses `GET /api/search/departments`.
-- **Appointment Booking**: `CreateBookingPopup` for doctors — 7-day slot lookahead, pricing fetch from `/api/pricing/appointment-price`. Institute booking path is deprioritized (flag #53).
+- **Expert System** (`/consultation`): 3-step wizard (body system → symptoms → duration/age group). **13 body systems** (added Dental & Oral). Step 2 has an "Other…" checkbox that reveals a free-text symptom input. Jaccard similarity against 71 diseases; top 5 matches shown with `badge-sm` urgency badges. Generates pre-consultation markdown auto-attached as an `AppointmentFile` at booking time.
+- **Search** (`/search`): Multi-filter search with 3 modes — Doctors, Institutes, Departments. Bipartite ranker surfaces top 3 symptom-matched doctors (`specialtyScore×0.5 + ratingScore×0.3 + proximityScore×0.2`). Multi-term `+` name search supported. Department mode uses `GET /api/search/departments`. Language/specialty/service chips use `badge-sm`.
+- **Appointment Booking**: `CreateBookingPopup` for doctors — **date-picker only** (no time slots); auto-picks first available slot for the chosen date; shows slot count for the day + "Your exact time will be assigned based on queue order." note. After booking succeeds, `ViewPendingAppointmentPatientPopup` opens immediately with the new appointment. Institute booking path is deprioritized (flag #53).
 - **Payment**: 50% deposit via Demo Payment screen. For virtual appointments, 50% balance payment after appointment completes.
-- **Appointment Calendar** (`/`): Month grid with status dots; day-click shows detail; list view groups active vs. closed. Opens `ViewPendingAppointmentPatientPopup`.
-- **Patient Popup Actions**: Pay deposit, pay balance, cancel, mark complete (in-person only), leave one review (after `completed`/`fully_paid`), file dispute.
-- **Chat & Video**: Stream-powered at `/chat/:id` and `/call/:id`. Per-message Tagalog/Cebuano/English translation with cache. Medical term tooltips (70+ terms).
+- **Appointment Calendar** (`/`): Month grid with status dots; day-click shows detail; list view shows **active appointments only** (pending_payment, deposit_paid, accepted, ongoing, awaiting_balance, disputed — completed/fully_paid/cancelled/rejected/resolved are hidden). Opens `ViewPendingAppointmentPatientPopup`. List rows have paperclip button to expand `AppointmentFilesPanel` inline.
+- **Home Dashboard status banner**: Replaces static "Book Now" card when there is an active appointment. Priority: `awaiting_balance` (pay balance) → `pending_payment` (pay deposit) → `ongoing` in-person (view + message) → `accepted` (view + message doctor) → `deposit_paid` (waiting) → review available. Falls back to Book Now card when no urgent appointment exists.
+- **Patient Popup Actions**: Pay deposit, pay balance, **cancel (red outline button)**, mark complete (in-person only), leave one review (after `completed`/`fully_paid`), **file dispute (red outline button)**. Cancel and dispute buttons are `btn-error btn-outline` for visual clarity.
+- **Chat & Video**: Stream-powered at `/chat/:id` and `/call/:id`. Chat channel is per doctor-patient pair (same channel regardless of appointment count). Call button in chat enabled when appointment is `ongoing` OR `accepted` within 30 min. Per-message Tagalog/Cebuano/English translation with cache. Medical term tooltips (70+ terms).
 - **Appointment Files**: Upload, list, download (signed URL), delete, PDF export via `AppointmentFilesPanel`.
 - **Notifications**: In-app + Brevo email for all appointment lifecycle events.
+- **Report Account**: "Report Account" button (low-prominence, ghost/error style) on all `OtherProfilePage` views. Opens modal with 7 checkbox reasons + free-text; posts to `POST /api/app-reports` with `category: "other"`.
 
 **Standards:**
 - Patient popup never shows provider actions (accept/reject). Only patient-side transitions are callable from `ViewPendingAppointmentPatientPopup`.
@@ -146,6 +164,7 @@ Student project — actively in development.
 - **Dispute Resolution** (`/admin/reports`): View dispute details, set outcome (`provider_right` / `patient_right` / `split`), add admin note. When outcome is `patient_right`, optional "Issue full refund" checkbox notifies patient of refund amount.
 - **User Management** (`/admin/users`): Search/filter all users by role. View account details. Force-delete cleans S3 files and `emailregistry`.
 - **App Reports**: View user-submitted bug/UX/feature reports. Advance status (`pending → viewed → resolved`).
+- **Analytics** (`/admin/analytics`): Date-range filtered dashboard — totalRevenue, platformRevenue, revenueByDay, revenueByDoctor (top 20), appointmentVolume breakdown, topProviders (top 10), cancellationRate, disputeRate. CSV + Excel export.
 - **Notifications**: Receives `notifyAllAdmins` broadcasts for new pending accounts, permit renewals, and disputes.
 
 **Standards:**
@@ -258,17 +277,17 @@ Admin (separate admins collection — not a discriminator)
 ```
 
 ### Base User Fields (all roles inherit)
-`email`, `password` (bcrypt), `role`, `status`, `phoneNumber`, `phoneType`, `profilePic {url,key}`, `approvedBy` (ref Admin), `pendingDeletion`, `deletionRequestedAt`, `resetPasswordCode/Expiry`, `lastPasswordChange`, `twoFactorEnabled`, `loginAttempts`, `loginLockedAt`, `birthDate`, `createdAt`
+`email`, `password` (bcrypt), `role`, `status`, `signupMethod` (email/phone), `phoneNumber`, `phoneType`, `phoneVerified` (bool, default false), `emailVerified` (bool, default false), `profilePic {url,key}`, `approvedBy` (ref Admin), `pendingDeletion`, `deletionRequestedAt`, `resetPasswordCode/Expiry`, `lastPasswordChange`, `twoFactorEnabled`, `loginAttempts`, `loginLockedAt`, `birthDate`, `lastSeen` (Date, for online status), `emailNotificationsEnabled` (bool, default true), `createdAt`
 
 ### Role-Specific Fields
 | Role | Key Fields |
 |---|---|
 | Patient | `firstName`, `lastName`, `sex`, `bio`, `languages[]`, `address` |
-| Doctor | `firstName`, `lastName`, `sex`, `bio`, `languages[]`, `address`, `licenseNumber` (encrypted), `licenseExpiration`, `licenseImage {key}`, `legalIDImage {key}`, `specialty[]`, `subSpecialty[]` |
+| Doctor | `firstName`, `lastName`, `sex`, `bio`, `languages[]`, `address`, `licenseNumber` (encrypted), `licenseExpiration`, `licenseImage {key}`, `legalIDImage {key}`, `specialty[]`, `subSpecialty[]`, `blockedPatients[]` (ObjectId refs), `maxPatientsPerDay` (Number, default null) |
 | Pharmacy | `pharmacyName`, `pharmacistFirstName/LastName`, `sex`, `bio`, `address`, `businessPermit {key}`, `fdaLicense {key}`, `pharmacistLicenseNumber` (encrypted), `pharmacistLicenseExpiration`, `pharmacistLicenseImage {key}`, `pharmacistLegalIDImage {key}` |
 | Institute | `instituteName`, `instituteType` (clinic/hospital), `contactFirstName/LastName`, `licensingAgency`, `address`, `businessPermit {key}`, `constructionPermit {key}` (hospital only), `departmentAccounts []` (ObjectId refs to Department users) |
 | Department | `technologistFirstName/LastName`, `sex`, `bio`, `address`, `departmentId`, `departmentType`, `rootInstitute` (ref User/Institute), `technologistLicenseNumber` (encrypted), `technologistLicenseExpiration`, `technologistLicenseImage {key}`, `technologistLegalIDImage {key}` |
-| Admin | `firstName`, `lastName`, `email`, `password`, `adminCode` (bcrypt-hashed), `profilePic`, `status`, `twoFactorEnabled`, `loginAttempts`, `loginLockedAt`, `role: "admin"` (immutable) |
+| Admin | `firstName`, `lastName`, `email`, `password`, `adminCode` (bcrypt-hashed), `adminCodeKey` (HMAC-SHA256 of adminCode, unique sparse — enforces uniqueness without exposing plaintext), `profilePic`, `status`, `phoneNumber`, `phoneType`, `phoneVerified` (bool, default false), `twoFactorEnabled`, `loginAttempts`, `loginLockedAt`, `emailNotificationsEnabled` (bool, default true), `role: "admin"` (immutable) |
 
 ### Status Enum (User + Admin)
 `notOnBoarded` → `pending` → `onBoarded` → `needsRenewal` → `pendingRenewal` → `pendingRenewalExpired` → `suspended`
@@ -284,6 +303,7 @@ Also: `rejected`
 | `doctorspecialties` | Link: doctor ↔ specialty/subspecialty claim; `status`, `claimType`, `approvedBy` |
 | `institutedepartmentservices` | Link: department ↔ service claim; `status`, `durationMinutes` |
 | `emailregistry` | Tracks email → model mapping for global uniqueness |
+| `phoneregistry` | Tracks phone number → userId mapping for global uniqueness (same pattern as emailregistry) |
 | `verificationcodes` | OTP codes for signup, email change, password change, permit renewal, 2FA; TTL index on `expiresAt` |
 | `notifications` | In-app: `recipient`, `type` (enum), `title`, `body`, `isRead`; indexes on `{recipient, isRead}`, `{recipient, createdAt}` |
 | `permitrenewals` | Staging: `userId`, `type`, `newImage {key}`, `newLicenseNumber`, `newExpiration`, `status`, `approvedBy`, `rejectionReason` |
@@ -294,6 +314,7 @@ Also: `rejected`
 | `appreports` | User bug/UX/feature reports: `userId`, `category`, `subject`, `description`, `status` (pending/viewed/resolved) |
 | `schedules` | Provider availability: `doctorId` or `instituteId`, `daysOfWeek[]`, `startHour`, `endHour` |
 | `pricing` | `providerId`, `serviceId`, `price` |
+| `appointmentqueues` | Queue per provider per day; unique `{providerId, date}`; `slots[]` array with position/type/status per appointment |
 
 ---
 
@@ -302,29 +323,38 @@ Also: `rejected`
 ### `/api/auth`
 | Method | Path | Description |
 |---|---|---|
-| POST | `/signup` | Create account + send email verify code |
-| POST | `/signup/verify` | Verify signup OTP, set JWT cookie |
-| POST | `/signup/resend` | Resend signup verify code |
-| POST | `/login` | User-only login (checks User collection). Returns `requires2FA` or sets cookie. Tracks `loginAttempts`; on 5th failure sends reset code and locks. |
+| POST | `/signup` | Create account (email or phone) + send verify OTP. No adminCode — admin conversion happens in onboarding. |
+| POST | `/signup/verify` | Verify OTP → always creates plain `User` (email signup) or `User` with phone (phone signup). |
+| POST | `/signup/resend` | Resend signup OTP |
+| POST | `/login` | Email OR verified-phone login (checks User collection). Returns `requires2FA` or sets cookie. Tracks `loginAttempts`; 5th failure → lock + reset code emailed. |
 | POST | `/admin-login` | Admin login (email + password + adminCode). Returns `requires2FA` or sets cookie. |
 | POST | `/verify-2fa` | Verify 6-digit 2FA code, set JWT cookie. Admin path confirmed via `payload.adminVerified` |
+| POST | `/2fa/switch-channel` | Switch 2FA OTP delivery between email and phone |
 | PATCH | `/toggle-2fa` | Toggle `twoFactorEnabled` on own account (protectRoute) |
+| PATCH | `/toggle-email-notifications` | Toggle email notification preference (protectRoute) |
 | POST | `/logout` | Clear JWT cookie |
-| GET | `/me` | Get current user (returns `twoFactorEnabled`) |
+| GET | `/me` | Get current user (returns `twoFactorEnabled`, `phoneVerified`, `emailVerified`) |
 | PATCH | `/update-profile` | Update non-credential profile fields (role-allowlisted) |
-| POST | `/update-email/request` | Step 1: verify current email (OTP) |
-| POST | `/update-email/verify-current` | Step 2: verify OTP on current email |
+| POST | `/update-email/request` | Step 1: verify current password + send OTP to current email |
+| POST | `/update-email/verify-current` | Step 2: verify OTP on current email; sends OTP to new email |
 | POST | `/update-email/verify-new` | Step 3: verify OTP on new email, apply change |
-| POST | `/update-password/request` | Step 1: send password change OTP |
+| POST | `/update-password/request` | Step 1: verify current password + send OTP to email |
 | POST | `/update-password/verify` | Step 2: verify OTP, apply new password |
-| POST | `/forgot-password` | Send reset code to email (admin requires adminCode) |
-| POST | `/forgot-password/verify` | Verify reset code (check only) |
-| POST | `/forgot-password/reset` | Apply new password + clear loginAttempts |
+| POST | `/forgot-password/lookup` | Pre-step: check account exists (email or phone), return available channels. No code sent yet. |
+| POST | `/forgot-password` | Step 1: send reset OTP to chosen channel (email or phone) |
+| POST | `/forgot-password/verify` | Step 2: verify reset code (check only, does not consume) |
+| POST | `/forgot-password/reset` | Step 3: apply new password + clear loginAttempts |
+| POST | `/phone/request-verify` | Onboarding/Settings: generate phone OTP (mock SMS). Works for all roles incl. admin. |
+| POST | `/phone/confirm-verify` | Confirm phone OTP → sets `phoneVerified: true`. Works for all roles incl. admin. |
+| POST | `/phone/request-change` | Settings credentials: validate current password, generate OTP for new phone number |
+| POST | `/onboarding/request-email-verify` | Onboarding (phone-signup users): send OTP to provided email via Brevo |
+| POST | `/onboarding/confirm-email-verify` | Confirm email OTP → sets `email + emailVerified: true` on User |
 | DELETE | `/delete-me` | Request 30-day soft-delete |
 
 ### `/api/onboarding`
 `POST /patient`, `/doctor`, `/pharmacy`, `/institute`, `/admin`, `/department`
-All set status to `pending` (except department which is set `onBoarded` by institute).
+All set status to `pending` (except department which is set `onBoarded` by institute, and patient which is immediately `onBoarded`).
+`POST /admin/convert` — converts a base `User` doc to an `Admin` doc using the provided `adminCode` (unique, HMAC-verified). Must be called before `POST /admin`.
 
 ### `/api/upload`
 - `POST /` — upload file to S3 (returns `{url, key}`)
@@ -343,7 +373,7 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 `POST /book` (accepts `preConsultationMarkdown`), `POST /pay-deposit`, `POST /accept`, `POST /reject`, `POST /cancel`, `POST /complete`, `POST /pay-balance`, `POST /dispute`, `POST /review`, `GET /my-appointments`, `GET /transaction-history` (institute: queries all dept sub-accounts; accepts `?departmentId=`), `GET /reviews/:providerId`
 
 ### `/api/chat`
-`GET /token` (Stream Chat token), `POST /translate` (MyMemory proxy)
+`GET /token` (Stream Chat token), `POST /translate` (MyMemory proxy), `GET /appointment-attachments` (fetch appointment files for chat context)
 
 ### `/api/doctor-schedule`
 `POST /availability`, `GET /get-availability`
@@ -370,7 +400,15 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 `POST /` (any authenticated user), `GET /` (admin), `PATCH /:id/status` (admin)
 
 ### `/api/chatbot`
-`POST /message` — authenticated; body `{ message, history[] }`; rate-limited 20/hr per user; calls Groq API (llama3-8b-8192); returns `{ reply }`
+`POST /message` — authenticated; body `{ message, history[] }`; rate-limited 20/hr per user; calls Groq API (`llama-3.1-8b-instant`); returns `{ reply }`
+
+### `/api/gcash`
+`GET /info` — public (no auth); returns mock platform GCash number + account name. Defaults to env vars `MOCK_GCASH_NUMBER` / `MOCK_GCASH_NAME` if set, else hardcoded demo values.
+
+### `/api/pharmacyorder`
+**Products:** `GET /products` (public listing), `GET /products/mine` (pharmacy's own), `POST /products`, `PATCH /products/:productId`, `DELETE /products/:productId`  
+**Orders:** `POST /orders/pay-now`, `POST /orders/prescription-review`, `PATCH /orders/:orderId/prescription/approve`, `PATCH /orders/:orderId/prescription/reject`, `PATCH /orders/:orderId/ready`, `PATCH /orders/:orderId/start-fulfillment`, `PATCH /orders/:orderId/pay-approved`, `GET /orders/dashboard`  
+**Income:** `GET /income`, `POST /income/manual`
 
 ### `/api/admin/analytics`
 `GET /` — admin only; query params `?from=YYYY-MM-DD&to=YYYY-MM-DD` (default last 30 days); returns full analytics payload
@@ -404,7 +442,7 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 | `/` | `HomePageUser` / `HomePageDoctor` / `HomePagePharmacy` / `HomePageInstitute` / `HomePageDepartment` / `HomePageAdmin` | All |
 | `/consultation` | `ConsultationPage` | Patient |
 | `/search` | `SearchPage` | Patient |
-| `/appointments` | ComingSoonPage | Doctor (pending build) |
+| `/appointments` | `DoctorAppointmentsPage` | Doctor |
 | `/specialty` | `SpecialtyPage` | Doctor |
 | `/setup-departments` | `OnboardingDepartment` | Institute |
 | `/services` | `ServicesPage` | Department |
@@ -418,6 +456,9 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 | `/admin/users` | `UserManagementPage` | Admin |
 | `/admin/specialties` | `AdminSpecialtiesPage` | Admin |
 | `/admin/reports` | `AdminReportsPage` | Admin |
+| `/admin/analytics` | `AdminAnalyticsPage` | Admin |
+| `/terms-of-service` | `TermsOfServicePage` | Public |
+| `/privacy-policy` | `PrivacyPolicyPage` | Public |
 | `/login` | `LoginPage` | Public |
 | `/signup` | `SignUpPage` | Public |
 | `/forgot-password` | `ForgotPasswordPage` | Public |
@@ -426,29 +467,29 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 
 ### Home Pages (per role)
 
-**Patient (`HomePageUser`)** — pending banner; Book Now card (→ /consultation or /search); `AppointmentCalendar` with calendar/list toggle + `ViewPendingAppointmentPatientPopup` on click.
+**Patient (`HomePageUser`)** — pending banner; Join Call banner (virtual, 30 min before / ongoing); queue position banner (in-person, polls 60s); **status-aware action banner** (most-urgent appointment action: pay balance → pay deposit → ongoing in-person → confirmed → waiting → review → fallback to Book Now card); `AppointmentCalendar` (active appointments only) with calendar/list toggle + `ViewPendingAppointmentPatientPopup` on click. Appointments polled every 30s.
 
-**Doctor (`HomePageDoctor`)** — pending banner; Join Call banner (virtual, 30 min before / ongoing); tabbed: **Appointments** (setup warning or success card, pricing card, schedule card, max patients card, **`QueuePanel`** (today's queue with walk-in/advance/no-show), `AppointmentCalendar` + `ViewPendingAppointmentDoctorPopup`) | **Transactions** (`TransactionList`).
+**Doctor (`HomePageDoctor`)** — pending banner; Join Call banner (virtual, 30 min before / ongoing); tabbed: **Appointments** (setup warning or success card, pricing card, schedule card, max patients card, **`QueuePanel`** (auto-builds on mount; today's queue with walk-in/advance/no-show — no manual build button), `AppointmentCalendar` (active only) + `ViewPendingAppointmentDoctorPopup`) | **Transactions** (`TransactionList`). Appointments polled every 30s.
 
-**Pharmacy (`HomePagePharmacy`)** — pending banner; tabbed: **Manage Catalogue** (placeholder) | **Transactions** (`TransactionList`).
+**Pharmacy (`HomePagePharmacy`)** — pending banner; tabbed: **Orders** (Order List, Shipping & Pickup queue, Completed orders, Prescription review modals) | **Manage Catalogue** (`PharmacyCataloguePage`) | **Transactions** (`TransactionList`).
 
 **Institute (`HomePageInstitute`)** — pending banner; tabbed: **Overview** (sub-account setup prompt or dept count card, institute info cards) | **Transactions** (`TransactionList` with department dropdown filter).
 
-**Department (`HomePageDepartment`)** — pending banner; tabbed: **Appointments** (services setup prompt or verified-services card, dept info cards, `AppointmentCalendar` + `ViewPendingAppointmentDoctorPopup`) | **Transactions** (`TransactionList`).
+**Department (`HomePageDepartment`)** — pending banner; tabbed: **Appointments** (services setup prompt or verified-services card, dept info cards, `QueuePanel` (auto-builds), `AppointmentCalendar` (active only) + `ViewPendingAppointmentDoctorPopup`) | **Transactions** (`TransactionList`). Appointments polled every 30s.
 
 **Admin (`HomePageAdmin`)** — tabbed: All Requests | Pending Accounts | Specialties | Subspecialties | Claims | Renewals | Reports; bulk approve/reject; inline suggestion name edit; approve-with-items transaction.
 
 ### Key Shared Components
 | Component | Purpose |
 |---|---|
-| `AppointmentCalendar.jsx` | Calendar/list toggle; 7-col month grid; month nav; status dots; day-click detail; list view groups active vs closed; counterpart name from populated data |
+| `AppointmentCalendar.jsx` | Calendar/list toggle; 7-col month grid; month nav; status dots (active statuses only: pending_payment, deposit_paid, accepted, ongoing, awaiting_balance, disputed — completed/cancelled/rejected/resolved hidden); day-click detail; list view shows active only with inline paperclip→`AppointmentFilesPanel` per row; counterpart name from populated data |
 | `TransactionList.jsx` | Summary stats + table; accepts optional `departmentId` for institute filter |
 | `PendingAppointment.jsx` | Appointment card with counterpart name lookup, Message button, View Details |
 | `AppointmentFilesPanel.jsx` | Upload (WebP auto-convert), list, download (signed URL), delete, PDF export; props: `appointmentId`, `participantRole`, `readOnly` |
 | `LinkifiedText.jsx` | Auto-links URLs and emails in plain text; click shows "Leaving MedConnect" confirmation modal before navigating |
 | `Sidebar.jsx` | Role-aware navigation links; disabled when `status === "pending"` |
 | `Navbar.jsx` | Notifications badge (polls unread-count every 30s); "Add Service" button shown for department role on `/services` page (opens `SuggestServicePopup`) |
-| `Layout.jsx` | Wraps pages with Sidebar + Navbar |
+| `Layout.jsx` | Wraps pages with Sidebar + Navbar + `VirtualJoinPrompt` + `PiPOverlay` (draggable call-in-progress badge, shown when `useCallStore.activeCallId` is set and user is not on `/call/*`) + `ChatbotWidget` |
 | `MapPinModal.jsx` | Leaflet map for address coordinate pinning |
 | `SpecialtyField.jsx` | Specialty + subspecialty search/add with pending local state |
 | `DepartmentTypeField.jsx` | Department type search/add; clinic limited to 1 |
@@ -465,10 +506,11 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 | `SuggestServicePopup.jsx` | Department modal to suggest a new service; posts to `POST /api/services/suggest` |
 
 ### Login Flow (LoginPage.jsx)
-Three steps via component state:
+Four steps via component state:
 1. `"user"` — email + password. Subtle "Admin Login →" text link at bottom.
 2. `"admin"` — email + password + admin code all at once.
 3. `"twoFactor"` — 6-digit code entry (both user and admin paths).
+4. `"locked"` — brute-force lockout recovery; email + 6-digit reset code + new password; calls `POST /api/auth/forgot-password/reset`; triggered automatically when login/adminLogin return HTTP 429.
 
 ### Forgot Password Flow
 `ForgotPasswordPage` → role picker modal on mount (User / Admin) → `ForgotPasswordVerifyPage` → `ForgotPasswordResetPage`. Admin path requires adminCode field.
@@ -500,13 +542,14 @@ Three steps via component state:
 |---|---|
 | Every 30s | `accepted → ongoing` transition |
 | Every 5 min | `ongoing → awaiting_balance/fully_paid` + delete rejected appointments after 24h |
+| Daily 6am (Manila) | Build appointment queues for all doctors/departments with accepted appointments today |
 | Daily midnight | 30-day soft-delete sweep + S3 cleanup |
 | Daily 1am | License expiry checker: `onBoarded → needsRenewal` (60 days before), `needsRenewal → suspended` (expired) |
 
 ### Expert System (ConsultationPage)
-- 3-step symptom wizard: body system → symptoms (8 per system) → duration/age group
-- Jaccard similarity against `diseaseSymptoms.json` (71 diseases, 12 body systems)
-- Scores normalized to `confidence` (0–1); top 5 matches shown with urgency badges
+- 3-step symptom wizard: body system → symptoms (8 per system + "Other" free-text) → duration/age group
+- **13 body systems**: cardiovascular, respiratory, gastro, neuro, msk, derm, ent, ophthalmology, mental, endo, repro, **dental** (NEW), general
+- Jaccard similarity against `diseaseSymptoms.json` (71 diseases); top 5 matches shown with `badge-sm` urgency badges
 - Stores `specialtyConfidence` map in `sessionStorage` → used by SearchPage bipartite ranker
 - Pre-consultation markdown auto-generated and attached as `AppointmentFile` on booking
 
@@ -515,8 +558,15 @@ Reads `specialtyConfidence` from sessionStorage; scores doctors as `specialtySco
 
 ### Chat (Stream)
 - `ChatPage.jsx` uses Stream Chat SDK
+- Channel ID is `[authUser._id, targetUserId].sort().join("-")` — single persistent channel per doctor-patient pair regardless of appointment count
+- Call button (`CallButton.jsx`) enabled when appointment is `ongoing` OR `accepted` within 30 minutes of start
 - `MedicalChatMessage.jsx` — custom message renderer
 - `POST /api/chat/translate` — proxies to MyMemory free API; auto-detects source; graceful fallback
+
+### Video Call (Stream)
+- `CallPage.jsx` — auth check: compound call IDs (`userId1-userId2`) verify `authUser._id` is one of the two parts; shows "Access Denied" if not. Single-ID calls from Join Call banners skip this check.
+- `useCallStore.js` — Zustand store: `activeCallId`, `setActiveCallId`, `clearActiveCallId`. Set on join, cleared on `CallingState.LEFT`.
+- `PiPOverlay` in `Layout.jsx` — draggable floating badge ("Call in progress / Click to return") when `activeCallId` is set and user is not on `/call/*`. Drag to reposition; click to return; ✕ to dismiss.
 
 ---
 
@@ -533,11 +583,55 @@ STREAM_SECRET
 ENCRYPTION_KEY
 ADMIN_CODE
 GROQ_API_KEY        ← required for AI chatbot; free key at console.groq.com
+MOCK_GCASH_NUMBER   ← optional; defaults to "0917-000-0000" if unset
+MOCK_GCASH_NAME     ← optional; defaults to "MedConnect Platform" if unset
 ```
 
 ---
 
 ## Recent Changes & Important Notes
+
+### Session 2026-06-09 Part 2 — UI Polish, Booking Overhaul, Report Account, Call PiP, Queue Auto-build, Real-time Polling
+
+**Group A — UI/CSS fixes:**
+- `ConsultationPage.jsx`: urgency + "Top match" badges `badge-xs` → `badge-sm`
+- `ProviderCard.jsx`: department type, service, language chips `badge-xs` → `badge-sm`
+- `ViewPendingAppointmentPatientPopup.jsx`: cancel buttons → `btn-error btn-outline btn-sm`; "File a Dispute" trigger → `btn-error btn-outline btn-sm`
+- `DoctorAppointmentsPage.jsx`: removed "N total" subtitle
+
+**Group B — Consultation content:**
+- `ConsultationPage.jsx`: added **Dental & Oral** as 13th body system (8 symptoms: toothache, sensitivity, bleeding gums, gum swelling, jaw pain, mouth sores, bad breath, difficulty chewing)
+- `ConsultationPage.jsx`: Step 2 "Other…" checkbox reveals free-text input; typed symptoms are added to `selectedSymptoms` via `addSymptomFromSearch`
+
+**Group C — Status-aware dashboard banner:**
+- `HomePageUser.jsx`: static "Book Now" card replaced by `renderActionBanner()`. Priority order: `awaiting_balance` → `pending_payment` → `ongoing` in-person → `accepted` → `deposit_paid` → review available → fallback to Book Now. Each state shows relevant action buttons (navigate to payment, open chat, open appointment popup).
+
+**Group D — Booking overhaul:**
+- `CreateBookingPopup.jsx`: time slot picker and calendar/list view toggle removed. Date selection auto-picks the first available slot (keeps a valid `start` for the backend). Selected date shows slot count + "queue order" note. Summary shows date/type/price (no time). Confirm enabled once a date is picked.
+- `ProviderCard.jsx`: `onBookingCreated` callback now opens `ViewPendingAppointmentPatientPopup` with the new appointment immediately after booking.
+
+**Group E — Calendar active-only:**
+- `AppointmentCalendar.jsx`: `ACTIVE_DOT_STATUSES` — removed `completed` and `fully_paid`. `allApptsByDate` merged into `apptsByDate` (same filter). List view shows only active appointments; "Closed" section removed. Day popup shows active only.
+
+**Group F — Patient appointment card:**
+- `AppointmentCalendar.jsx`: `ListRow` now has a paperclip button (patient/doctor/department roles) that accordion-expands `AppointmentFilesPanel` inline below the row. `expandedFiles` Set state + `toggleFiles` function in the calendar component.
+
+**Group G — Report Account:**
+- `OtherProfilePage.jsx`: "Report Account" button (ghost/xs/error, 50% opacity until hovered) shown on all non-own profiles. Modal: 7 checkbox reasons + free-text textarea (1800 char limit). Posts `POST /api/app-reports` with `category: "other"`, `subject: "Report Account: [name]"` (≤120 chars), bullet-listed reasons + details in `description`.
+
+**Group H — Chat + Call:**
+- `CallPage.jsx`: auth check for compound IDs (`userId1-userId2`) — shows "Access Denied" if `authUser._id` not in parts. Single-ID calls (Join Call banners) skip check.
+- Single chat log per pair already implemented (channel ID = sorted pair joined with `-`). No changes needed.
+- `ChatPage.jsx`: `hasOngoingCall` now also returns true when appointment is `accepted` within 30 min of start (matches Join Call banner logic). Requires `dayjs` (added import). `CallButton` tooltip updated.
+- `useCallStore.js` (NEW): Zustand store — `activeCallId`, `setActiveCallId`, `clearActiveCallId`.
+- `CallPage.jsx`: calls `setActiveCallId(callId)` after join succeeds; `CallContent` calls `clearActiveCallId()` on `CallingState.LEFT`.
+- `Layout.jsx`: `PiPOverlay` component — draggable via mousedown/mousemove; click navigates to `/call/${activeCallId}`; ✕ dismisses. Hidden when on `/call/*` or no active call.
+
+**Group I — Real-time & queue:**
+- `QueuePanel.jsx`: auto-builds queue on mount via `useRef` guard (only once per mount, only when `!queue.isActive`). "Build Queue" manual button removed. No-queue state shows spinner + "Building…" text.
+- `HomePageUser.jsx`, `HomePageDoctor.jsx`, `HomePageDepartment.jsx`: `fetchAppointments` now called every 30s via `setInterval` with cleanup on unmount.
+
+---
 
 ### Expert System Data (must commit to git)
 - `diseaseSymptoms.json` expanded to **71 diseases** (was 61); added: Leptospirosis, Schistosomiasis, Rheumatic Fever, Pancreatitis, Acute Cholecystitis, Chronic Kidney Disease, Nephrotic Syndrome, Uterine Fibroids, Preeclampsia, Schizophrenia
@@ -608,7 +702,7 @@ Tests updated to import from proper modules:
 
 **Admin analytics (#75):** New `/api/admin/analytics` route (`analytics.route.js` + `analytics.controller.js`). Returns totalRevenue, platformRevenue, revenueByDay, revenueByDoctor (top 20), appointmentVolume breakdown, topProviders (top 10), cancellationRate, disputeRate. Frontend: `AdminAnalyticsPage.jsx` at `/admin/analytics` — date range filter, stat cards, tables, CSV + Excel export (.xlsx as CSV). "Analytics →" link added to HomePageAdmin tab row.
 
-**AI chatbot (#80):** `chatbot.controller.js` calls Groq API via fetch (no npm package — uses `fetch` directly with `llama3-8b-8192` model). Rate limit: 20 messages/hour per user (in-memory Map, server-side). System prompt constrains it to MedConnect feature help only. `GROQ_API_KEY` env var required. Frontend: `ChatbotWidget.jsx` — floating bottom-right button (fixed, z-50), chat panel with message thread, quick prompts on open, `/path` links rendered as `<Link>`. Added to `Layout.jsx` so it appears on all authenticated pages for all roles.
+**AI chatbot (#80):** `chatbot.controller.js` calls Groq API via fetch (no npm package — uses `fetch` directly with `llama-3.1-8b-instant` model, 12s timeout, max 300 tokens, temperature 0.4). Rate limit: 20 messages/hour per user (in-memory Map via `rateLimiter.js`, server-side). System prompt constrains to MedConnect feature help only — refuses medical diagnoses, redirects symptom questions to `/consultation`, redirects doctor search to `/search`. `GROQ_API_KEY` env var required; missing → 503. Frontend: `ChatbotWidget.jsx` — floating bottom-right button (fixed, z-50), panel 80–96 chars wide, message history (last 8 sent to API), 6 role-aware quick-prompt chips on open, `/path` links rendered as `<Link>`, rate-limit 429 shows modal message. Added to `Layout.jsx` so it appears on all authenticated pages for all roles.
 
 **PSGC dropdowns (#86):** `PSGCAddressFields.jsx` fetches from `psgc.cloud` public API (no bundled data). Cascading Region → Province → City/Municipality. Integrated into `AddressFields` in `OnboardingShared.jsx` — replaces city/province free-text inputs. Falls back gracefully (shows message) if API unreachable.
 
@@ -649,6 +743,43 @@ All flags #68–#88 were clarified and updated in the Open Flags section. Key de
 - Queue position alerts: 10, 5, and 2 slots ahead.
 - Walk-in button #79: shows when appointment is `ongoing` OR within 30 min of `accepted` start.
 - #78: `maxPatientsPerDay` per day total; no time-block logic (queue handles order).
+
+### Session 2026-06-09 — Auth Stabilisation, Admin Overhaul, Address & Specialty UX
+
+**Signup:**
+- Admin code removed from signup. `verifySignup` always creates a plain `User`; admin conversion (`/onboarding/admin/convert`) happens in onboarding. `SignUpPage.jsx`: `isAdminMode` + adminCode field + "Admin Sign Up →" toggle all removed.
+- `Admin.adminCode` made optional (set during onboarding, not signup). `adminCodeKey` (HMAC-SHA256 of plaintext, unique sparse index) added to enforce uniqueness without bcrypt. `adminConvert.controller.js` returns readable 400 on duplicate.
+- `Admin.phoneVerified` field added.
+
+**Forgot password:**
+- New 3-step flow: `POST /forgot-password/lookup` → user chooses channel → `POST /forgot-password` sends OTP. `ForgotPasswordPage.jsx` redesigned with "identify" step, not-found error with return button, "choose channel" step.
+- `verifyForgotPasswordCode` and `resetForgotPassword` now fall back to phone lookup so phone-identified users can complete the flow.
+
+**Phone verification:**
+- `PhoneField.verifyCode` now calls `confirmPhoneVerify` backend (was purely frontend string compare — `phoneVerified` was never set in DB).
+- `requestPhoneVerify` / `confirmPhoneVerify` / `requestPhoneChange` now work for admin accounts (use Admin model when `role === "admin"`).
+
+**Onboarding:**
+- Phone-signup users must now verify their email during onboarding via `EmailVerificationField` (new component in `OnboardingShared.jsx`). Sends real Brevo OTP. `step2Complete` gates on `emailVerified`. Routes: `POST /auth/onboarding/request-email-verify` + `POST /auth/onboarding/confirm-email-verify`.
+- All 4 role onboarding controllers: `emailVerified: isPhoneSignup ? !!req.body.email` bug fixed → `emailVerified: existing.emailVerified ?? false` (reads what was actually verified before form submit).
+- `DoctorSpecialty` claim records now created at onboarding submit (was silently missing — specialties went to `Doctor.specialty[]` array only, never to `doctorspecialties` collection).
+- Onboarding draft cache (localStorage) added then removed in same session — images can't be serialized; removed entirely.
+- `OnboardingAdmin.jsx`: `phoneVerified` state added; `onVerified` wired to PhoneField; `formComplete` requires phone verified.
+
+**Specialties:**
+- `getSpecialties` and `getSubspecialtiesBySpecialty` now return `pending` + `verified` entries. `SpecialtyField` + `SubspecialtyField` show `(pending)` label in dropdown; selected chips use clock icon for both `isNew` and `status === "pending"` entries.
+
+**Address fields (`PSGCAddressFields.jsx`):**
+- Region removed. All provinces loaded on mount. All ~1,600 cities loaded on mount (cached). Province selection reorders city dropdown (province-first optgroup) without clearing city. Barangay is a 1-col combobox; suggestions loaded after city selected.
+- Field order: Building | Street / Barangay | City / Province | Postal Code.
+
+**Settings:**
+- Standalone Phone Number card removed; Verify Phone / Add & Verify Phone button placed next to Update Credentials button (hidden once verified, shown for all roles incl. admin).
+- Credentials modal gains "Change Phone Number" mode (current password + new phone + OTP via `POST /auth/phone/request-change`).
+- `requestPhoneChange` backend added.
+
+**Login:**
+- Phone mode `onBlur` bug fixed — was checking formatted display string length (12 chars with spaces) instead of raw digit count (10).
 
 ### Session 2026-06-04 — Email Notification Toggle
 Added per-user opt-out for notification emails. Verification/security codes (OTP, 2FA, signup, password/email change) are always sent regardless of this setting.
@@ -769,9 +900,9 @@ The queue system (#71/#72/#87) is a new collection and the most complex feature.
 - Walk-ins (type `walkin`) are appended to the end. Emergencies (type `emergency`) are inserted at position 1 and everyone else shifts down (+1 position). Both are doctor-created only — patients cannot create these.
 - The active slot (position 1 with status `active`) corresponds to the `ongoing` appointment in the main appointments collection.
 - **Advance to next**: Doctor can only call next when current appointment is `completed`, `awaiting_balance`, or `fully_paid`. Cannot skip manually — skip only triggers via the 5-minute no-show window.
-- **No-show / skip**: After 5 minutes with no activity (patient hasn't joined virtual or doctor hasn't marked started), system auto-prompts doctor. If doctor confirms skip:
-  - Patient accepts skip → moved to end of queue (position updates, `appointment.start` adjusted, notifications sent).
-  - Patient doesn't accept → treated as `cancelled`, no refund. Appointment status → `cancelled`.
+- **No-show / skip**: Doctor manually triggers `POST /api/queue/no-show` (there is no automatic 5-min timer — doctor decides when a patient is a no-show). Doctor chooses outcome:
+  - `outcome: "skip"` → patient moved to end of queue (position updates, `appointment.start` adjusted, notifications sent).
+  - `outcome: "cancel"` → treated as `cancelled`, no refund. Appointment status → `cancelled`.
 - **Emergency bump**: When doctor adds an emergency walk-in mid-session, the currently `ongoing` appointment reverts to `accepted` (current patient notified + all others notified they've been pushed back one slot). Emergency slot becomes `active` / `ongoing`.
 - **Position notifications**: Sent at 10, 5, and 2 slots ahead (in-app + email if `emailNotificationsEnabled`). Notification type: `queue_position_update`.
 - **Patient dashboard**: If the patient has an appointment today, their dashboard shows their live queue position ("You are #N in queue — N people ahead of you"). Polls every 60s.
@@ -839,6 +970,7 @@ The queue system (#71/#72/#87) is a new collection and the most complex feature.
 | 18 | Package version sync | After development — audit `package.json` |
 | 22 | Dual permit renewal endpoints | Old role-specific endpoints in `permits.controller.js` still write directly to User; remove once new `PermitRenewal` flow confirmed |
 | 84 | Data privacy compliance | **Partially done.** T&C + Privacy Policy pages updated. Still missing: consent banner on signup, formal data retention policy, DPA officer contact. Do not attempt full compliance pass without explicit instruction. |
+| — | Drop legacy registry collections | Once all teammates have merged the AccountRegistry refactor, drop `emailregistries` and `phoneregistries` from MongoDB Atlas. Migration script: `backend/src/scripts/migrate-registries.js` (already run). |
 
 ### Remaining Flags — Cross-Login & Dual 2FA
 | # | Feature | Notes |

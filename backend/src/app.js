@@ -36,7 +36,11 @@ const __dirname = path.resolve();
 
 app.use(
     cors({
-        origin: process.env.CLIENT_ORIGIN || "http://localhost:5173",
+        // In production NODE_ENV=production and CLIENT_ORIGIN must be set.
+        // In dev, reflect any origin so any localhost port works.
+        origin: process.env.NODE_ENV === "production"
+            ? process.env.CLIENT_ORIGIN
+            : true,
         credentials: true,
     })
 );

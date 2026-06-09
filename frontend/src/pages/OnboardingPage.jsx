@@ -136,6 +136,8 @@ const OnboardingPage = () => {
     // --- ROLE-SPECIFIC ONBOARDING ---
     const onboardingProps = {
         email: authUser?.email,
+        signupMethod: authUser?.signupMethod ?? "email",
+        phoneNumber: authUser?.phoneNumber,
         role: selectedRole,
         onBack: () => setSelectedRole(null),
         onSuccess: handleOnboardingSuccess,

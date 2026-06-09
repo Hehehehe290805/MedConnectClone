@@ -9,6 +9,7 @@ const OnboardingAdmin = ({ email, role, onBack, onSuccess }) => {
     const [uploadingFields, setUploadingFields] = useState({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [adminCodeError, setAdminCodeError] = useState("");
+    const [phoneVerified, setPhoneVerified] = useState(false);
 
     const [form, setForm] = useState({
         adminCode: "",
@@ -37,7 +38,8 @@ const OnboardingAdmin = ({ email, role, onBack, onSuccess }) => {
         form.adminCode.trim() &&
         form.firstName.trim() &&
         form.lastName.trim() &&
-        form.phoneNumber.length === 10;
+        form.phoneNumber.length === 10 &&
+        phoneVerified;
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -95,7 +97,7 @@ const OnboardingAdmin = ({ email, role, onBack, onSuccess }) => {
                             <input type="text" className="input input-bordered w-full" placeholder="Gonzales" value={form.lastName} onChange={(e) => update("lastName", e.target.value)} />
                         </div>
                     </div>
-                    <PhoneField phoneNumber={form.phoneNumber} phoneType={form.phoneType} onNumberChange={(val) => update("phoneNumber", val)} onTypeChange={(val) => update("phoneType", val)} />
+                    <PhoneField phoneNumber={form.phoneNumber} phoneType={form.phoneType} onNumberChange={(val) => update("phoneNumber", val)} onTypeChange={(val) => update("phoneType", val)} onVerified={setPhoneVerified} />
                     <button className="btn btn-primary w-full" type="submit" disabled={isPending || isAnyUploading || !formComplete || isSubmitting}>
                         {isPending || isSubmitting ? <><span className="loading loading-spinner loading-xs" />Submitting...</> : "Submit for Approval"}
                     </button>
