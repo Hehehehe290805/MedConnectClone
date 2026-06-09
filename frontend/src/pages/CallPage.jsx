@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router";
 import useAuthUser from "../hooks/useAuthUser";
 import { useQuery } from "@tanstack/react-query";
 import { getStreamToken } from "../lib/api";
+import useCallStore from "../store/useCallStore";
 
 import {
   StreamVideo,
@@ -32,6 +33,13 @@ const CallPage = () => {
   const [isConnecting, setIsConnecting] = useState(false);
 
   const { authUser, isLoading } = useAuthUser();
+  const { setActiveCallId } = useCallStore();
+
+  // Auth check for compound channel IDs (format: "userId1-userId2").
+  // Single-ID calls from the Join Call banner are already gated by the home page.
+  const callParts = callId?.includes("-") ? callId.split("-") : null;
+  const isCompoundId = callParts?.length === 2 && callParts.every(p => /^[a-f0-9]{24}$/.test(p));
+  const isUnauthorized = isCompoundId && !!authUser && !callParts.includes(authUser._id);
 
   const { data: tokenData } = useQuery({
     queryKey: ["streamToken"],
@@ -65,6 +73,7 @@ const CallPage = () => {
 
         setClient(videoClient);
         setCall(callInstance);
+        setActiveCallId(callId);
       } catch (error) {
         console.error("Error joining call:", error);
         toast.error("Could not join the call. Please try again.");
@@ -77,6 +86,18 @@ const CallPage = () => {
   }, [tokenData, authUser, callId]);
 
   if (isLoading || isConnecting) return <PageLoader />;
+
+  if (isUnauthorized) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center gap-4 text-center p-4">
+        <p className="text-2xl font-bold">Access Denied</p>
+        <p className="opacity-60 max-w-sm">You are not a participant in this call.</p>
+        <button className="btn btn-primary" onClick={() => window.close() || (window.location.href = "/")}>
+          Go Home
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen flex flex-col items-center justify-center">
@@ -100,10 +121,13 @@ const CallPage = () => {
 const CallContent = () => {
   const { useCallCallingState } = useCallStateHooks();
   const callingState = useCallCallingState();
-
+  const { clearActiveCallId } = useCallStore();
   const navigate = useNavigate();
 
-  if (callingState === CallingState.LEFT) return navigate("/");
+  if (callingState === CallingState.LEFT) {
+    clearActiveCallId();
+    return navigate("/");
+  }
 
   return (
     <StreamTheme>

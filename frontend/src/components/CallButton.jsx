@@ -7,7 +7,7 @@ function CallButton({ handleVideoCall, disabled }) {
         onClick={handleVideoCall}
         disabled={disabled}
         className="btn btn-success btn-sm text-white disabled:opacity-40"
-        title={disabled ? "Only available during an ongoing appointment" : "Join video call"}
+        title={disabled ? "Available 30 min before or during an appointment" : "Join video call"}
       >
         <VideoIcon className="size-6" />
       </button>

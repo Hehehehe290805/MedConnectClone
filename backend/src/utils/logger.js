@@ -10,6 +10,6 @@ export async function logError(controller, error) {
         });
         await log.save();
     } catch (err) {
-        console.error("Failed to log error to MongoDB:", err);
+
     }
 }

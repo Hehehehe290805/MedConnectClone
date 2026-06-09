@@ -13,7 +13,7 @@ import PermitRenewal from "../models/PermitRenewal.js";
 import Notification from "../models/Notification.js";
 import Schedule from "../models/Schedule.js";
 import Pricing from "../models/Pricing.js";
-import EmailRegistry from "../models/EmailRegistry.js";
+import AccountRegistry from "../models/AccountRegistry.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { encrypt } from "../utils/crypto.js";
@@ -812,7 +812,7 @@ export const getAllUsers = asyncHandler(async (req, res) => {
 
 // Immediately hard-deletes a user account (bypasses the 30-day soft-delete window).
 // Cleans up S3 files first so the bucket stays tidy even if the DB delete succeeds.
-// EmailRegistry is also removed to free the email for re-registration.
+// AccountRegistry entries are also removed to free the email/phone for re-registration.
 export const adminForceDeleteUser = asyncHandler(async (req, res) => {
   const { userId } = req.params;
 
@@ -841,7 +841,7 @@ export const adminForceDeleteUser = asyncHandler(async (req, res) => {
   } else {
     await User.findByIdAndDelete(userId);
   }
-  await EmailRegistry.deleteOne({ email: user.email });
+  await AccountRegistry.deleteMany({ registrant: user._id });
 
   if (!isAdmin) {
     await Promise.all([

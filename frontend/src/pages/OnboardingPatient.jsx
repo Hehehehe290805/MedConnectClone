@@ -3,17 +3,22 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { completeOnboarding } from "../lib/api";
 import { isValidPersonName, NAME_ERROR } from "../lib/utils";
-import { StepProgress, StepHeader, ImageUploadField, LanguagesField, AddressFields, PhoneField, forwardGeocode, uploadPendingImages } from "./OnboardingShared";
+import { StepProgress, StepHeader, ImageUploadField, LanguagesField, AddressFields, PhoneField, EmailVerificationField, forwardGeocode, uploadPendingImages } from "./OnboardingShared";
 
 const TOTAL_STEPS = 2;
 
-const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const OnboardingPatient = ({ email, signupMethod, phoneNumber: signupPhone, role, onBack, onSuccess }) => {
+  const isPhoneSignup = signupMethod === "phone" || !email;
   const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
 
   const [form, setForm] = useState({
+    email: "",
     profilePic: {},
     firstName: "",
     lastName: "",
@@ -23,15 +28,7 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
     languages: [],
     phoneNumber: "",
     phoneType: "mobile",
-    address: {
-      buildingNumber: "",
-      street: "",
-      barangay: "",
-      city: "",
-      province: "",
-      postalCode: "",
-      coordinates: null,
-    },
+    address: { buildingNumber: "", street: "", barangay: "", city: "", province: "", postalCode: "", coordinates: null },
   });
 
   const dobRef = useRef(null);
@@ -79,16 +76,26 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
     form.birthDate &&
     form.sex;
 
-  const step2Complete =
+  const step2Complete = isPhoneSignup ? (
+    EMAIL_REGEX.test(form.email) &&
+    emailVerified &&
     form.languages.length > 0 &&
-    form.phoneNumber.length === 10 &&
-    phoneVerified &&
     form.address.buildingNumber.trim() &&
     form.address.street.trim() &&
     form.address.barangay.trim() &&
     form.address.city.trim() &&
     form.address.province.trim() &&
-    /^\d{4}$/.test(form.address.postalCode);
+    /^\d{4}$/.test(form.address.postalCode)
+  ) : (
+    form.languages.length > 0 &&
+    form.phoneNumber.length === 10 &&
+    form.address.buildingNumber.trim() &&
+    form.address.street.trim() &&
+    form.address.barangay.trim() &&
+    form.address.city.trim() &&
+    form.address.province.trim() &&
+    /^\d{4}$/.test(form.address.postalCode)
+  );
 
   const validateStep1 = () => {
     const e = {};
@@ -113,9 +120,14 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
 
   const validateStep2 = () => {
     const e = {};
+    if (isPhoneSignup) {
+      if (!form.email.trim()) e.email = "Email is required";
+      else if (!EMAIL_REGEX.test(form.email)) e.email = "Enter a valid email address";
+    } else {
+      if (!form.phoneNumber.trim()) e.phoneNumber = "Phone number is required";
+      else if (form.phoneNumber.length !== 10) e.phoneNumber = "Phone number must be 10 digits";
+    }
     if (form.languages.length === 0) e.languages = "At least one language is required";
-    if (!form.phoneNumber.trim()) e.phoneNumber = "Phone number is required";
-    else if (form.phoneNumber.length !== 10) e.phoneNumber = "Phone number must be 10 digits";
     if (!form.address.buildingNumber.trim()) e["address.buildingNumber"] = "Building / House No. is required";
     if (!form.address.street.trim()) e["address.street"] = "Street is required";
     if (!form.address.barangay.trim()) e["address.barangay"] = "Barangay is required";
@@ -136,6 +148,7 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
           subtitle={step === 1 ? "Tell us about yourself" : "How can we reach you?"}
           role={role}
           email={email}
+          phoneNumber={signupPhone}
           onBack={step === 1 ? onBack : () => setStep(1)}
           isFirstStep={step === 1}
         />
@@ -214,7 +227,16 @@ const OnboardingPatient = ({ email, role, onBack, onSuccess }) => {
             mutate({ ...finalForm, role: "patient" });
           }} className="space-y-4">
             <LanguagesField value={form.languages} onChange={(val) => update("languages", val)} error={errors.languages} />
-            <PhoneField phoneNumber={form.phoneNumber} phoneType={form.phoneType} onNumberChange={(val) => update("phoneNumber", val)} onTypeChange={(val) => update("phoneType", val)} error={errors.phoneNumber} onVerified={setPhoneVerified} />
+            {isPhoneSignup ? (
+              <EmailVerificationField
+                email={form.email}
+                onEmailChange={(val) => { update("email", val); setEmailVerified(false); }}
+                onVerified={setEmailVerified}
+                error={errors.email}
+              />
+            ) : (
+              <PhoneField phoneNumber={form.phoneNumber} phoneType={form.phoneType} onNumberChange={(val) => update("phoneNumber", val)} onTypeChange={(val) => update("phoneType", val)} error={errors.phoneNumber} onVerified={setPhoneVerified} />
+            )}
             <AddressFields value={form.address} onChange={(val) => update("address", val)} errors={errors} cityRef={cityRef} />
             <button className="btn btn-primary w-full" type="submit" disabled={isPending || !step2Complete || isSubmitting}>
               {isPending || isSubmitting ? <><span className="loading loading-spinner loading-xs" />Submitting...</> : "Complete Onboarding"}

@@ -52,6 +52,10 @@ const BODY_SYSTEMS = [
     symptoms: ["Painful urination", "Frequent urination", "Blood in urine", "Vaginal discharge", "Pelvic pain", "Painful menstruation", "Irregular menstruation", "Vaginal itching"],
   },
   {
+    id: "dental", label: "Dental & Oral", icon: "🦷",
+    symptoms: ["Toothache", "Tooth sensitivity", "Bleeding gums", "Gum swelling or tenderness", "Jaw pain", "Mouth sores or ulcers", "Bad breath", "Difficulty chewing"],
+  },
+  {
     id: "general", label: "General / Not Sure", icon: "🏥",
     symptoms: ["Fever", "Fatigue or tiredness", "Weakness", "Chills", "Unexplained weight loss", "Swollen lymph nodes", "Aching all over", "Feeling generally unwell"],
   },
@@ -155,6 +159,8 @@ const ConsultationPage = () => {
   const [ageGroup, setAgeGroup] = useState(null);
   const [symptomSearch, setSymptomSearch] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
+  const [otherText, setOtherText] = useState("");
+  const [showOtherInput, setShowOtherInput] = useState(false);
   const searchRef = useRef(null);
 
   const systemData = BODY_SYSTEMS.find(s => s.id === selectedSystem);
@@ -192,6 +198,8 @@ const ConsultationPage = () => {
   const handleStep1Select = (id) => {
     setSelectedSystem(id);
     setSelectedSymptoms([]);
+    setOtherText("");
+    setShowOtherInput(false);
     setStep(2);
   };
 
@@ -358,6 +366,44 @@ const ConsultationPage = () => {
               </label>
             ))}
           </div>
+
+          {/* Other — free-text custom symptom */}
+          <div className="space-y-2">
+            <label className="flex items-center gap-3 p-3 rounded-lg border border-base-300 cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors">
+              <input
+                type="checkbox"
+                className="checkbox checkbox-sm checkbox-primary"
+                checked={showOtherInput}
+                onChange={(e) => { setShowOtherInput(e.target.checked); if (!e.target.checked) setOtherText(""); }}
+              />
+              <span className="text-sm">Other…</span>
+            </label>
+            {showOtherInput && (
+              <div className="flex gap-2 pl-1">
+                <input
+                  type="text"
+                  className="input input-sm input-bordered flex-1"
+                  placeholder="Describe your symptom…"
+                  value={otherText}
+                  onChange={e => setOtherText(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && otherText.trim()) {
+                      addSymptomFromSearch(otherText.trim());
+                      setOtherText("");
+                    }
+                  }}
+                  autoFocus
+                />
+                <button
+                  className="btn btn-sm btn-primary"
+                  disabled={!otherText.trim()}
+                  onClick={() => { addSymptomFromSearch(otherText.trim()); setOtherText(""); }}
+                >
+                  Add
+                </button>
+              </div>
+            )}
+          </div>
           <div className="flex justify-between pt-2">
             <button onClick={() => setStep(1)} className="btn btn-ghost btn-sm gap-1">
               <ArrowLeftIcon className="size-3" /> Back
@@ -461,8 +507,8 @@ const ConsultationPage = () => {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-sm">{m.disease}</span>
-                          {i === 0 && <span className="badge badge-xs badge-primary">Top match</span>}
-                          <span className={`badge badge-xs ${urgency.cls}`}>{urgency.label}</span>
+                          {i === 0 && <span className="badge badge-sm badge-primary">Top match</span>}
+                          <span className={`badge badge-sm ${urgency.cls}`}>{urgency.label}</span>
                         </div>
                         <p className="text-xs opacity-60 mt-0.5">
                           {m.matchCount} matching symptom{m.matchCount > 1 ? "s" : ""} · {(m.confidence * 100).toFixed(0)}% confidence · See a <strong>{m.specialty}</strong> specialist

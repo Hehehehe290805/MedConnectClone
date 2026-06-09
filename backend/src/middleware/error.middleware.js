@@ -4,7 +4,7 @@
  * Catches all errors passed via next(err) or thrown in asyncHandler-wrapped controllers.
  */
 export const errorMiddleware = (err, req, res, next) => {
-    console.error(`[ERROR] ${req.method} ${req.originalUrl} —`, err.message || err);
+    console.error(`[ERROR] ${err.message || err}`);
 
     // Mongoose validation error
     if (err.name === "ValidationError") {

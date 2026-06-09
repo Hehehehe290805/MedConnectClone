@@ -22,11 +22,14 @@ const verificationCodeSchema = new mongoose.Schema({
         required: true,
         enum: [
             "signup",
+            "phone_signup",
             "update-email-current",
             "update-email-new",
             "update-password",
             "permit-renewal",
             "two_factor",
+            "phone_verify",
+            "onboarding_email_verify",
         ],
     },
     payload: {

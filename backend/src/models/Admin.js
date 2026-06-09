@@ -1,5 +1,10 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
+
+function adminCodeKey(plain) {
+    return crypto.createHmac("sha256", process.env.ENCRYPTION_KEY || "fallback").update(plain).digest("hex");
+}
 
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
@@ -39,7 +44,8 @@ const adminSchema = new mongoose.Schema({
         default: "admin",
         immutable: true,
     },
-    adminCode: { type: String, required: true },
+    adminCode: { type: String },
+    adminCodeKey: { type: String, sparse: true, unique: true }, // HMAC of plaintext code — used for uniqueness without bcrypt
     approvedBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Admin",
@@ -58,6 +64,7 @@ const adminSchema = new mongoose.Schema({
         enum: ["mobile", "telephone"],
         default: "mobile",
     },
+    phoneVerified: { type: Boolean, default: false },
 }, { timestamps: true });
 
 adminSchema.pre("save", async function (next) {
@@ -66,7 +73,8 @@ adminSchema.pre("save", async function (next) {
             const salt = await bcrypt.genSalt(10);
             this.password = await bcrypt.hash(this.password, salt);
         }
-        if (this.isModified("adminCode")) {
+        if (this.isModified("adminCode") && this.adminCode) {
+            this.adminCodeKey = adminCodeKey(this.adminCode);
             const salt = await bcrypt.genSalt(10);
             this.adminCode = await bcrypt.hash(this.adminCode, salt);
         }

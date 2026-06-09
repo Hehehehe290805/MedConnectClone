@@ -21,7 +21,7 @@ export async function notify(recipientId, type, title, body, metadata = {}) {
     try {
         await Notification.create({ recipient: recipientId, type, title, body, metadata });
     } catch (err) {
-        console.error("[Notify] Failed to create in-app notification:", err.message);
+        console.error("[Notify] Failed to create notification:", err.message);
     }
 
     // 2. Email — skipped when recipient has turned off email notifications
@@ -48,7 +48,7 @@ export async function notifyAllAdmins(type, title, body) {
             // fire-and-forget per admin — do not await all in parallel to keep
             // error isolation (one bad admin doc won't skip others)
             notify(admin._id, type, title, body).catch((err) =>
-                console.error(`[NotifyAdmins] Failed for admin ${admin._id}:`, err.message)
+                console.error(`[NotifyAdmins] Failed for admin:`, err.message)
             );
         }
     } catch (err) {

@@ -1,19 +1,21 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router";
-import { ChevronLeftIcon, ChevronRightIcon, CalendarIcon, ListIcon, XIcon, MessageCircleIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, CalendarIcon, ListIcon, XIcon, MessageCircleIcon, PaperclipIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
 import useAuthUser from "../hooks/useAuthUser";
+import AppointmentFilesPanel from "./AppointmentFilesPanel.jsx";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 const PH_TZ = "Asia/Manila";
 
-// Only show dots for non-terminal statuses (no cancelled/rejected/resolved)
+// Only show active/in-progress appointments on the calendar.
+// Completed, fully_paid, cancelled, rejected, and resolved are hidden.
 const ACTIVE_DOT_STATUSES = new Set([
     "pending_payment", "deposit_paid", "accepted", "ongoing",
-    "awaiting_balance", "disputed", "completed", "fully_paid",
+    "awaiting_balance", "disputed",
 ]);
 
 const STATUS_DOT = {
@@ -63,33 +65,53 @@ const STATUS_LABEL = {
     resolved:         "Resolved",
 };
 
-const ListRow = ({ appt, userRole, onViewDetails, onChat }) => {
+const ListRow = ({ appt, userRole, onViewDetails, onChat, onToggleFiles, filesExpanded }) => {
     const start = dayjs(appt.start).tz(PH_TZ);
     const durationMin = Math.round((new Date(appt.end) - new Date(appt.start)) / 60000);
     const canChat = userRole === "patient" || userRole === "doctor";
     const showChat = canChat && CHAT_STATUSES.has(appt.status) && getChatCounterpartId(appt, userRole);
+    const showFiles = userRole === "patient" || userRole === "doctor" || userRole === "department";
+    const participantRole = userRole === "patient" ? "patient" : "doctor";
+
     return (
-        <div className="flex items-center gap-2">
-            <button
-                onClick={() => onViewDetails(appt)}
-                className="flex-1 text-left flex items-center justify-between gap-3 p-3 rounded-xl border border-base-300 bg-base-100 hover:bg-base-200 transition-colors"
-            >
-                <div className="min-w-0">
-                    <p className="text-sm font-semibold truncate">{getCounterpart(appt, userRole)}</p>
-                    <p className="text-xs opacity-60">
-                        {start.format("ddd, MMM D, YYYY")} · {start.format("h:mm A")} ({durationMin} min) · ₱{appt.amount?.toLocaleString("en-PH")}
-                    </p>
-                </div>
-                <span className="text-xs shrink-0 opacity-70">{STATUS_LABEL[appt.status] || appt.status}</span>
-            </button>
-            {showChat && (
+        <div>
+            <div className="flex items-center gap-2">
                 <button
-                    className="btn btn-ghost btn-sm btn-circle shrink-0"
-                    title="Open chat"
-                    onClick={() => onChat(appt)}
+                    onClick={() => onViewDetails(appt)}
+                    className="flex-1 text-left flex items-center justify-between gap-3 p-3 rounded-xl border border-base-300 bg-base-100 hover:bg-base-200 transition-colors"
                 >
-                    <MessageCircleIcon className="size-4" />
+                    <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">{getCounterpart(appt, userRole)}</p>
+                        <p className="text-xs opacity-60">
+                            {start.format("ddd, MMM D, YYYY")} · {start.format("h:mm A")} ({durationMin} min) · ₱{appt.amount?.toLocaleString("en-PH")}
+                        </p>
+                    </div>
+                    <span className="text-xs shrink-0 opacity-70">{STATUS_LABEL[appt.status] || appt.status}</span>
                 </button>
+                {showChat && (
+                    <button
+                        className="btn btn-ghost btn-sm btn-circle shrink-0"
+                        title="Open chat"
+                        onClick={() => onChat(appt)}
+                    >
+                        <MessageCircleIcon className="size-4" />
+                    </button>
+                )}
+                {showFiles && (
+                    <button
+                        className="btn btn-ghost btn-sm gap-1 shrink-0"
+                        title="Appointment files"
+                        onClick={() => onToggleFiles(appt._id)}
+                    >
+                        <PaperclipIcon className="size-3.5" />
+                        {filesExpanded ? <ChevronUpIcon className="size-3" /> : <ChevronDownIcon className="size-3" />}
+                    </button>
+                )}
+            </div>
+            {filesExpanded && showFiles && (
+                <div className="mt-1 px-3 pb-3 pt-2 border border-base-300 rounded-xl bg-base-100">
+                    <AppointmentFilesPanel appointmentId={appt._id} participantRole={participantRole} />
+                </div>
             )}
         </div>
     );
@@ -103,25 +125,23 @@ const AppointmentCalendar = ({ appointments = [], onViewDetails, isLoading }) =>
     const [viewMode, setViewMode] = useState("calendar");
     const [currentMonth, setCurrentMonth] = useState(() => dayjs().tz(PH_TZ).startOf("month"));
     const [selectedDay, setSelectedDay] = useState(null);
+    const [expandedFiles, setExpandedFiles] = useState(new Set());
+
+    const toggleFiles = (apptId) => {
+        setExpandedFiles(prev => {
+            const next = new Set(prev);
+            next.has(apptId) ? next.delete(apptId) : next.add(apptId);
+            return next;
+        });
+    };
 
     const today = dayjs().tz(PH_TZ).format("YYYY-MM-DD");
 
-    // Only map active appointments to dates for dot display
+    // Only active appointments appear on the calendar and day popup.
     const apptsByDate = useMemo(() => {
         const map = {};
         appointments.forEach(a => {
             if (!ACTIVE_DOT_STATUSES.has(a.status)) return;
-            const key = dayjs(a.start).tz(PH_TZ).format("YYYY-MM-DD");
-            if (!map[key]) map[key] = [];
-            map[key].push(a);
-        });
-        return map;
-    }, [appointments]);
-
-    // For day popup: show all appointments on that day (including cancelled etc.)
-    const allApptsByDate = useMemo(() => {
-        const map = {};
-        appointments.forEach(a => {
             const key = dayjs(a.start).tz(PH_TZ).format("YYYY-MM-DD");
             if (!map[key]) map[key] = [];
             map[key].push(a);
@@ -134,14 +154,11 @@ const AppointmentCalendar = ({ appointments = [], onViewDetails, isLoading }) =>
         return Array.from({ length: 42 }, (_, i) => gridStart.add(i, "day"));
     }, [currentMonth]);
 
-    const selectedDayAppts = selectedDay ? (allApptsByDate[selectedDay] || []) : [];
+    const selectedDayAppts = selectedDay ? (apptsByDate[selectedDay] || []) : [];
 
-    const active = [...appointments]
-        .filter(a => !["cancelled", "rejected", "resolved"].includes(a.status))
+    const activeAppts = [...appointments]
+        .filter(a => ACTIVE_DOT_STATUSES.has(a.status))
         .sort((a, b) => new Date(a.start) - new Date(b.start));
-    const closed = [...appointments]
-        .filter(a => ["cancelled", "rejected", "resolved"].includes(a.status))
-        .sort((a, b) => new Date(b.start) - new Date(a.start));
 
     const handleChat = (appt) => {
         const id = getChatCounterpartId(appt, userRole);
@@ -212,12 +229,11 @@ const AppointmentCalendar = ({ appointments = [], onViewDetails, isLoading }) =>
                                 <button
                                     key={i}
                                     onClick={() => {
-                                        const allDay = allApptsByDate[key] || [];
-                                        if (allDay.length > 0) setSelectedDay(key);
+                                        if (dayAppts.length > 0) setSelectedDay(key);
                                     }}
                                     className={[
                                         "min-h-[56px] p-1 border-b border-r border-base-200 flex flex-col items-center gap-0.5",
-                                        (allApptsByDate[key] || []).length > 0 ? "hover:bg-base-200 transition-colors cursor-pointer" : "cursor-default",
+                                        dayAppts.length > 0 ? "hover:bg-base-200 transition-colors cursor-pointer" : "cursor-default",
                                         !inMonth ? "opacity-25" : "",
                                         isSelected ? "bg-primary/10" : "",
                                     ].filter(Boolean).join(" ")}
@@ -242,32 +258,25 @@ const AppointmentCalendar = ({ appointments = [], onViewDetails, isLoading }) =>
                     </div>
                 </div>
             ) : (
-                /* List view */
-                <div className="space-y-6">
-                    {appointments.length === 0 ? (
+                /* List view — active appointments only */
+                <div className="space-y-2">
+                    {activeAppts.length === 0 ? (
                         <div className="text-center py-12 opacity-40">
                             <CalendarIcon className="size-10 mx-auto mb-3" />
-                            <p className="font-medium">No appointments yet</p>
+                            <p className="font-medium">No active appointments</p>
                         </div>
                     ) : (
-                        <>
-                            {active.length > 0 && (
-                                <div className="space-y-2">
-                                    <p className="text-xs font-semibold uppercase tracking-wider opacity-50">Active & Upcoming</p>
-                                    {active.map(a => (
-                                        <ListRow key={a._id} appt={a} userRole={userRole} onViewDetails={onViewDetails} onChat={handleChat} />
-                                    ))}
-                                </div>
-                            )}
-                            {closed.length > 0 && (
-                                <div className="space-y-2">
-                                    <p className="text-xs font-semibold uppercase tracking-wider opacity-50">Closed</p>
-                                    {closed.map(a => (
-                                        <ListRow key={a._id} appt={a} userRole={userRole} onViewDetails={onViewDetails} onChat={handleChat} />
-                                    ))}
-                                </div>
-                            )}
-                        </>
+                        activeAppts.map(a => (
+                            <ListRow
+                                key={a._id}
+                                appt={a}
+                                userRole={userRole}
+                                onViewDetails={onViewDetails}
+                                onChat={handleChat}
+                                onToggleFiles={toggleFiles}
+                                filesExpanded={expandedFiles.has(a._id)}
+                            />
+                        ))
                     )}
                 </div>
             )}

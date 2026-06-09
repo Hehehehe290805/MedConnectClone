@@ -1,5 +1,15 @@
 import { Navigate, Route, Routes } from "react-router";
 import { Toaster } from "react-hot-toast";
+import toast from "react-hot-toast";
+
+// Dismiss any existing toast before showing a new one so toasts never stack.
+// ES modules are cached, so this patch applies to every file that imports toast.
+const _err = toast.error.bind(toast);
+const _ok  = toast.success.bind(toast);
+const _info = toast.bind(toast);
+toast.error   = (msg, opts) => { toast.dismiss(); return _err(msg, opts); };
+toast.success = (msg, opts) => { toast.dismiss(); return _ok(msg, opts); };
+// leave toast() (loading/custom) as-is — callers manage those manually
 
 // Pages
 import HomePageUser from "./pages/HomePageUser.jsx";

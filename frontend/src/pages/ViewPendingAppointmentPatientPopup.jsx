@@ -95,7 +95,7 @@ const ViewPendingAppointmentPatientPopup = ({ appointment: appt, onClose, onUpda
                             By clicking this button, you agree to our{" "}
                             <Link to="/terms-of-service" target="_blank" className="link link-primary">Terms &amp; Conditions</Link>.
                         </p>
-                        <button className="btn btn-ghost btn-sm w-full opacity-60" disabled={isCancelling} onClick={() => cancel()}>
+                        <button className="btn btn-error btn-outline btn-sm w-full" disabled={isCancelling} onClick={() => cancel()}>
                             Cancel Appointment
                         </button>
                     </div>
@@ -104,7 +104,7 @@ const ViewPendingAppointmentPatientPopup = ({ appointment: appt, onClose, onUpda
                 return (
                     <div className="space-y-2">
                         <p className="text-sm opacity-60">Deposit received. Waiting for the provider to confirm.</p>
-                        <button className="btn btn-ghost btn-sm w-full opacity-60" disabled={isCancelling} onClick={() => cancel()}>
+                        <button className="btn btn-error btn-outline btn-sm w-full" disabled={isCancelling} onClick={() => cancel()}>
                             Cancel Appointment
                         </button>
                     </div>
@@ -118,7 +118,7 @@ const ViewPendingAppointmentPatientPopup = ({ appointment: appt, onClose, onUpda
                                 <MessageCircleIcon className="size-4" />Message Provider
                             </button>
                         )}
-                        <button className="btn btn-ghost btn-sm w-full opacity-60" disabled={isCancelling} onClick={() => cancel()}>
+                        <button className="btn btn-error btn-outline btn-sm w-full" disabled={isCancelling} onClick={() => cancel()}>
                             Cancel (deposit non-refundable)
                         </button>
                     </div>
@@ -345,7 +345,7 @@ const ViewPendingAppointmentPatientPopup = ({ appointment: appt, onClose, onUpda
                     {canDispute && !["disputed", "resolved"].includes(appt.status) && (
                         <div className="pt-2 border-t border-base-300">
                             {!showDisputeInput ? (
-                                <button className="btn btn-ghost btn-sm w-full gap-2 opacity-60" onClick={() => setShowDisputeInput(true)}>
+                                <button className="btn btn-error btn-outline btn-sm w-full gap-2" onClick={() => setShowDisputeInput(true)}>
                                     <FlagIcon className="size-3.5" />File a Dispute
                                 </button>
                             ) : (
