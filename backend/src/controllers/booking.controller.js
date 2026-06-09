@@ -157,7 +157,7 @@ export const bookAppointment = asyncHandler(async (req, res) => {
             });
         } catch (err) {
             // Non-fatal — booking succeeds even if the file attachment fails
-            console.error("[Booking] Failed to attach pre-consultation file:", err.message);
+
         }
     }
 

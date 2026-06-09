@@ -5,7 +5,7 @@ import dayjs from "dayjs";
 import toast from "react-hot-toast";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
-import { XIcon, ChevronLeftIcon, ChevronRightIcon, CalendarIcon, ListIcon } from "lucide-react";
+import { XIcon, ChevronLeftIcon, ChevronRightIcon, UsersIcon } from "lucide-react";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -23,7 +23,6 @@ const CreateBookingPopup = ({ provider, onClose, onBookingCreated }) => {
     const [selectedSlot, setSelectedSlot] = useState(null);
     const [price, setPrice] = useState(null);
     const [isVirtual, setIsVirtual] = useState(true);
-    const [viewMode, setViewMode] = useState("calendar"); // "calendar" | "list"
     const [calendarMonth, setCalendarMonth] = useState(dayjs().tz(PH_TZ).startOf("month"));
 
     const today = dayjs().tz(PH_TZ);
@@ -53,7 +52,9 @@ const CreateBookingPopup = ({ provider, onClose, onBookingCreated }) => {
                 setAllSlots(slots);
                 if (slots.length > 0) {
                     const firstDate = dayjs(slots[0].start).tz(PH_TZ).format("YYYY-MM-DD");
+                    const firstDaySlots = slots.filter(s => dayjs(s.start).tz(PH_TZ).format("YYYY-MM-DD") === firstDate);
                     setSelectedDate(firstDate);
+                    setSelectedSlot(firstDaySlots[0] || null);
                     setCalendarMonth(dayjs(slots[0].start).tz(PH_TZ).startOf("month"));
                 }
             })
@@ -76,7 +77,8 @@ const CreateBookingPopup = ({ provider, onClose, onBookingCreated }) => {
 
     const handleDateSelect = (date) => {
         setSelectedDate(date);
-        setSelectedSlot(null);
+        const slots = slotsByDate[date] || [];
+        setSelectedSlot(slots[0] || null);
     };
 
     // Build the calendar grid for calendarMonth
@@ -91,7 +93,7 @@ const CreateBookingPopup = ({ provider, onClose, onBookingCreated }) => {
     }, [calendarMonth]);
 
     const handleSubmit = async () => {
-        if (!selectedSlot) { setError("Please select a time slot."); return; }
+        if (!selectedDate || !selectedSlot) { setError("Please select a date."); return; }
         try {
             setLoading(true);
             setError("");
@@ -189,135 +191,86 @@ const CreateBookingPopup = ({ provider, onClose, onBookingCreated }) => {
                     </p>
                 ) : (
                     <>
-                        {/* View mode toggle */}
-                        <div className="flex items-center justify-between">
-                            <p className="text-sm font-semibold">Select a Date</p>
-                            <div className="join">
-                                <button type="button" className={`join-item btn btn-xs ${viewMode === "calendar" ? "btn-primary" : "btn-ghost"}`} onClick={() => setViewMode("calendar")}>
-                                    <CalendarIcon className="size-3" /> Calendar
+                        <p className="text-sm font-semibold">Select a Date</p>
+
+                        {/* Month calendar */}
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <button
+                                    type="button"
+                                    className="btn btn-ghost btn-xs btn-circle"
+                                    disabled={!calendarMonth.isAfter(today.startOf("month"))}
+                                    onClick={() => setCalendarMonth(m => m.subtract(1, "month"))}
+                                >
+                                    <ChevronLeftIcon className="size-3.5" />
                                 </button>
-                                <button type="button" className={`join-item btn btn-xs ${viewMode === "list" ? "btn-primary" : "btn-ghost"}`} onClick={() => setViewMode("list")}>
-                                    <ListIcon className="size-3" /> List
+                                <span className="text-sm font-semibold">{calendarMonth.format("MMMM YYYY")}</span>
+                                <button
+                                    type="button"
+                                    className="btn btn-ghost btn-xs btn-circle"
+                                    disabled={!calendarMonth.isBefore(maxMonth)}
+                                    onClick={() => setCalendarMonth(m => m.add(1, "month"))}
+                                >
+                                    <ChevronRightIcon className="size-3.5" />
                                 </button>
                             </div>
-                        </div>
-
-                        {viewMode === "calendar" && (
-                            <div className="space-y-2">
-                                {/* Month nav */}
-                                <div className="flex items-center justify-between">
-                                    <button
-                                        type="button"
-                                        className="btn btn-ghost btn-xs btn-circle"
-                                        disabled={!calendarMonth.isAfter(today.startOf("month"))}
-                                        onClick={() => setCalendarMonth(m => m.subtract(1, "month"))}
-                                    >
-                                        <ChevronLeftIcon className="size-3.5" />
-                                    </button>
-                                    <span className="text-sm font-semibold">{calendarMonth.format("MMMM YYYY")}</span>
-                                    <button
-                                        type="button"
-                                        className="btn btn-ghost btn-xs btn-circle"
-                                        disabled={!calendarMonth.isBefore(maxMonth)}
-                                        onClick={() => setCalendarMonth(m => m.add(1, "month"))}
-                                    >
-                                        <ChevronRightIcon className="size-3.5" />
-                                    </button>
-                                </div>
-
-                                {/* Day-of-week headers */}
-                                <div className="grid grid-cols-7 gap-0.5">
-                                    {DOW.map(d => (
-                                        <div key={d} className="text-xs text-center opacity-40 font-medium py-1">{d}</div>
-                                    ))}
-                                    {calendarDays.map((day, i) => {
-                                        if (!day) return <div key={`pad-${i}`} />;
-                                        const dateStr = day.format("YYYY-MM-DD");
-                                        const hasSlots = Boolean(slotsByDate[dateStr]);
-                                        const isPast = day.isBefore(today, "day");
-                                        const isSelected = selectedDate === dateStr;
-                                        return (
-                                            <button
-                                                key={dateStr}
-                                                type="button"
-                                                disabled={!hasSlots || isPast}
-                                                onClick={() => handleDateSelect(dateStr)}
-                                                className={`
-                                                    relative rounded-lg py-1.5 text-xs flex flex-col items-center transition-colors
-                                                    ${isSelected ? "bg-primary text-primary-content font-bold" : ""}
-                                                    ${hasSlots && !isPast && !isSelected ? "hover:bg-primary/10 font-medium text-base-content" : ""}
-                                                    ${(!hasSlots || isPast) ? "opacity-25 cursor-default" : ""}
-                                                `}
-                                            >
-                                                {day.date()}
-                                                {hasSlots && !isPast && (
-                                                    <span className={`w-1 h-1 rounded-full mt-0.5 ${isSelected ? "bg-primary-content" : "bg-primary"}`} />
-                                                )}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                                <p className="text-xs opacity-40 text-center">Dates with available slots are shown with a dot</p>
-                            </div>
-                        )}
-
-                        {viewMode === "list" && (
-                            <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
-                                {availableDates.map(date => {
-                                    const d = dayjs(date).tz(PH_TZ);
-                                    const isSelected = selectedDate === date;
+                            <div className="grid grid-cols-7 gap-0.5">
+                                {DOW.map(d => (
+                                    <div key={d} className="text-xs text-center opacity-40 font-medium py-1">{d}</div>
+                                ))}
+                                {calendarDays.map((day, i) => {
+                                    if (!day) return <div key={`pad-${i}`} />;
+                                    const dateStr = day.format("YYYY-MM-DD");
+                                    const hasSlots = Boolean(slotsByDate[dateStr]);
+                                    const isPast = day.isBefore(today, "day");
+                                    const isSelected = selectedDate === dateStr;
                                     return (
                                         <button
-                                            key={date}
+                                            key={dateStr}
                                             type="button"
-                                            onClick={() => handleDateSelect(date)}
-                                            className={`btn btn-sm flex-col h-auto py-2 px-3 gap-0 leading-tight ${isSelected ? "btn-primary" : "btn-outline"}`}
+                                            disabled={!hasSlots || isPast}
+                                            onClick={() => handleDateSelect(dateStr)}
+                                            className={`
+                                                relative rounded-lg py-1.5 text-xs flex flex-col items-center transition-colors
+                                                ${isSelected ? "bg-primary text-primary-content font-bold" : ""}
+                                                ${hasSlots && !isPast && !isSelected ? "hover:bg-primary/10 font-medium text-base-content" : ""}
+                                                ${(!hasSlots || isPast) ? "opacity-25 cursor-default" : ""}
+                                            `}
                                         >
-                                            <span className="text-xs font-normal">{d.format("ddd")}</span>
-                                            <span className="text-sm font-semibold">{d.format("MMM D")}</span>
+                                            {day.date()}
+                                            {hasSlots && !isPast && (
+                                                <span className={`w-1 h-1 rounded-full mt-0.5 ${isSelected ? "bg-primary-content" : "bg-primary"}`} />
+                                            )}
                                         </button>
                                     );
                                 })}
                             </div>
-                        )}
+                            <p className="text-xs opacity-40 text-center">Dots indicate available days</p>
+                        </div>
 
-                        {/* Time slot picker */}
+                        {/* Selected date info + queue count */}
                         {selectedDate && slotsForDate.length > 0 && (
-                            <div>
-                                <p className="text-sm font-semibold mb-2">
-                                    {dayjs(selectedDate).tz(PH_TZ).format("dddd, MMMM D")} — Select a Time
-                                </p>
-                                <div className="grid grid-cols-3 gap-1.5 max-h-40 overflow-y-auto pr-1">
-                                    {slotsForDate.map((slot, i) => {
-                                        const t = dayjs(slot.start).tz(PH_TZ);
-                                        const isSelected = selectedSlot?.start === slot.start;
-                                        return (
-                                            <button
-                                                key={i}
-                                                type="button"
-                                                onClick={() => setSelectedSlot(slot)}
-                                                className={`btn btn-sm font-normal ${isSelected ? "btn-primary" : "btn-outline"}`}
-                                            >
-                                                {t.format("h:mm A")}
-                                            </button>
-                                        );
-                                    })}
+                            <div className="bg-base-200 rounded-xl p-4 space-y-1">
+                                <p className="text-sm font-semibold">{dayjs(selectedDate).tz(PH_TZ).format("dddd, MMMM D, YYYY")}</p>
+                                <div className="flex items-center gap-1.5 text-xs opacity-60">
+                                    <UsersIcon className="size-3.5" />
+                                    <span>{slotsForDate.length} appointment slot{slotsForDate.length !== 1 ? "s" : ""} available this day</span>
                                 </div>
+                                <p className="text-xs opacity-40">Your exact time will be assigned based on queue order.</p>
                             </div>
                         )}
                     </>
                 )}
 
                 {/* Booking summary */}
-                {selectedSlot && price != null && (
+                {selectedDate && price != null && (
                     <div className="bg-base-200 rounded-xl p-4 text-sm space-y-1">
                         <p className="font-semibold mb-2">Booking Summary</p>
-                        <p><span className="opacity-60">Date: </span>{dayjs(selectedSlot.start).tz(PH_TZ).format("dddd, MMMM D, YYYY")}</p>
-                        <p><span className="opacity-60">Time: </span>{dayjs(selectedSlot.start).tz(PH_TZ).format("h:mm A")} – {dayjs(selectedSlot.end).tz(PH_TZ).format("h:mm A")}</p>
+                        <p><span className="opacity-60">Date: </span>{dayjs(selectedDate).tz(PH_TZ).format("dddd, MMMM D, YYYY")}</p>
                         <p><span className="opacity-60">Type: </span>{isVirtual ? "Virtual" : "In-Person"}</p>
                         <p><span className="opacity-60">Total: </span>₱{price.toLocaleString("en-PH")}</p>
                         <p><span className="opacity-60">Deposit (50%): </span>₱{(price * 0.5).toLocaleString("en-PH")}</p>
-                        <p className="text-xs opacity-40 pt-1">Platform fee (10%) is included in the total.</p>
+                        <p className="text-xs opacity-40 pt-1">Platform fee (10%) included. Exact time determined by queue on appointment day.</p>
                     </div>
                 )}
 
@@ -328,14 +281,14 @@ const CreateBookingPopup = ({ provider, onClose, onBookingCreated }) => {
                         <button type="button" className="btn btn-ghost" onClick={onClose} disabled={loading}>
                             Cancel
                         </button>
-                        <button className="btn btn-primary" disabled={loading || !selectedSlot} onClick={handleSubmit}>
+                        <button className="btn btn-primary" disabled={loading || !selectedDate} onClick={handleSubmit}>
                             {loading
                                 ? <><span className="loading loading-spinner loading-xs" />Booking…</>
                                 : "Confirm Appointment"
                             }
                         </button>
                     </div>
-                    {selectedSlot && (
+                    {selectedDate && (
                         <p className="text-xs text-center opacity-50">
                             By clicking this button, you agree to our{" "}
                             <Link to="/terms-of-service" target="_blank" className="link link-primary">Terms &amp; Conditions</Link>.

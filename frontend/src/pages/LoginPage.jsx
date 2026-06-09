@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { BriefcaseMedicalIcon, ShieldIcon, KeyRoundIcon, LockIcon, SmartphoneIcon } from "lucide-react";
+import { BriefcaseMedicalIcon, ShieldIcon, KeyRoundIcon, SmartphoneIcon } from "lucide-react";
 import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { login, adminLogin, verify2FA, resetForgotPassword, switch2FAChannel } from "../lib/api";
+import { login, adminLogin, verify2FA, switch2FAChannel } from "../lib/api";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
 // step: "user" | "admin" | "twoFactor" | "locked"
 const LoginPage = () => {
@@ -16,11 +15,10 @@ const LoginPage = () => {
   const [password, setPassword] = useState("");
   const [adminCode, setAdminCode] = useState("");
   const [twoFACode, setTwoFACode] = useState("");
-  const [lockedCode, setLockedCode] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [formError, setFormError] = useState("");
   const [loginMode, setLoginMode] = useState("email"); // "email" | "phone"
+  const [failCount, setFailCount] = useState(0);
+  const [showForgotHint, setShowForgotHint] = useState(false);
   const [twoFAChannel, setTwoFAChannel] = useState("email"); // "email" | "phone"
   const [twoFAMockCode, setTwoFAMockCode] = useState(null); // non-null when channel is "phone" (mock SMS)
   const emailRef = useRef(null);
@@ -50,8 +48,10 @@ const LoginPage = () => {
       } else invalidate();
     },
     onError: (err) => {
-      if (err?.response?.status === 429) { setStep("locked"); setFormError(""); return; }
-      toast.error(err?.response?.data?.message || "Invalid email or password.");
+      const newFail = failCount + 1;
+      setFailCount(newFail);
+      if (newFail >= 5) setShowForgotHint(true);
+      toast.error(err?.response?.data?.message || "Invalid credentials.");
     },
   });
 
@@ -63,7 +63,6 @@ const LoginPage = () => {
       else invalidate();
     },
     onError: (err) => {
-      if (err?.response?.status === 429) { setStep("locked"); setFormError(""); return; }
       setFormError(err?.response?.data?.message || "Invalid credentials or admin code.");
     },
   });
@@ -87,18 +86,7 @@ const LoginPage = () => {
     onError: (err) => setFormError(err?.response?.data?.message || "Could not switch channel."),
   });
 
-  // Brute-force lockout reset
-  const { mutate: doResetPassword, isPending: isResetting } = useMutation({
-    mutationFn: resetForgotPassword,
-    onSuccess: () => {
-      toast.success("Password reset! You can now sign in with your new password.");
-      setStep("user");
-      setLockedCode(""); setNewPassword(""); setConfirmPassword("");
-    },
-    onError: (err) => setFormError(err?.response?.data?.message || "Invalid or expired code."),
-  });
-
-  const isPending = isUserLogging || isAdminLogging || isVerifying || isResetting;
+  const isPending = isUserLogging || isAdminLogging || isVerifying;
 
   const handleUserLogin = (e) => {
     e.preventDefault();
@@ -137,29 +125,15 @@ const LoginPage = () => {
     doVerify2FA({ email, code: twoFACode });
   };
 
-  const handleResetPassword = (e) => {
-    e.preventDefault();
-    setFormError("");
-    if (lockedCode.length !== 6) { setFormError("Enter the 6-digit code from your email."); return; }
-    if (!PASSWORD_REGEX.test(newPassword)) {
-      setFormError("Password needs 8+ characters with uppercase, lowercase, number, and symbol (@$!%*?&).");
-      return;
-    }
-    if (newPassword !== confirmPassword) { setFormError("Passwords do not match."); return; }
-    doResetPassword({ email, code: lockedCode, newPassword });
-  };
-
   const resetToUser = () => {
     setStep("user");
     setFormError("");
     setTwoFACode("");
     setAdminCode("");
-    setLockedCode("");
-    setNewPassword("");
-    setConfirmPassword("");
     setTwoFAChannel("email");
     setTwoFAMockCode(null);
     setLoginMode("email");
+    setShowForgotHint(false);
   };
 
   const ImagePanel = () => (
@@ -191,7 +165,7 @@ const LoginPage = () => {
             <form onSubmit={handleUserLogin} className="space-y-4 w-full">
               <div>
                 <h2 className="text-xl font-semibold">Welcome Back</h2>
-                <p className="text-sm opacity-70">Sign in to continue your journey to better health.</p>
+                <p className="text-sm opacity-70">Live a healthy life today with MedConnect!</p>
               </div>
 
               <div className="flex flex-col gap-3">
@@ -217,7 +191,7 @@ const LoginPage = () => {
                         className="text-xs text-primary hover:underline text-left mt-1 w-fit"
                         onClick={() => { setLoginMode("phone"); setEmail(""); emailRef.current?.setCustomValidity(""); }}
                       >
-                        Use phone number instead
+                        Login using mobile number
                       </button>
                     </>
                   ) : (
@@ -229,15 +203,16 @@ const LoginPage = () => {
                           ref={emailRef}
                           type="text"
                           inputMode="numeric"
-                          maxLength={10}
-                          placeholder="9171234567"
+                          maxLength={12}
+                          placeholder="917 123 4567"
                           className="input input-bordered rounded-l-none flex-1 w-0"
-                          value={email}
+                          value={email.replace(/\D/g, "").slice(0,10).replace(/^(\d{3})(\d{3})(\d{0,4})$/, (_, a, b, c) => c ? `${a} ${b} ${c}` : b ? `${a} ${b}` : a)}
                           required
                           onChange={(e) => { const d = e.target.value.replace(/\D/g, "").slice(0, 10); setEmail(d); e.target.setCustomValidity(""); }}
                           onBlur={(e) => {
-                            if (!e.target.value) e.target.setCustomValidity("Phone number is required");
-                            else if (e.target.value.length !== 10) e.target.setCustomValidity("Enter 10 digits after +63");
+                            const raw = e.target.value.replace(/\D/g, "");
+                            if (!raw) e.target.setCustomValidity("Phone number is required");
+                            else if (raw.length !== 10) e.target.setCustomValidity("Enter 10 digits after +63");
                             else e.target.setCustomValidity("");
                           }}
                         />
@@ -247,7 +222,7 @@ const LoginPage = () => {
                         className="text-xs text-primary hover:underline text-left mt-1 w-fit"
                         onClick={() => { setLoginMode("email"); setEmail(""); emailRef.current?.setCustomValidity(""); }}
                       >
-                        Use email instead
+                        Login using email
                       </button>
                     </>
                   )}
@@ -418,92 +393,31 @@ const LoginPage = () => {
             </form>
           )}
 
-          {/* ── Account locked (brute-force) — inline reset ── */}
-          {step === "locked" && (
-            <form onSubmit={handleResetPassword} className="space-y-4 w-full">
-              <div className="flex items-center gap-2">
-                <LockIcon className="size-5 text-error" />
-                <h2 className="text-xl font-semibold">Account Locked</h2>
-              </div>
-
-              <div className="alert bg-error/10 border border-error/20 text-sm py-3">
-                Too many failed attempts. A 6-digit reset code was sent to your email — enter it below along with a new password to unlock your account.
-              </div>
-
-              <div className="flex flex-col gap-3">
-                {/* Email editable in case user refreshed the page */}
-                <div className="form-control w-full">
-                  <label className="label"><span className="label-text">Email</span></label>
-                  <input
-                    type="email"
-                    className="input input-bordered w-full"
-                    value={email}
-                    required
-                    onChange={(e) => { setEmail(e.target.value); setFormError(""); }}
-                  />
-                </div>
-
-                <div className="form-control w-full">
-                  <label className="label"><span className="label-text">Reset Code (from email)</span></label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={6}
-                    placeholder="123456"
-                    className={`input input-bordered w-full tracking-widest text-center text-lg ${formError ? "input-error" : ""}`}
-                    value={lockedCode}
-                    autoFocus
-                    onChange={(e) => { setLockedCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setFormError(""); }}
-                  />
-                </div>
-
-                <div className="form-control w-full">
-                  <label className="label"><span className="label-text">New Password</span></label>
-                  <input
-                    type="password"
-                    placeholder="New password"
-                    className="input input-bordered w-full"
-                    value={newPassword}
-                    required
-                    onChange={(e) => { setNewPassword(e.target.value); setFormError(""); }}
-                  />
-                  <p className="text-xs opacity-50 mt-1">8+ chars, uppercase, lowercase, number, symbol (@$!%*?&)</p>
-                </div>
-
-                <div className="form-control w-full">
-                  <label className="label"><span className="label-text">Confirm New Password</span></label>
-                  <input
-                    type="password"
-                    placeholder="Repeat new password"
-                    className="input input-bordered w-full"
-                    value={confirmPassword}
-                    required
-                    onChange={(e) => { setConfirmPassword(e.target.value); setFormError(""); }}
-                  />
-                </div>
-
-                {formError && <p className="text-error text-xs">{formError}</p>}
-
-                <button
-                  type="submit"
-                  className="btn btn-primary w-full"
-                  disabled={isPending || lockedCode.length !== 6 || !newPassword || !confirmPassword}
-                >
-                  {isResetting
-                    ? <><span className="loading loading-spinner loading-xs" />Resetting...</>
-                    : "Reset Password & Unlock"}
-                </button>
-
-                <button type="button" className="btn btn-ghost btn-sm w-full" onClick={resetToUser}>
-                  ← Back to Sign In
-                </button>
-              </div>
-            </form>
-          )}
         </div>
 
         <ImagePanel />
       </div>
+
+      {/* Forgot-password hint — shown after 5 failed attempts, fully optional */}
+      {showForgotHint && (
+        <div className="modal modal-open">
+          <div className="modal-box max-w-sm text-center">
+            <h3 className="font-bold text-lg mb-2">Having trouble signing in?</h3>
+            <p className="text-sm opacity-70 mb-5">
+              You've made several failed attempts. If you've forgotten your password, you can reset it now — or keep trying if you think you remember it.
+            </p>
+            <div className="flex flex-col gap-2">
+              <Link to="/forgot-password" className="btn btn-primary w-full" onClick={() => setShowForgotHint(false)}>
+                Reset My Password
+              </Link>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowForgotHint(false)}>
+                Keep trying
+              </button>
+            </div>
+          </div>
+          <div className="modal-backdrop" onClick={() => setShowForgotHint(false)} />
+        </div>
+      )}
     </div>
   );
 };

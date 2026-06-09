@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import User, { Patient, Doctor, Pharmacy, Institute, Department } from "../models/User.js";
 import Admin from "../models/Admin.js";
 import AccountRegistry from "../models/AccountRegistry.js";
+import DoctorSpecialty from "../models/DoctorSpecialty.js";
 import DepartmentType from "../models/DepartmentType.js";
 import InstituteDepartmentService from "../models/InstituteDepartmentService.js";
 import { upsertStreamUser } from "../lib/stream.js";
@@ -74,7 +75,7 @@ const streamUpsert = async (user) => {
         });
     } catch (err) {
         // non-fatal — log and continue
-        console.error("Stream upsert error:", err.message);
+
     }
 };
 
@@ -113,7 +114,7 @@ export const onboardAsPatient = asyncHandler(async (req, res) => {
             phoneNumber: isPhoneSignup ? existing.phoneNumber : phoneNumber,
             phoneType: isPhoneSignup ? existing.phoneType : phoneType,
             phoneVerified: existing.phoneVerified || false,
-            emailVerified: isPhoneSignup ? !!req.body.email : (existing.emailVerified ?? false),
+            emailVerified: existing.emailVerified ?? false,
             twoFactorEnabled: existing.twoFactorEnabled || false,
             emailNotificationsEnabled: existing.emailNotificationsEnabled ?? true,
             firstName,
@@ -176,7 +177,7 @@ export const onboardAsDoctor = asyncHandler(async (req, res) => {
             phoneNumber: isPhoneSignup ? existing.phoneNumber : phoneNumber,
             phoneType: isPhoneSignup ? existing.phoneType : phoneType,
             phoneVerified: existing.phoneVerified || false,
-            emailVerified: isPhoneSignup ? !!req.body.email : (existing.emailVerified ?? false),
+            emailVerified: existing.emailVerified ?? false,
             twoFactorEnabled: existing.twoFactorEnabled || false,
             emailNotificationsEnabled: existing.emailNotificationsEnabled ?? true,
             firstName,
@@ -194,6 +195,24 @@ export const onboardAsDoctor = asyncHandler(async (req, res) => {
             licenseImage,
             legalIDImage,
         }, session);
+
+        // Create pending DoctorSpecialty claim records for every selected specialty/subspecialty
+        const specialtyDocs = (specialty || []).filter(Boolean).map(id => ({
+            doctorId: promoted._id,
+            specialtyId: id,
+            claimType: "specialty",
+            status: "pending",
+        }));
+        const subspecialtyDocs = (subSpecialty || []).filter(Boolean).map(id => ({
+            doctorId: promoted._id,
+            subspecialtyId: id,
+            claimType: "subspecialty",
+            status: "pending",
+        }));
+        const allClaims = [...specialtyDocs, ...subspecialtyDocs];
+        if (allClaims.length > 0) {
+            await DoctorSpecialty.insertMany(allClaims, { session });
+        }
 
         await session.commitTransaction();
         await streamUpsert(promoted);
@@ -251,7 +270,7 @@ export const onboardAsPharmacy = asyncHandler(async (req, res) => {
             phoneNumber: isPhoneSignup ? existing.phoneNumber : phoneNumber,
             phoneType: isPhoneSignup ? existing.phoneType : phoneType,
             phoneVerified: existing.phoneVerified || false,
-            emailVerified: isPhoneSignup ? !!req.body.email : (existing.emailVerified ?? false),
+            emailVerified: existing.emailVerified ?? false,
             twoFactorEnabled: existing.twoFactorEnabled || false,
             emailNotificationsEnabled: existing.emailNotificationsEnabled ?? true,
             pharmacyName,
@@ -336,7 +355,7 @@ export const onboardAsInstitute = asyncHandler(async (req, res) => {
             phoneNumber: isPhoneSignup ? existing.phoneNumber : phoneNumber,
             phoneType: isPhoneSignup ? existing.phoneType : phoneType,
             phoneVerified: existing.phoneVerified || false,
-            emailVerified: isPhoneSignup ? !!req.body.email : (existing.emailVerified ?? false),
+            emailVerified: existing.emailVerified ?? false,
             twoFactorEnabled: existing.twoFactorEnabled || false,
             emailNotificationsEnabled: existing.emailNotificationsEnabled ?? true,
             instituteName,
@@ -500,7 +519,7 @@ export const onboardAsDepartment = asyncHandler(async (req, res) => {
                 image: profilePic?.url || "",
             });
         } catch (err) {
-            console.error("Stream upsert error:", err.message);
+
         }
 
         // Notify the institute owner that their new department sub-account is active

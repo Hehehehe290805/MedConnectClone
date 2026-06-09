@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { completeOnboarding } from "../lib/api";
 import { isValidPersonName, NAME_ERROR } from "../lib/utils";
-import { StepProgress, StepHeader, ImageUploadField, LanguagesField, AddressFields, PhoneField, forwardGeocode, uploadPendingImages } from "./OnboardingShared";
+import { StepProgress, StepHeader, ImageUploadField, LanguagesField, AddressFields, PhoneField, EmailVerificationField, forwardGeocode, uploadPendingImages } from "./OnboardingShared";
 
 const TOTAL_STEPS = 2;
 
@@ -15,9 +15,10 @@ const OnboardingPatient = ({ email, signupMethod, phoneNumber: signupPhone, role
   const [step, setStep] = useState(1);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
 
   const [form, setForm] = useState({
-    email: "",           // only used when isPhoneSignup
+    email: "",
     profilePic: {},
     firstName: "",
     lastName: "",
@@ -27,15 +28,7 @@ const OnboardingPatient = ({ email, signupMethod, phoneNumber: signupPhone, role
     languages: [],
     phoneNumber: "",
     phoneType: "mobile",
-    address: {
-      buildingNumber: "",
-      street: "",
-      barangay: "",
-      city: "",
-      province: "",
-      postalCode: "",
-      coordinates: null,
-    },
+    address: { buildingNumber: "", street: "", barangay: "", city: "", province: "", postalCode: "", coordinates: null },
   });
 
   const dobRef = useRef(null);
@@ -85,6 +78,7 @@ const OnboardingPatient = ({ email, signupMethod, phoneNumber: signupPhone, role
 
   const step2Complete = isPhoneSignup ? (
     EMAIL_REGEX.test(form.email) &&
+    emailVerified &&
     form.languages.length > 0 &&
     form.address.buildingNumber.trim() &&
     form.address.street.trim() &&
@@ -95,7 +89,6 @@ const OnboardingPatient = ({ email, signupMethod, phoneNumber: signupPhone, role
   ) : (
     form.languages.length > 0 &&
     form.phoneNumber.length === 10 &&
-    phoneVerified &&
     form.address.buildingNumber.trim() &&
     form.address.street.trim() &&
     form.address.barangay.trim() &&
@@ -235,17 +228,12 @@ const OnboardingPatient = ({ email, signupMethod, phoneNumber: signupPhone, role
           }} className="space-y-4">
             <LanguagesField value={form.languages} onChange={(val) => update("languages", val)} error={errors.languages} />
             {isPhoneSignup ? (
-              <div className="form-control">
-                <label className="label"><span className="label-text">Email Address <span className="text-error">*</span></span></label>
-                <input
-                  type="email"
-                  className={`input input-bordered w-full ${errors.email ? "input-error" : ""}`}
-                  placeholder="name@example.com"
-                  value={form.email}
-                  onChange={(e) => update("email", e.target.value)}
-                />
-                {errors.email && <p className="text-error text-xs mt-1">{errors.email}</p>}
-              </div>
+              <EmailVerificationField
+                email={form.email}
+                onEmailChange={(val) => { update("email", val); setEmailVerified(false); }}
+                onVerified={setEmailVerified}
+                error={errors.email}
+              />
             ) : (
               <PhoneField phoneNumber={form.phoneNumber} phoneType={form.phoneType} onNumberChange={(val) => update("phoneNumber", val)} onTypeChange={(val) => update("phoneType", val)} error={errors.phoneNumber} onVerified={setPhoneVerified} />
             )}

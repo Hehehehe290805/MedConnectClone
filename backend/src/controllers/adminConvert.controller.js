@@ -50,6 +50,9 @@ export const convertToAdmin = asyncHandler(async (req, res) => {
         });
     } catch (err) {
         await session.abortTransaction();
+        if (err.code === 11000 && err.keyPattern?.adminCodeKey) {
+            return sendError(res, 400, "That admin code is already in use by another admin account. Choose a different code.");
+        }
         throw err;
     } finally {
         session.endSession();

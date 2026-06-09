@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { MapPinIcon, StarIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import CreateBookingPopup from "../pages/CreateBookingPopup";
+import ViewPendingAppointmentPatientPopup from "../pages/ViewPendingAppointmentPatientPopup";
 
 const StarRating = ({ value, count }) => {
     if (!value) return null;
@@ -16,6 +17,7 @@ const StarRating = ({ value, count }) => {
 
 const ProviderCard = ({ provider }) => {
     const [showBooking, setShowBooking] = useState(false);
+    const [bookedAppointment, setBookedAppointment] = useState(null);
     const [showAllSpecialties, setShowAllSpecialties] = useState(false);
     const isDoctor = provider.role === "doctor";
     const isDepartment = provider.role === "department";
@@ -105,10 +107,10 @@ const ProviderCard = ({ provider }) => {
                 {!isDoctor && !isDepartment && provider.departmentTypes?.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-2">
                         {provider.departmentTypes.slice(0, 3).map((d) => (
-                            <span key={d} className="badge badge-secondary badge-xs">{d}</span>
+                            <span key={d} className="badge badge-secondary badge-sm">{d}</span>
                         ))}
                         {provider.departmentTypes.length > 3 && (
-                            <span className="badge badge-ghost badge-xs">+{provider.departmentTypes.length - 3}</span>
+                            <span className="badge badge-ghost badge-sm">+{provider.departmentTypes.length - 3}</span>
                         )}
                     </div>
                 )}
@@ -116,10 +118,10 @@ const ProviderCard = ({ provider }) => {
                 {isDepartment && provider.services?.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-2">
                         {provider.services.slice(0, 3).map((s) => (
-                            <span key={s} className="badge badge-secondary badge-xs">{s}</span>
+                            <span key={s} className="badge badge-secondary badge-sm">{s}</span>
                         ))}
                         {provider.services.length > 3 && (
-                            <span className="badge badge-ghost badge-xs">+{provider.services.length - 3}</span>
+                            <span className="badge badge-ghost badge-sm">+{provider.services.length - 3}</span>
                         )}
                     </div>
                 )}
@@ -128,7 +130,7 @@ const ProviderCard = ({ provider }) => {
                 {isDoctor && provider.languages?.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-2">
                         {provider.languages.slice(0, 3).map((l) => (
-                            <span key={l} className="badge badge-outline badge-xs">{l}</span>
+                            <span key={l} className="badge badge-outline badge-sm">{l}</span>
                         ))}
                     </div>
                 )}
@@ -186,7 +188,19 @@ const ProviderCard = ({ provider }) => {
             </div>
 
             {showBooking && (
-                <CreateBookingPopup provider={provider} onClose={() => setShowBooking(false)} />
+                <CreateBookingPopup
+                    provider={provider}
+                    onClose={() => setShowBooking(false)}
+                    onBookingCreated={(appt) => { setShowBooking(false); setBookedAppointment(appt); }}
+                />
+            )}
+
+            {bookedAppointment && (
+                <ViewPendingAppointmentPatientPopup
+                    appointment={bookedAppointment}
+                    onClose={() => setBookedAppointment(null)}
+                    onUpdated={() => {}}
+                />
             )}
         </div>
     );

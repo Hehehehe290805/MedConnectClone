@@ -56,7 +56,7 @@ export const SpecialtyField = ({ value = [], onChange }) => {
         !dbSpecialties.some((s) => s.name.toLowerCase() === queryTrimmed.toLowerCase());
 
     const selectExisting = (specialty) => {
-        onChange([...value, { _id: specialty._id, name: specialty.name, status: "verified", isNew: false }]);
+        onChange([...value, { _id: specialty._id, name: specialty.name, status: specialty.status, isNew: false }]);
         setQuery("");
         setIsOpen(false);
     };
@@ -86,8 +86,9 @@ export const SpecialtyField = ({ value = [], onChange }) => {
             {isOpen && (filtered.length > 0 || showAddNew) && (
                 <div className="absolute z-20 w-full bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-52 overflow-y-auto mt-1 top-full">
                         {filtered.map((s) => (
-                            <button key={s._id} type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-base-200" onClick={() => selectExisting(s)}>
-                                {s.name}
+                            <button key={s._id} type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-base-200 flex items-center gap-2" onClick={() => selectExisting(s)}>
+                                <span>{s.name}</span>
+                                {s.status === "pending" && <span className="text-xs opacity-50 font-normal">(pending)</span>}
                             </button>
                         ))}
                         {showAddNew && (
@@ -99,13 +100,16 @@ export const SpecialtyField = ({ value = [], onChange }) => {
             )}
             {value.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
-                    {value.map((s) => (
-                        <span key={s.name} className={`badge gap-1 py-3 ${s.isNew ? "badge-outline badge-primary" : "badge-primary"}`}>
-                            {s.isNew && <ClockIcon className="size-3 opacity-60" />}
-                            {s.name}
-                            <button type="button" onClick={() => remove(s.name)}><XIcon className="size-3" /></button>
-                        </span>
-                    ))}
+                    {value.map((s) => {
+                        const isPending = s.isNew || s.status === "pending";
+                        return (
+                            <span key={s.name} className={`badge gap-1 py-3 ${isPending ? "badge-outline badge-primary" : "badge-primary"}`}>
+                                {isPending && <ClockIcon className="size-3 opacity-60" />}
+                                {s.name}
+                                <button type="button" onClick={() => remove(s.name)}><XIcon className="size-3" /></button>
+                            </span>
+                        );
+                    })}
                 </div>
             )}
         </div>
@@ -159,7 +163,7 @@ export const SubspecialtyField = ({ value = [], onChange, selectedSpecialties = 
         !allAvailable.some((s) => s.name.toLowerCase() === queryTrimmed.toLowerCase());
 
     const selectExisting = (sub) => {
-        onChange([...value, { _id: sub._id, name: sub.name, status: "verified", rootSpecialtyId: sub.rootSpecialtyId, rootSpecialtyName: sub.rootSpecialtyName, isNew: false }]);
+        onChange([...value, { _id: sub._id, name: sub.name, status: sub.status, rootSpecialtyId: sub.rootSpecialtyId, rootSpecialtyName: sub.rootSpecialtyName, isNew: false }]);
         setQuery("");
         setIsOpen(false);
     };
@@ -189,9 +193,10 @@ export const SubspecialtyField = ({ value = [], onChange, selectedSpecialties = 
             {isOpen && !pendingRootSpecialty && (filtered.length > 0 || showAddNew) && (
                 <div className="absolute z-20 w-full bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-52 overflow-y-auto mt-1 top-full">
                         {filtered.map((s) => (
-                            <button key={`${s._id}-${s.rootSpecialtyId}`} type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-base-200" onClick={() => selectExisting(s)}>
-                                <span>{s.name}</span>
-                                <span className="text-xs opacity-50 ml-2">under {s.rootSpecialtyName}</span>
+                            <button key={`${s._id}-${s.rootSpecialtyId}`} type="button" className="w-full text-left px-3 py-2 text-sm hover:bg-base-200 flex items-center gap-2" onClick={() => selectExisting(s)}>
+                                <span className="flex-1">{s.name}</span>
+                                {s.status === "pending" && <span className="text-xs opacity-50 font-normal">(pending)</span>}
+                                <span className="text-xs opacity-50">under {s.rootSpecialtyName}</span>
                             </button>
                         ))}
                         {showAddNew && (
@@ -214,13 +219,16 @@ export const SubspecialtyField = ({ value = [], onChange, selectedSpecialties = 
             )}
             {value.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
-                    {value.map((s) => (
-                        <span key={s.name} className={`badge gap-1 py-3 ${s.isNew ? "badge-outline badge-primary" : "badge-primary"}`} title={`under ${s.rootSpecialtyName}`}>
-                            {s.isNew && <ClockIcon className="size-3 opacity-60" />}
-                            {s.name}
-                            <button type="button" onClick={() => remove(s.name)}><XIcon className="size-3" /></button>
-                        </span>
-                    ))}
+                    {value.map((s) => {
+                        const isPending = s.isNew || s.status === "pending";
+                        return (
+                            <span key={s.name} className={`badge gap-1 py-3 ${isPending ? "badge-outline badge-primary" : "badge-primary"}`} title={`under ${s.rootSpecialtyName}`}>
+                                {isPending && <ClockIcon className="size-3 opacity-60" />}
+                                {s.name}
+                                <button type="button" onClick={() => remove(s.name)}><XIcon className="size-3" /></button>
+                            </span>
+                        );
+                    })}
                 </div>
             )}
         </div>

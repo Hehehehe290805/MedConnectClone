@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { BriefcaseMedicalIcon, XIcon, AlertTriangleIcon, SmartphoneIcon } from "lucide-react";
+import { BriefcaseMedicalIcon, XIcon, AlertTriangleIcon } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 import toast from "react-hot-toast";
 import useSignUp from "../hooks/useSignUp";
@@ -126,8 +126,6 @@ const SignUpPage = () => {
     const [phoneDigits, setPhoneDigits] = useState("");    // 10 digits after +63
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [showTermsPopup, setShowTermsPopup] = useState(false);
-    const [isAdminMode, setIsAdminMode] = useState(false);
-    const [adminCode, setAdminCode] = useState("");
 
     const [code, setCode] = useState(["", "", "", "", "", ""]);
     const [resendCooldown, setResendCooldown] = useState(0);
@@ -138,8 +136,6 @@ const SignUpPage = () => {
     const emailRef = useRef(null);
     const passwordRef = useRef(null);
     const termsCheckboxRef = useRef(null);
-    const adminCodeRef = useRef(null);
-
     const { signupMutation, isSigningUp, verifyMutation, isVerifying, resendMutation, isResending } = useSignUp();
 
     useEffect(() => { reset(); }, []);
@@ -220,14 +216,7 @@ const SignUpPage = () => {
         const pwMsg = getPasswordValidity(formData.password);
         if (pwMsg) { passwordRef.current?.setCustomValidity(pwMsg); passwordRef.current?.reportValidity(); return; }
 
-        if (isAdminMode && !adminCode.trim()) {
-            adminCodeRef.current?.setCustomValidity("Admin code is required");
-            adminCodeRef.current?.reportValidity();
-            return;
-        }
-
         const payload = { email: formData.email, password: formData.password };
-        if (isAdminMode) payload.adminCode = adminCode;
 
         signupMutation(
             payload,
@@ -342,7 +331,7 @@ const SignUpPage = () => {
                                                     }}
                                                 />
                                                 <button type="button" className="text-xs text-primary hover:underline text-left mt-1 w-fit" onClick={() => { setSignupMode("phone"); setFormData({ ...formData, email: "" }); emailRef.current?.setCustomValidity(""); }}>
-                                                    <SmartphoneIcon className="size-3 inline mr-1" />Use mobile number instead
+                                                    Signup using mobile number
                                                 </button>
                                             </>
                                         ) : (
@@ -354,21 +343,22 @@ const SignUpPage = () => {
                                                         ref={emailRef}
                                                         type="text"
                                                         inputMode="numeric"
-                                                        maxLength={10}
-                                                        placeholder="9171234567"
+                                                        maxLength={12}
+                                                        placeholder="917 123 4567"
                                                         className="input input-bordered rounded-l-none flex-1 w-0"
-                                                        value={phoneDigits}
+                                                        value={phoneDigits.replace(/^(\d{3})(\d{3})(\d{0,4})$/, (_, a, b, c) => c ? `${a} ${b} ${c}` : b ? `${a} ${b}` : a)}
                                                         required
                                                         onChange={(e) => { const d = e.target.value.replace(/\D/g, "").slice(0, 10); setPhoneDigits(d); e.target.setCustomValidity(""); }}
                                                         onBlur={(e) => {
-                                                            if (!e.target.value) e.target.setCustomValidity("Mobile number is required");
-                                                            else if (e.target.value.length !== 10) e.target.setCustomValidity("Enter 10 digits after +63");
+                                                            const raw = e.target.value.replace(/\D/g, "");
+                                                            if (!raw) e.target.setCustomValidity("Mobile number is required");
+                                                            else if (raw.length !== 10) e.target.setCustomValidity("Enter 10 digits after +63");
                                                             else e.target.setCustomValidity("");
                                                         }}
                                                     />
                                                 </div>
                                                 <button type="button" className="text-xs text-primary hover:underline text-left mt-1 w-fit" onClick={() => { setSignupMode("email"); setPhoneDigits(""); emailRef.current?.setCustomValidity(""); }}>
-                                                    Use email instead
+                                                    Signup using email
                                                 </button>
                                             </>
                                         )}
@@ -401,24 +391,6 @@ const SignUpPage = () => {
                                         )}
                                     </div>
 
-                                    {/* ADMIN CODE */}
-                                    {isAdminMode && (
-                                        <div className="form-control w-full">
-                                            <label className="label"><span className="label-text">Admin Code</span></label>
-                                            <input
-                                                ref={adminCodeRef}
-                                                type="text"
-                                                placeholder="Enter admin code"
-                                                className="input input-bordered w-full"
-                                                value={adminCode}
-                                                required
-                                                onChange={(e) => {
-                                                    setAdminCode(e.target.value);
-                                                    e.target.setCustomValidity("");
-                                                }}
-                                            />
-                                        </div>
-                                    )}
 
                                     {/* TERMS */}
                                     <div className="form-control">
@@ -461,15 +433,6 @@ const SignUpPage = () => {
                                         </p>
                                     </div>
                                     
-                                    <div className="text-center mt-3 pt-3 border-t border-base-300">
-                                        <button
-                                            type="button"
-                                            className="text-xs opacity-40 hover:opacity-70 transition-opacity"
-                                            onClick={() => setIsAdminMode(!isAdminMode)}
-                                        >
-                                            {isAdminMode ? "<- Back to User Sign Up" : "Admin Sign Up ->"}
-                                        </button>
-                                    </div>
                                 </div>
                             </div>
                         </form>

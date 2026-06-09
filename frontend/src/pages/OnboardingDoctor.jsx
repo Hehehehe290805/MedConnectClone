@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { completeOnboarding } from "../lib/api";
 import { isValidPersonName, NAME_ERROR } from "../lib/utils";
-import { StepProgress, StepHeader, ImageUploadField, LanguagesField, AddressFields, PhoneField, forwardGeocode, uploadPendingImages } from "./OnboardingShared";
+import { StepProgress, StepHeader, ImageUploadField, LanguagesField, AddressFields, PhoneField, EmailVerificationField, forwardGeocode, uploadPendingImages } from "./OnboardingShared";
 import { SpecialtyField, SubspecialtyField, suggestSpecialty, suggestSubspecialty } from "../components/SpecialtyField";
 
 const TOTAL_STEPS = 3;
@@ -16,6 +16,7 @@ const OnboardingDoctor = ({ email, signupMethod, phoneNumber: signupPhone, role,
     const [step, setStep] = useState(1);
     const [uploadingFields, setUploadingFields] = useState({});
     const [phoneVerified, setPhoneVerified] = useState(false);
+    const [emailVerified, setEmailVerified] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errors, setErrors] = useState({});
 
@@ -34,15 +35,7 @@ const OnboardingDoctor = ({ email, signupMethod, phoneNumber: signupPhone, role,
         languages: [],
         phoneNumber: "",
         phoneType: "mobile",
-        address: {
-            buildingNumber: "",
-            street: "",
-            barangay: "",
-            city: "",
-            province: "",
-            postalCode: "",
-            coordinates: null,
-        },
+        address: { buildingNumber: "", street: "", barangay: "", city: "", province: "", postalCode: "", coordinates: null },
         specialty: [],
         subSpecialty: [],
         licenseNumber: "",
@@ -88,6 +81,7 @@ const OnboardingDoctor = ({ email, signupMethod, phoneNumber: signupPhone, role,
 
     const step2Complete = isPhoneSignup ? (
         EMAIL_REGEX.test(form.email) &&
+        emailVerified &&
         form.languages.length > 0 &&
         form.address.buildingNumber.trim() &&
         form.address.street.trim() &&
@@ -97,7 +91,6 @@ const OnboardingDoctor = ({ email, signupMethod, phoneNumber: signupPhone, role,
         /^\d{4}$/.test(form.address.postalCode)
     ) : (
         form.languages.length > 0 &&
-        phoneVerified &&
         form.phoneNumber.length === 10 &&
         form.address.buildingNumber.trim() &&
         form.address.street.trim() &&
@@ -268,16 +261,11 @@ const OnboardingDoctor = ({ email, signupMethod, phoneNumber: signupPhone, role,
                     }} className="space-y-4">
                         <LanguagesField value={form.languages} onChange={(val) => update("languages", val)} />
                         {isPhoneSignup ? (
-                            <div className="form-control">
-                                <label className="label"><span className="label-text">Email Address <span className="text-error">*</span></span></label>
-                                <input
-                                    type="email"
-                                    className="input input-bordered w-full"
-                                    placeholder="name@example.com"
-                                    value={form.email}
-                                    onChange={(e) => update("email", e.target.value)}
-                                />
-                            </div>
+                            <EmailVerificationField
+                                email={form.email}
+                                onEmailChange={(val) => { update("email", val); setEmailVerified(false); }}
+                                onVerified={setEmailVerified}
+                            />
                         ) : (
                             <PhoneField
                                 phoneNumber={form.phoneNumber}

@@ -4,15 +4,48 @@ import { axiosInstance } from "../lib/axios";
 import { BotIcon, XIcon, SendIcon, RefreshCwIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import { Link } from "react-router";
+import useAuthUser from "../hooks/useAuthUser";
 
 const WELCOME = "Hi! I'm the MedConnect Assistant. Ask me how to use the platform, about appointments, payments, or anything else about MedConnect.";
 
-const QUICK_PROMPTS = [
-    "How do I book an appointment?",
-    "What are the payment terms?",
-    "How does 2FA work?",
-    "Redirect me to pre-consultation",
-];
+const QUICK_PROMPTS_BY_ROLE = {
+    patient: [
+        "How do I book an appointment?",
+        "What are the payment terms?",
+        "How does the pre-consultation wizard work?",
+        "How do I cancel or dispute an appointment?",
+    ],
+    doctor: [
+        "How do I set my schedule and pricing?",
+        "How do I accept or reject an appointment?",
+        "How does the queue system work?",
+        "How do I renew my license?",
+    ],
+    pharmacy: [
+        "How does prescription review work?",
+        "How do I manage my catalogue?",
+        "How does the order fulfillment flow work?",
+        "How do I renew my FDA license?",
+    ],
+    institute: [
+        "How do I create department sub-accounts?",
+        "How do I view my transactions?",
+        "How do I renew my business permit?",
+        "What's the difference between a clinic and a hospital?",
+    ],
+    department: [
+        "How do I claim services?",
+        "How does the appointment queue work?",
+        "How do I accept or reject a booking?",
+        "How do I renew my technologist license?",
+    ],
+    admin: [
+        "How do I approve or reject pending accounts?",
+        "How do I resolve a dispute?",
+        "How do I manage specialties and services?",
+        "How does permit renewal approval work?",
+    ],
+};
 
 const linkify = (text) => {
     // Convert /path references to clickable links
@@ -26,6 +59,8 @@ const linkify = (text) => {
 };
 
 const ChatbotWidget = () => {
+    const { authUser } = useAuthUser();
+    const quickPrompts = QUICK_PROMPTS_BY_ROLE[authUser?.role] ?? QUICK_PROMPTS_BY_ROLE.patient;
     const [open, setOpen] = useState(false);
     const [input, setInput] = useState("");
     const [messages, setMessages] = useState([
@@ -135,7 +170,7 @@ const ChatbotWidget = () => {
                     {/* Quick prompts — show only when just welcome message */}
                     {messages.length === 1 && (
                         <div className="px-3 pb-2 flex flex-wrap gap-1.5">
-                            {QUICK_PROMPTS.map((p) => (
+                            {quickPrompts.map((p) => (
                                 <button
                                     key={p}
                                     className="btn btn-xs btn-outline rounded-full"

@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { completeOnboarding } from "../lib/api";
-import { StepProgress, StepHeader, ImageUploadField, AddressFields, PhoneField, forwardGeocode, uploadPendingImages } from "./OnboardingShared";
+import { StepProgress, StepHeader, ImageUploadField, AddressFields, PhoneField, EmailVerificationField, forwardGeocode, uploadPendingImages } from "./OnboardingShared";
 import { isValidPersonName, NAME_ERROR } from "../lib/utils";
 
 const TOTAL_STEPS = 3;
@@ -43,6 +43,7 @@ const OnboardingPharmacy = ({ email, signupMethod, phoneNumber: signupPhone, rol
   const [step, setStep] = useState(1);
   const [uploadingFields, setUploadingFields] = useState({});
   const [phoneVerified, setPhoneVerified] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
 
@@ -95,6 +96,7 @@ const OnboardingPharmacy = ({ email, signupMethod, phoneNumber: signupPhone, rol
 
   const step2Complete = isPhoneSignup ? (
     EMAIL_REGEX.test(form.email) &&
+    emailVerified &&
     form.address.buildingNumber?.trim() &&
     form.address.street?.trim() &&
     form.address.barangay?.trim() &&
@@ -102,7 +104,6 @@ const OnboardingPharmacy = ({ email, signupMethod, phoneNumber: signupPhone, rol
     form.address.province?.trim() &&
     /^\d{4}$/.test(form.address.postalCode)
   ) : (
-    phoneVerified &&
     form.phoneNumber.length === 10 &&
     form.address.buildingNumber.trim() &&
     form.address.street.trim() &&
@@ -223,16 +224,11 @@ const OnboardingPharmacy = ({ email, signupMethod, phoneNumber: signupPhone, rol
             setStep(3);
           }} className="space-y-4">
             {isPhoneSignup ? (
-              <div className="form-control">
-                <label className="label"><span className="label-text">Email Address <span className="text-error">*</span></span></label>
-                <input
-                  type="email"
-                  className="input input-bordered w-full"
-                  placeholder="name@example.com"
-                  value={form.email}
-                  onChange={(e) => update("email", e.target.value)}
-                />
-              </div>
+              <EmailVerificationField
+                email={form.email}
+                onEmailChange={(val) => { update("email", val); setEmailVerified(false); }}
+                onVerified={setEmailVerified}
+              />
             ) : (
               <PhoneField phoneNumber={form.phoneNumber} phoneType={form.phoneType} onNumberChange={(val) => update("phoneNumber", val)} onTypeChange={(val) => update("phoneType", val)} onVerified={setPhoneVerified} />
             )}

@@ -5,14 +5,14 @@ import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 
 export const getSpecialties = asyncHandler(async (req, res) => {
-    const items = await Specialty.find({ status: "verified" }).sort({ name: 1 });
+    const items = await Specialty.find({ status: { $in: ["verified", "pending"] } }).sort({ name: 1 });
     return sendSuccess(res, 200, "Specialties fetched", { items });
 });
 
 export const getSubspecialtiesBySpecialty = asyncHandler(async (req, res) => {
     const { specialtyId } = req.params;
     if (!specialtyId) return sendError(res, 400, "Specialty ID is required");
-    const items = await Subspecialty.find({ rootSpecialty: specialtyId, status: "verified" }).sort({ name: 1 });
+    const items = await Subspecialty.find({ rootSpecialty: specialtyId, status: { $in: ["verified", "pending"] } }).sort({ name: 1 });
     return sendSuccess(res, 200, "Subspecialties fetched", { items });
 });
 

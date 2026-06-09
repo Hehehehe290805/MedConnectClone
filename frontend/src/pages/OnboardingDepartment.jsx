@@ -43,7 +43,6 @@ const OnboardingDepartment = () => {
     const queryClient = useQueryClient();
     const { authUser } = useAuthUser();
 
-    const [step, setStep] = useState(1);
     const [uploadingFields, setUploadingFields] = useState({});
     const [phoneVerified, setPhoneVerified] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -97,6 +96,8 @@ const OnboardingDepartment = () => {
             .finally(() => setServicesLoading(false));
     }, [step, selectedDeptType]);
 
+    const [step, setStep] = useState(1);
+
     const [form, setForm] = useState({
         deptEmail: "",
         deptPassword: "",
@@ -109,15 +110,7 @@ const OnboardingDepartment = () => {
         bio: "",
         phoneNumber: "",
         phoneType: "mobile",
-        address: {
-            buildingNumber: "",
-            street: "",
-            barangay: "",
-            city: "",
-            province: "",
-            postalCode: "",
-            coordinates: null,
-        },
+        address: { buildingNumber: "", street: "", barangay: "", city: "", province: "", postalCode: "", coordinates: null },
         technologistLicenseNumber: "",
         technologistLicenseExpiration: "",
         technologistLicenseImage: {},

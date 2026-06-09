@@ -3,9 +3,14 @@ import { body } from "express-validator";
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
 export const signupValidator = [
+    // Allow either email OR phone — validate email format only when email is provided
     body("email")
-        .notEmpty().withMessage("Email is required")
+        .if((value, { req }) => !!req.body.email)
         .isEmail().withMessage("Must be a valid email"),
+    body().custom((_, { req }) => {
+        if (!req.body.email && !req.body.phone) throw new Error("Email or phone number is required");
+        return true;
+    }),
     body("password")
         .notEmpty().withMessage("Password is required")
         .matches(passwordRegex).withMessage("Password must be at least 8 characters and include 1 uppercase, 1 lowercase, 1 number, and 1 symbol (@$!%*?&)"),
@@ -15,9 +20,9 @@ export const signupValidator = [
 ];
 
 export const loginValidator = [
+    // email field can contain an email address or a verified phone number
     body("email")
-        .notEmpty().withMessage("Email is required")
-        .isEmail().withMessage("Must be a valid email"),
+        .notEmpty().withMessage("Email or phone number is required"),
     body("password")
         .notEmpty().withMessage("Password is required"),
 ];
@@ -46,16 +51,16 @@ export const updateMeCredentialsValidator = [
         .matches(passwordRegex).withMessage("Password must be at least 8 characters and include 1 uppercase, 1 lowercase, 1 number, and 1 symbol (@$!%*?&)"),
 ];
 
+export const lookupForgotPasswordValidator = [
+    body("email").notEmpty().withMessage("Email or phone number is required"),
+];
+
 export const forgotPasswordValidator = [
-    body("email")
-        .notEmpty().withMessage("Email is required")
-        .isEmail().withMessage("Must be a valid email"),
+    body("email").notEmpty().withMessage("Email or phone number is required"),
 ];
 
 export const verifyForgotPasswordValidator = [
-    body("email")
-        .notEmpty().withMessage("Email is required")
-        .isEmail().withMessage("Must be a valid email"),
+    body("email").notEmpty().withMessage("Email or phone number is required"),
     body("code")
         .notEmpty().withMessage("Code is required")
         .isLength({ min: 6, max: 6 }).withMessage("Code must be 6 digits")
@@ -63,9 +68,7 @@ export const verifyForgotPasswordValidator = [
 ];
 
 export const verify2FAValidator = [
-    body("email")
-        .notEmpty().withMessage("Email is required")
-        .isEmail().withMessage("Must be a valid email"),
+    body("email").notEmpty().withMessage("Email or phone number is required"),
     body("code")
         .notEmpty().withMessage("Code is required")
         .isLength({ min: 6, max: 6 }).withMessage("Code must be 6 digits")
@@ -73,9 +76,7 @@ export const verify2FAValidator = [
 ];
 
 export const resetForgotPasswordValidator = [
-    body("email")
-        .notEmpty().withMessage("Email is required")
-        .isEmail().withMessage("Must be a valid email"),
+    body("email").notEmpty().withMessage("Email or phone number is required"),
     body("code")
         .notEmpty().withMessage("Code is required")
         .isLength({ min: 6, max: 6 }).withMessage("Code must be 6 digits")

@@ -36,9 +36,11 @@ const personalFields = [
         .notEmpty().withMessage("Sex is required")
         .isIn(["male", "female"]).withMessage("Sex must be male or female"),
     body("bio").optional().isString().withMessage("Bio must be a string"),
-    body("phoneNumber").notEmpty().withMessage("Phone number is required"),
+    // phoneNumber is optional here — phone-signup users already have it from signup;
+    // email-signup users provide it in the form (frontend enforces 10 digits)
+    body("phoneNumber").optional().isString(),
     body("phoneType")
-        .notEmpty().withMessage("Phone type is required")
+        .optional()
         .isIn(["mobile", "telephone"]).withMessage("Phone type must be mobile or telephone"),
 ];
 
@@ -78,10 +80,8 @@ export const onboardPharmacyValidator = [
         .notEmpty().withMessage("Sex is required")
         .isIn(["male", "female"]).withMessage("Sex must be male or female"),
     body("bio").optional().isString().withMessage("Bio must be a string"),
-    body("phoneNumber").notEmpty().withMessage("Phone number is required"),
-    body("phoneType")
-        .notEmpty().withMessage("Phone type is required")
-        .isIn(["mobile", "telephone"]).withMessage("Phone type must be mobile or telephone"),
+    body("phoneNumber").optional().isString(),
+    body("phoneType").optional().isIn(["mobile", "telephone"]).withMessage("Phone type must be mobile or telephone"),
     ...addressFields,
     ...publicImageFields("profilePic"),
     ...privateImageFields("businessPermit"),
@@ -103,10 +103,8 @@ export const onboardPharmacyValidator = [
 export const onboardAdminValidator = [
     body("firstName").notEmpty().withMessage("First name is required"),
     body("lastName").notEmpty().withMessage("Last name is required"),
-    body("phoneNumber").notEmpty().withMessage("Phone number is required"),
-    body("phoneType")
-        .notEmpty().withMessage("Phone type is required")
-        .isIn(["mobile", "telephone"]).withMessage("Phone type must be mobile or telephone"),
+    body("phoneNumber").optional().isString(),
+    body("phoneType").optional().isIn(["mobile", "telephone"]).withMessage("Phone type must be mobile or telephone"),
     ...publicImageFields("profilePic"),
 ];
 
@@ -151,10 +149,8 @@ export const onboardInstituteValidator = [
     body("bio").optional().isString().withMessage("Bio must be a string"),
     body("contactFirstName").notEmpty().withMessage("Contact first name is required"),
     body("contactLastName").notEmpty().withMessage("Contact last name is required"),
-    body("phoneNumber").notEmpty().withMessage("Phone number is required"),
-    body("phoneType")
-        .notEmpty().withMessage("Phone type is required")
-        .isIn(["mobile", "telephone"]).withMessage("Phone type must be mobile or telephone"),
+    body("phoneNumber").optional().isString(),
+    body("phoneType").optional().isIn(["mobile", "telephone"]).withMessage("Phone type must be mobile or telephone"),
     ...addressFields,
     ...publicImageFields("profilePic"),
     ...privateImageFields("businessPermit"),

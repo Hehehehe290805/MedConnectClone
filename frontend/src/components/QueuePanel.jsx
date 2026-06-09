@@ -1,15 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { axiosInstance } from "../lib/axios";
 import toast from "react-hot-toast";
-import { UsersIcon, ArrowRightCircleIcon, UserXIcon, UserPlusIcon, ZapIcon, RefreshCwIcon } from "lucide-react";
+import { ArrowRightCircleIcon, UserXIcon, ZapIcon, RefreshCwIcon } from "lucide-react";
 
 const TYPE_BADGE = { booked: "badge-ghost", walkin: "badge-primary", emergency: "badge-error" };
 const TYPE_LABEL = { booked: "Booked", walkin: "Walk-in", emergency: "Emergency" };
 
-const QueuePanel = () => {
+const QueuePanel = ({ showWalkinForm, setShowWalkinForm }) => {
     const queryClient = useQueryClient();
-    const [showWalkinForm, setShowWalkinForm] = useState(false);
     const [walkinFirst, setWalkinFirst] = useState("");
     const [walkinLast, setWalkinLast] = useState("");
     const [walkinType, setWalkinType] = useState("walkin");
@@ -28,6 +27,15 @@ const QueuePanel = () => {
     const doneSlots = slots.filter(s => ["done", "cancelled", "skipped"].includes(s.status));
 
     const inval = () => queryClient.invalidateQueries({ queryKey: ["queue-today"] });
+
+    // Auto-build the queue once after initial load if it hasn't been built yet today.
+    const hasAutoBuilt = useRef(false);
+    useEffect(() => {
+        if (!isLoading && !hasAutoBuilt.current) {
+            hasAutoBuilt.current = true;
+            if (!queue || !queue.isActive) buildQueue();
+        }
+    }, [isLoading, queue]);
 
     const { mutate: buildQueue, isPending: isBuilding } = useMutation({
         mutationFn: () => axiosInstance.post("/queue/build"),
@@ -66,49 +74,18 @@ const QueuePanel = () => {
         onError: (e) => toast.error(e?.response?.data?.message || "Failed to add."),
     });
 
-    if (isLoading) {
-        return (
-            <div className="card bg-base-200 p-4 flex items-center justify-center py-8">
-                <span className="loading loading-spinner loading-sm" />
-            </div>
-        );
-    }
-
-    if (!queue || !queue.isActive) {
-        return (
-            <div className="card bg-base-200 border border-base-300 p-5">
-                <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                        <UsersIcon className="size-5 text-primary" />
-                        <h3 className="font-semibold">Today's Queue</h3>
-                    </div>
-                    <button className="btn btn-primary btn-sm" disabled={isBuilding} onClick={() => buildQueue()}>
-                        {isBuilding ? <span className="loading loading-spinner loading-xs" /> : "Build Queue"}
-                    </button>
-                </div>
-                <p className="text-sm opacity-50">Queue hasn't been built yet for today. Click "Build Queue" to load today's accepted appointments.</p>
-            </div>
-        );
-    }
+    if (isLoading || isBuilding) return null;
+    if (!queue || !queue.isActive) return null;
 
     return (
         <div className="card bg-base-200 border border-base-300 p-5 space-y-4">
-            {/* Header */}
-            <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                    <UsersIcon className="size-5 text-primary" />
-                    <h3 className="font-semibold">Today's Queue</h3>
-                    <span className="badge badge-primary badge-sm">{waitingSlots.length} waiting</span>
-                    {doneSlots.length > 0 && <span className="badge badge-ghost badge-sm">{doneSlots.length} done</span>}
-                </div>
-                <div className="flex items-center gap-2">
-                    <button className="btn btn-ghost btn-xs gap-1" onClick={() => refetch()}>
-                        <RefreshCwIcon className="size-3" />
-                    </button>
-                    <button className="btn btn-outline btn-xs gap-1" onClick={() => setShowWalkinForm(v => !v)}>
-                        <UserPlusIcon className="size-3" /> Add Walk-in
-                    </button>
-                </div>
+            {/* Status badges + refresh */}
+            <div className="flex items-center gap-2">
+                <span className="badge badge-primary badge-sm">{waitingSlots.length} waiting</span>
+                {doneSlots.length > 0 && <span className="badge badge-ghost badge-sm">{doneSlots.length} done</span>}
+                <button className="btn btn-ghost btn-xs ml-auto" onClick={() => refetch()}>
+                    <RefreshCwIcon className="size-3" />
+                </button>
             </div>
 
             {/* Add walk-in form */}

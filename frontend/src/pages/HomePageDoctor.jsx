@@ -7,7 +7,7 @@ import ViewPendingAppointmentDoctorPopup from "./ViewPendingAppointmentDoctorPop
 import SetPricePopup from "./SetPricePopup.jsx";
 import SetSchedulePopup from "./SetSchedulePopup.jsx";
 import toast from "react-hot-toast";
-import { ClockIcon, CheckCircleIcon, AlertTriangleIcon, CalendarCheckIcon, ReceiptIcon, CalendarIcon, VideoIcon } from "lucide-react";
+import { ClockIcon, CheckCircleIcon, AlertTriangleIcon, CalendarCheckIcon, ReceiptIcon, CalendarIcon, VideoIcon, UsersIcon, UserPlusIcon } from "lucide-react";
 import useAuthUser from "../hooks/useAuthUser";
 import QueuePanel from "../components/QueuePanel";
 import dayjs from "dayjs";
@@ -37,6 +37,7 @@ const HomePageDoctor = () => {
     const [maxPatientsInput, setMaxPatientsInput] = useState("");
     const [showMaxPatients, setShowMaxPatients] = useState(false);
     const [savingMaxPatients, setSavingMaxPatients] = useState(false);
+    const [showWalkinForm, setShowWalkinForm] = useState(false);
 
     useEffect(() => {
         fetchAppointments();
@@ -47,6 +48,9 @@ const HomePageDoctor = () => {
             setMaxPatients(val);
             setMaxPatientsInput(val != null ? String(val) : "");
         }).catch(() => {});
+
+        const id = setInterval(fetchAppointments, 30_000);
+        return () => clearInterval(id);
     }, []);
 
     const fetchAppointments = async () => {
@@ -327,8 +331,22 @@ const HomePageDoctor = () => {
 
                     {error && <div className="alert alert-error"><span>{error}</span></div>}
 
-                    {/* Queue panel — shown first, above the calendar */}
-                    <QueuePanel />
+                    {/* Queue section */}
+                    <div>
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                                <UsersIcon className="size-5 text-primary" />
+                                <h3 className="font-semibold">Today's Queue</h3>
+                            </div>
+                            <button
+                                className="btn btn-outline btn-sm gap-1"
+                                onClick={() => setShowWalkinForm(v => !v)}
+                            >
+                                <UserPlusIcon className="size-3.5" /> Add Walk-In
+                            </button>
+                        </div>
+                        <QueuePanel showWalkinForm={showWalkinForm} setShowWalkinForm={setShowWalkinForm} />
+                    </div>
 
                     <AppointmentCalendar
                         appointments={appointments}
