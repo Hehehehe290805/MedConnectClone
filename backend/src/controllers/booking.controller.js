@@ -55,10 +55,11 @@ export const bookAppointment = asyncHandler(async (req, res) => {
 
     // Duration
     let durationMinutes;
+    let svcData = null;
     if (providerType === "doctor") {
         durationMinutes = 30;
     } else {
-        const svcData = await InstituteDepartmentService.findOne({ departmentId: instituteId, serviceId });
+        svcData = await InstituteDepartmentService.findOne({ departmentId: instituteId, serviceId });
         if (!svcData) return sendError(res, 404, "Service not found for institute.");
         durationMinutes = svcData.durationMinutes;
     }
