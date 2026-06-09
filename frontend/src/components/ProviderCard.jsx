@@ -202,11 +202,6 @@ const ProviderCard = ({ provider }) => {
                     onClose={() => setBookedAppointment(null)}
                     onUpdated={() => {}}
                 />
-            {showBooking && isDoctor && (
-                <CreateBookingPopup provider={provider} onClose={() => setShowBooking(false)} />
-            )}
-            {showBooking && isDepartment && (
-                <CreateDepartmentBookingPopup provider={provider} onClose={() => setShowBooking(false)} />
             )}
         </div>
     );
