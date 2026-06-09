@@ -73,6 +73,8 @@ export const claimService = asyncHandler(async (req, res) => {
     const { targetId, durationMinutes, maxPatientsPerDay, price } = req.body;
 
     if (!durationMinutes) return sendError(res, 400, "durationMinutes is required");
+    if (!price || isNaN(parseFloat(price)) || parseFloat(price) <= 0)
+        return sendError(res, 400, "A price is required to claim a service.");
 
     const service = await Service.findById(targetId);
     if (!service) return sendError(res, 404, "Service not found");

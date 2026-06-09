@@ -51,8 +51,8 @@ const ClaimServicesPopup = ({ onClose }) => {
         if (!duration || duration < 1) return toast.error("Enter a valid duration in minutes.");
         const max = maxPatients[serviceId] ? parseInt(maxPatients[serviceId]) : undefined;
         const price = prices[serviceId] ? parseFloat(prices[serviceId]) : undefined;
+        if (!price || isNaN(price) || price <= 0) return toast.error("A price is required to claim a service.");
         if (max !== undefined && (isNaN(max) || max < 1)) return toast.error("Enter a valid max patients per day.");
-        if (price !== undefined && (isNaN(price) || price < 0)) return toast.error("Enter a valid price.");
         setClaiming(serviceId);
         try {
             await axiosInstance.post("/services/claim", {

@@ -200,7 +200,7 @@ export const getDepartmentAvailability = asyncHandler(async (req, res) => {
     if (!serviceClaim)
         return sendError(res, 404, "Service not found or not yet approved for this department.");
 
-    const { maxPatientsPerDay, durationMinutes } = serviceClaim;
+    const { maxPatientsPerDay, durationMinutes, price } = serviceClaim;
     const now = nowPhTime();
 
     const startHourNum = Number(schedule.startHour.split(":")[0]);
@@ -252,7 +252,7 @@ export const getDepartmentAvailability = asyncHandler(async (req, res) => {
 
     return sendSuccess(res, 200, "Department availability fetched", {
         schedule: { startHour: schedule.startHour, endHour: schedule.endHour, daysOfWeek: schedule.daysOfWeek },
-        service: { durationMinutes, maxPatientsPerDay },
+        service: { durationMinutes, maxPatientsPerDay, price },
         availableDates,
     });
 });

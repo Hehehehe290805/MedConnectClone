@@ -118,8 +118,21 @@ export const bookAppointment = asyncHandler(async (req, res) => {
         }
     }
 
-    const pricing = await Pricing.findOne({ providerId: doctorId || instituteId, serviceId });
-    if (!pricing) return sendError(res, 400, "Pricing not found for this service.");
+    let pricing = await Pricing.findOne({ providerId: doctorId || instituteId, serviceId });
+    if (!pricing) {
+        // For department bookings: fall back to the price stored on the service claim
+        // and lazily create the missing Pricing record so future bookings skip this path
+        if (providerType === "institute" && svcData?.price) {
+            try {
+                pricing = await Pricing.findOneAndUpdate(
+                    { providerId: instituteId, serviceId },
+                    { providerId: instituteId, serviceId, price: svcData.price },
+                    { upsert: true, new: true }
+                );
+            } catch { /* non-fatal */ }
+        }
+        if (!pricing) return sendError(res, 400, "Pricing not found for this service. The department must set a price when claiming the service.");
+    }
 
     const totalPrice = pricing.price;
     // Platform takes 10% of the total, collected from the 50% deposit.
