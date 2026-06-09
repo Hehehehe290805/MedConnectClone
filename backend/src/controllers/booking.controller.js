@@ -38,7 +38,7 @@ function hasOverlap(existing, start, end) {
 
 function applyTimeToDate(date, timeStr) {
     const [hour, minute] = timeStr.split(":").map(Number);
-    return dayjs(date).hour(hour).minute(minute).second(0).millisecond(0);
+    return dayjs(date).tz("Asia/Manila").hour(hour).minute(minute).second(0).millisecond(0);
 }
 
 // ── BOOK ──────────────────────────────────────────────────────────────────────
@@ -63,7 +63,7 @@ export const bookAppointment = asyncHandler(async (req, res) => {
         durationMinutes = svcData.durationMinutes;
     }
 
-    const startTimePH = dayjs(start);
+    const startTimePH = dayjs(start).tz("Asia/Manila");
     const startTimeUTC = startTimePH.utc();
     const endTimeUTC = startTimeUTC.add(durationMinutes, "minute");
 
