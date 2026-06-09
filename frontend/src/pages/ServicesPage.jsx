@@ -1,9 +1,12 @@
 import { useState, useCallback, useEffect } from "react";
 import { axiosInstance } from "../lib/axios";
-import { ActivityIcon, ClockIcon, PlusIcon, LightbulbIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ActivityIcon, ClockIcon, PlusIcon, LightbulbIcon, Trash2Icon, XIcon, CalendarIcon, AlertTriangleIcon, CheckCircleIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import ClaimServicesPopup from "../components/ClaimServicesPopup";
 import SuggestServicePopup from "../components/SuggestServicePopup";
+import SetSchedulePopup from "./SetSchedulePopup";
+
+const DAYS_LABEL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const ServicesPage = () => {
     const [services, setServices] = useState([]);
@@ -12,6 +15,9 @@ const ServicesPage = () => {
     const [showClaim, setShowClaim] = useState(false);
     const [showSuggest, setShowSuggest] = useState(false);
     const [deleting, setDeleting] = useState(null);
+    const [schedule, setSchedule] = useState(null);
+    const [scheduleLoading, setScheduleLoading] = useState(true);
+    const [showSchedule, setShowSchedule] = useState(false);
 
     const verified = services.filter(s => s.status === "verified");
     const pending = services.filter(s => s.status === "pending");
@@ -29,7 +35,22 @@ const ServicesPage = () => {
         }
     }, []);
 
-    useEffect(() => { fetchServices(); }, [fetchServices]);
+    const fetchSchedule = useCallback(async () => {
+        setScheduleLoading(true);
+        try {
+            const res = await axiosInstance.get("/doctor-schedule/get-availability");
+            setSchedule(res.data.data?.availability || null);
+        } catch {
+            setSchedule(null);
+        } finally {
+            setScheduleLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchServices();
+        fetchSchedule();
+    }, [fetchServices, fetchSchedule]);
 
     const handleDelete = async (claimId, name) => {
         setDeleting(claimId);
@@ -116,6 +137,43 @@ const ServicesPage = () => {
                 <p className="text-sm opacity-70 mt-1">Manage the services offered by your department.</p>
             </div>
 
+            {/* Schedule setup card */}
+            {scheduleLoading ? (
+                <div className="flex items-center gap-2 text-sm opacity-50">
+                    <span className="loading loading-spinner loading-xs" /> Checking schedule…
+                </div>
+            ) : !schedule || !schedule.isActive ? (
+                <div className="alert alert-warning rounded-xl">
+                    <AlertTriangleIcon className="w-5 h-5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm">No active schedule set</p>
+                        <p className="text-xs opacity-80">Patients cannot book your services until you set your availability.</p>
+                    </div>
+                    <button className="btn btn-sm btn-warning" onClick={() => setShowSchedule(true)}>
+                        <CalendarIcon className="w-4 h-4" /> Set Schedule
+                    </button>
+                </div>
+            ) : (
+                <div className="bg-base-200 rounded-xl p-4 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-success/10 text-success">
+                            <CheckCircleIcon className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <p className="font-semibold text-sm">Schedule Active</p>
+                            <p className="text-xs opacity-60">
+                                {DAYS_LABEL.filter((_, i) => schedule.daysOfWeek?.includes(i)).join(", ")}
+                                {" · "}
+                                {schedule.startHour} – {schedule.endHour}
+                            </p>
+                        </div>
+                    </div>
+                    <button className="btn btn-sm btn-outline gap-1" onClick={() => setShowSchedule(true)}>
+                        <CalendarIcon className="w-4 h-4" /> Edit Schedule
+                    </button>
+                </div>
+            )}
+
             <div className="flex flex-col md:flex-row gap-4 items-start">
                 <Column
                     title="Approved Services"
@@ -175,6 +233,16 @@ const ServicesPage = () => {
 
             {showClaim && <ClaimServicesPopup onClose={handleClaimClose} />}
             {showSuggest && <SuggestServicePopup onClose={handleSuggestClose} />}
+            {showSchedule && (
+                <SetSchedulePopup
+                    currentSchedule={schedule}
+                    onClose={() => setShowSchedule(false)}
+                    onScheduleSet={(newSchedule) => {
+                        setSchedule(newSchedule);
+                        setShowSchedule(false);
+                    }}
+                />
+            )}
         </div>
     );
 };
