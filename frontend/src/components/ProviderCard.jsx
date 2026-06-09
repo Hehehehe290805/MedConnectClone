@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { MapPinIcon, StarIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import CreateBookingPopup from "../pages/CreateBookingPopup";
 import ViewPendingAppointmentPatientPopup from "../pages/ViewPendingAppointmentPatientPopup";
+import CreateDepartmentBookingPopup from "../pages/CreateDepartmentBookingPopup";
 
 const StarRating = ({ value, count }) => {
     if (!value) return null;
@@ -163,7 +164,7 @@ const ProviderCard = ({ provider }) => {
                         </p>
                     )}
 
-                    {isDoctor && (
+                    {(isDoctor || isDepartment) && (
                         <button
                             className={`btn btn-sm w-full mt-2 ${provider.isFullToday ? "btn-disabled opacity-50 cursor-not-allowed" : "btn-primary"}`}
                             onClick={() => !provider.isFullToday && setShowBooking(true)}
@@ -201,6 +202,11 @@ const ProviderCard = ({ provider }) => {
                     onClose={() => setBookedAppointment(null)}
                     onUpdated={() => {}}
                 />
+            {showBooking && isDoctor && (
+                <CreateBookingPopup provider={provider} onClose={() => setShowBooking(false)} />
+            )}
+            {showBooking && isDepartment && (
+                <CreateDepartmentBookingPopup provider={provider} onClose={() => setShowBooking(false)} />
             )}
         </div>
     );

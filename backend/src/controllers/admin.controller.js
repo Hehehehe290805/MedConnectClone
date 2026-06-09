@@ -214,21 +214,40 @@ export const getLicenseNumber = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, "License number fetched", { licenseNumber: user.licenseNumber });
 });
 
+// Returns only doctor specialty/subspecialty pending claims.
+// Department service claims are fetched separately via GET /service-claims.
 export const getPendingClaims = asyncHandler(async (req, res) => {
-  const [specialtyClaims, subspecialtyClaims, serviceClaims] = await Promise.all([
+  const [r1, r2] = await Promise.allSettled([
     DoctorSpecialty.find({ status: "pending", claimType: "specialty" })
       .populate("doctorId", "firstName lastName email")
       .populate("specialtyId", "name"),
     DoctorSpecialty.find({ status: "pending", claimType: "subspecialty" })
       .populate("doctorId", "firstName lastName email")
       .populate("subspecialtyId", "name"),
-    InstituteDepartmentService.find({ status: "pending", claimType: "service" })
-      .populate("departmentId", "technologistFirstName technologistLastName departmentType email")
-      .populate("serviceId", "name"),
   ]);
 
   return sendSuccess(res, 200, "Pending claims fetched", {
-    claims: { specialties: specialtyClaims, subspecialties: subspecialtyClaims, services: serviceClaims },
+    claims: {
+      specialties: r1.status === "fulfilled" ? r1.value : [],
+      subspecialties: r2.status === "fulfilled" ? r2.value : [],
+    },
+  });
+});
+
+// Mirrors getPendingClaims architecture exactly — Promise.allSettled, flat populates only,
+// structured claims object. Returns all statuses so AdminServiceClaimsPage keeps full filter tabs.
+export const getServiceClaims = asyncHandler(async (req, res) => {
+  const [r1] = await Promise.allSettled([
+    InstituteDepartmentService.find({})
+      .populate("departmentId", "technologistFirstName technologistLastName email")
+      .populate("serviceId", "name")
+      .sort({ createdAt: -1 }),
+  ]);
+
+  return sendSuccess(res, 200, "Service claims fetched", {
+    claims: {
+      services: r1.status === "fulfilled" ? r1.value : [],
+    },
   });
 });
 
@@ -240,10 +259,23 @@ export const approveClaim = asyncHandler(async (req, res) => {
   if (!claim) return sendError(res, 404, "Claim not found");
   if (claim.status === "verified") return sendError(res, 400, "Claim is already approved");
 
-  const type = claim.claimType;
+  // Detect by field presence so old DB records without claimType still work
+  const isServiceClaim = claim.claimType === "service" || Boolean(claim.departmentId);
+  const type = claim.claimType || (isServiceClaim ? "service" : "specialty");
   claim.status = "verified";
   claim.approvedBy = req.user._id;
   await claim.save();
+
+  // For service claims with a price set, upsert a Pricing record so booking can proceed
+  if (isServiceClaim && claim.price && claim.departmentId && claim.serviceId) {
+    try {
+      await Pricing.findOneAndUpdate(
+        { providerId: claim.departmentId, serviceId: claim.serviceId },
+        { providerId: claim.departmentId, serviceId: claim.serviceId, price: claim.price },
+        { upsert: true }
+      );
+    } catch { /* non-fatal */ }
+  }
 
   // notify the claimant
   try {
@@ -420,15 +452,16 @@ export const rejectClaim = asyncHandler(async (req, res) => {
   await claim.save();
 
   try {
-    const populateField = claim.claimType === "specialty" ? "specialtyId"
-      : claim.claimType === "subspecialty" ? "subspecialtyId"
+    const resolvedType = claim.claimType || (claim.departmentId ? "service" : "specialty");
+    const populateField = resolvedType === "specialty" ? "specialtyId"
+      : resolvedType === "subspecialty" ? "subspecialtyId"
       : "serviceId";
     await claim.populate(populateField);
-    const itemName = claim[populateField]?.name || claim.claimType;
+    const itemName = claim[populateField]?.name || resolvedType;
     const recipientId = claim.doctorId || claim.departmentId;
     if (recipientId) {
       notify(recipientId, "claim_rejected", "Claim Not Approved",
-        `Your ${claim.claimType} claim for "${itemName}" was not approved.`);
+        `Your ${resolvedType} claim for "${itemName}" was not approved.`);
     }
   } catch { /* non-fatal */ }
 
@@ -588,7 +621,7 @@ export const bulkReject = asyncHandler(async (req, res) => {
         const userDoc = await User.findById(item.id).lean();
         await User.findByIdAndUpdate(item.id, { status: "rejected" });
         await DoctorSpecialty.deleteMany({ doctorId: item.id, status: "pending" });
-        await InstituteDepartmentService.deleteMany({ instituteId: item.id, status: "pending" });
+        await InstituteDepartmentService.deleteMany({ departmentId: item.id, status: "pending" });
         if (userDoc) {
           for (const key of collectUserS3Keys(userDoc)) {
             try { await deleteFromS3(key); } catch { /* non-fatal */ }

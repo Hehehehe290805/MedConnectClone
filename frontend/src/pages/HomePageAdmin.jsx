@@ -112,14 +112,12 @@ const SuggestionRow = ({ s, checked, onCheck, onApproveSingle, onRejectSingle })
     );
 };
 
-// Claim row (for All Requests tab)
+// Doctor specialty/subspecialty claim row
 const ClaimRow = ({ claim, onView }) => {
     const who = claim.doctorId
         ? `Dr. ${claim.doctorId.firstName} ${claim.doctorId.lastName}`
-        : claim.departmentId
-        ? `${claim.departmentId.technologistFirstName || ""} ${claim.departmentId.technologistLastName || ""}`.trim() || claim.departmentId.email || "Department"
         : "Unknown";
-    const what = claim.specialtyId?.name || claim.subspecialtyId?.name || claim.serviceId?.name || "—";
+    const what = claim.specialtyId?.name || claim.subspecialtyId?.name || "—";
     return (
         <div className="flex items-center gap-3 p-3 bg-base-100 rounded-lg border border-base-300">
             <div className="flex-1 min-w-0">
@@ -127,6 +125,32 @@ const ClaimRow = ({ claim, onView }) => {
                 <p className="text-xs opacity-50">{claim.claimType} claim · {who}</p>
             </div>
             <button className="btn btn-xs btn-outline" onClick={() => onView(claim)}>Review</button>
+        </div>
+    );
+};
+
+// Department service claim row — richer display
+const ServiceClaimRow = ({ claim, onView }) => {
+    const dept = claim.departmentId;
+    const deptName = dept?.technologistFirstName
+        ? `${dept.technologistFirstName} ${dept.technologistLastName || ""}`.trim()
+        : dept?.email || "Department";
+    const instituteName = dept?.rootInstitute?.instituteName || "";
+    const serviceName = claim.serviceId?.name || "—";
+    return (
+        <div className="flex items-center gap-3 p-3 bg-base-100 rounded-lg border border-base-300">
+            <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm truncate">{serviceName}</p>
+                <p className="text-xs opacity-50 truncate">
+                    {deptName}{instituteName ? ` · ${instituteName}` : ""}
+                </p>
+                <div className="flex flex-wrap gap-2 mt-0.5 text-xs opacity-40">
+                    {claim.durationMinutes && <span>{claim.durationMinutes} min</span>}
+                    {claim.maxPatientsPerDay && <span>Max {claim.maxPatientsPerDay}/day</span>}
+                    {claim.price != null && <span className="text-primary font-medium">₱{Number(claim.price).toLocaleString("en-PH")}</span>}
+                </div>
+            </div>
+            <button className="btn btn-xs btn-outline shrink-0" onClick={() => onView(claim)}>Review</button>
         </div>
     );
 };
@@ -269,11 +293,12 @@ const HomePageAdmin = () => {
     // data
     const [pendingUsers, setPendingUsers] = useState([]);
     const [pendingSuggestions, setPendingSuggestions] = useState([]);
-    const [pendingClaims, setPendingClaims] = useState([]);
+    const [pendingClaims, setPendingClaims] = useState([]);         // doctor specialty/subspecialty
+    const [pendingServiceClaims, setPendingServiceClaims] = useState([]); // department service claims
     const [pendingRenewals, setPendingRenewals] = useState([]);
     const [complaints, setComplaints] = useState([]);
 
-    const [loading, setLoading] = useState({ users: false, suggestions: false, claims: false, renewals: false, complaints: false });
+    const [loading, setLoading] = useState({ users: false, suggestions: false, claims: false, serviceClaims: false, renewals: false, complaints: false });
 
     // resolve modal
     const [resolveTarget, setResolveTarget] = useState(null);
@@ -326,14 +351,23 @@ const HomePageAdmin = () => {
             const res = await axiosInstance.get("/admin/pending-claims");
             const claims = res.data.data?.claims;
             if (res.data.success && claims) {
-                const all = [
+                setPendingClaims([
                     ...(claims.specialties || []),
                     ...(claims.subspecialties || []),
-                    ...(claims.services || []),
-                ];
-                setPendingClaims(all);
+                ]);
             }
-        } catch { } finally { setLoading((p) => ({ ...p, claims: false })); }
+        } catch { toast.error("Failed to load specialty claims."); } finally { setLoading((p) => ({ ...p, claims: false })); }
+    }, []);
+
+    const fetchServiceClaims = useCallback(async () => {
+        setLoading((p) => ({ ...p, serviceClaims: true }));
+        try {
+            const res = await axiosInstance.get("/admin/service-claims");
+            const claims = res.data.data?.claims;
+            if (res.data.success && claims) {
+                setPendingServiceClaims((claims.services || []).filter(c => c.status === "pending"));
+            }
+        } catch { toast.error("Failed to load service claims."); } finally { setLoading((p) => ({ ...p, serviceClaims: false })); }
     }, []);
 
     const fetchRenewals = useCallback(async () => {
@@ -356,9 +390,10 @@ const HomePageAdmin = () => {
         fetchUsers();
         fetchSuggestions();
         fetchClaims();
+        fetchServiceClaims();
         fetchRenewals();
         fetchComplaints();
-    }, [fetchUsers, fetchSuggestions, fetchClaims, fetchRenewals, fetchComplaints]);
+    }, [fetchUsers, fetchSuggestions, fetchClaims, fetchServiceClaims, fetchRenewals, fetchComplaints]);
 
     // ── accounts tab helpers ──────────────────────────────────────────────
     const toggleUserCheck = (id) =>
@@ -509,11 +544,13 @@ const HomePageAdmin = () => {
 
     const onClaimApproved = (claimId) => {
         setPendingClaims((prev) => prev.filter((c) => c._id !== claimId));
+        setPendingServiceClaims((prev) => prev.filter((c) => c._id !== claimId));
         setClaimPopup(null);
     };
 
     const onClaimRejected = (claimId) => {
         setPendingClaims((prev) => prev.filter((c) => c._id !== claimId));
+        setPendingServiceClaims((prev) => prev.filter((c) => c._id !== claimId));
         setClaimPopup(null);
     };
 
@@ -526,8 +563,11 @@ const HomePageAdmin = () => {
 
     // ── render ────────────────────────────────────────────────────────────
     const pendingComplaints = complaints.filter(c => c.status === "pending");
+    // pendingClaims only has doctor specialty/subspecialty; pendingServiceClaims is fetched separately
+    const doctorClaims = pendingClaims;
+    const serviceClaims = pendingServiceClaims;
     const totalPending =
-        pendingUsers.length + pendingSuggestions.length + pendingClaims.length + pendingRenewals.length + pendingComplaints.length;
+        pendingUsers.length + pendingSuggestions.length + pendingClaims.length + pendingServiceClaims.length + pendingRenewals.length + pendingComplaints.length;
 
     return (
         <div className="p-4 sm:p-8 max-w-5xl mx-auto space-y-6">
@@ -574,11 +614,12 @@ const HomePageAdmin = () => {
                 {[
                     { key: "renewals", label: "Renewals", count: pendingRenewals.length, cls: "badge-info", refresh: fetchRenewals },
                     { key: "reports", label: "Reports", count: pendingComplaints.length, cls: "badge-info", refresh: fetchComplaints },
-                    { key: "claims", label: "Claims", count: pendingClaims.length, cls: "badge-info", refresh: fetchClaims },
+                    { key: "services", label: "Services", count: serviceClaims.length + pendingSuggestions.filter(s => s.type === "service").length, cls: "badge-info", refresh: () => { fetchServiceClaims(); fetchSuggestions(); } },
+                    { key: "claims", label: "Claims", count: doctorClaims.length, cls: "badge-info", refresh: fetchClaims },
                     { key: "subspecialties", label: "Subspecialties", count: pendingSuggestions.filter(s => s.type === "subspecialty").length, cls: "badge-info", refresh: fetchSuggestions },
                     { key: "specialties", label: "Specialties", count: pendingSuggestions.filter(s => s.type === "specialty").length, cls: "badge-info", refresh: fetchSuggestions },
                     { key: "accounts", label: "Pending Accounts", count: pendingUsers.length, cls: "badge-info", refresh: fetchUsers },
-                    { key: "all", label: "All Requests", count: totalPending, cls: "badge-info", refresh: () => { fetchUsers(); fetchSuggestions(); fetchClaims(); fetchRenewals(); fetchComplaints(); } },
+                    { key: "all", label: "All Requests", count: totalPending, cls: "badge-info", refresh: () => { fetchUsers(); fetchSuggestions(); fetchClaims(); fetchServiceClaims(); fetchRenewals(); fetchComplaints(); } },
                 ].map(({ key, label, count, cls, refresh }) => (
                     <div key={key} className="flex items-center gap-0.5">
                         <button
@@ -751,11 +792,49 @@ const HomePageAdmin = () => {
                 </div>
             )}
 
-            {/* ── CLAIMS TAB ──────────────────────────────────────────── */}
+            {/* ── CLAIMS TAB (doctor specialty/subspecialty) ──────────── */}
             {activeTab === "claims" && (
                 <div className="space-y-2">
-                    {loading.claims ? <LoadingRows /> : pendingClaims.length === 0 ? <SectionEmpty label="pending claims" /> : (
-                        pendingClaims.map(c => <ClaimRow key={c._id} claim={c} onView={setClaimPopup} />)
+                    {loading.claims ? <LoadingRows /> : doctorClaims.length === 0 ? <SectionEmpty label="pending specialty claims" /> : (
+                        doctorClaims.map(c => <ClaimRow key={c._id} claim={c} onView={setClaimPopup} />)
+                    )}
+                </div>
+            )}
+
+            {/* ── SERVICES TAB (service suggestions + service claims) ──── */}
+            {activeTab === "services" && (
+                <div className="space-y-4">
+                    {/* Service suggestions — same pattern as Specialties tab */}
+                    {(() => {
+                        const svcSuggestions = pendingSuggestions.filter(s => s.type === "service");
+                        if (loading.suggestions) return <LoadingRows />;
+                        if (svcSuggestions.length === 0) return null;
+                        return (
+                            <div className="space-y-2">
+                                <p className="text-xs font-semibold opacity-50 uppercase tracking-wide">New Service Suggestions</p>
+                                {svcSuggestions.map(s => (
+                                    <SuggestionRow key={s._id} s={s}
+                                        checked={selectedSuggestionIds.has(s._id)}
+                                        onCheck={() => toggleSuggestionCheck(s._id)}
+                                        onApproveSingle={approveSingleSuggestion}
+                                        onRejectSingle={rejectSingleSuggestion}
+                                    />
+                                ))}
+                            </div>
+                        );
+                    })()}
+                    {/* Service claims — same pattern as Claims tab */}
+                    {loading.serviceClaims ? <LoadingRows /> : serviceClaims.length > 0 ? (
+                        <div className="space-y-2">
+                            <p className="text-xs font-semibold opacity-50 uppercase tracking-wide">Service Claims</p>
+                            {serviceClaims.map(c => <ServiceClaimRow key={c._id} claim={c} onView={setClaimPopup} />)}
+                        </div>
+                    ) : null}
+                    {/* Empty state only when both are empty */}
+                    {!loading.suggestions && !loading.serviceClaims &&
+                        pendingSuggestions.filter(s => s.type === "service").length === 0 &&
+                        serviceClaims.length === 0 && (
+                        <SectionEmpty label="pending service items" />
                     )}
                 </div>
             )}
@@ -836,12 +915,36 @@ const HomePageAdmin = () => {
                             </div>
                         </div>
                     )}
-                    {/* Claims */}
-                    {pendingClaims.length > 0 && (
+                    {/* Doctor Specialty Claims */}
+                    {doctorClaims.length > 0 && (
                         <div>
-                            <p className="text-xs font-semibold opacity-50 uppercase tracking-wide mb-2">Claims</p>
+                            <p className="text-xs font-semibold opacity-50 uppercase tracking-wide mb-2">Specialty Claims</p>
                             <div className="space-y-2">
-                                {pendingClaims.map(c => <ClaimRow key={c._id} claim={c} onView={setClaimPopup} />)}
+                                {doctorClaims.map(c => <ClaimRow key={c._id} claim={c} onView={setClaimPopup} />)}
+                            </div>
+                        </div>
+                    )}
+                    {/* Service Suggestions */}
+                    {pendingSuggestions.filter(s => s.type === "service").length > 0 && (
+                        <div>
+                            <p className="text-xs font-semibold opacity-50 uppercase tracking-wide mb-2">Service Suggestions</p>
+                            <div className="space-y-2">
+                                {pendingSuggestions.filter(s => s.type === "service").map(s => (
+                                    <SuggestionRow key={s._id} s={s} checked={selectedSuggestionIds.has(s._id)}
+                                        onCheck={() => toggleSuggestionCheck(s._id)}
+                                        onApproveSingle={approveSingleSuggestion}
+                                        onRejectSingle={rejectSingleSuggestion}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    {/* Department Service Claims */}
+                    {serviceClaims.length > 0 && (
+                        <div>
+                            <p className="text-xs font-semibold opacity-50 uppercase tracking-wide mb-2">Service Claims</p>
+                            <div className="space-y-2">
+                                {serviceClaims.map(c => <ServiceClaimRow key={c._id} claim={c} onView={setClaimPopup} />)}
                             </div>
                         </div>
                     )}
@@ -879,12 +982,12 @@ const HomePageAdmin = () => {
                     {totalPending === 0 && <SectionEmpty label="pending requests" />}
                     {pendingUsers.map(user => {
                         const suggestions = userSuggestionsFor(user._id);
-                        const claims = pendingClaims.filter(c =>
-                            c.doctorId?._id?.toString() === user._id?.toString() ||
-                            c.doctorId?.toString() === user._id?.toString() ||
-                            c.instituteId?._id?.toString() === user._id?.toString() ||
-                            c.instituteId?.toString() === user._id?.toString()
-                        );
+                        const allClaims = [...pendingClaims, ...pendingServiceClaims];
+                        const claims = allClaims.filter(c => {
+                            const uid = user._id?.toString();
+                            return (c.doctorId?._id ?? c.doctorId)?.toString() === uid ||
+                                (c.departmentId?._id ?? c.departmentId)?.toString() === uid;
+                        });
                         const displayName = user.firstName && user.lastName
                             ? `${user.firstName} ${user.lastName}`
                             : user.instituteName || user.facilityName || user.pharmacyName || user.email;
@@ -918,7 +1021,11 @@ const HomePageAdmin = () => {
                                     {claims.length > 0 && (
                                         <div className="pl-3 border-l-2 border-info/30 space-y-1.5">
                                             <p className="text-xs opacity-50 font-semibold uppercase tracking-wide">Claims ({claims.length})</p>
-                                            {claims.map(c => <ClaimRow key={c._id} claim={c} onView={setClaimPopup} />)}
+                                            {claims.map(c =>
+                                                (c.claimType === "service" || Boolean(c.departmentId))
+                                                    ? <ServiceClaimRow key={c._id} claim={c} onView={setClaimPopup} />
+                                                    : <ClaimRow key={c._id} claim={c} onView={setClaimPopup} />
+                                            )}
                                         </div>
                                     )}
                                 </div>

@@ -2,6 +2,7 @@ import express from "express";
 import {
     setAvailability, getAvailability,
     getDoctorCalendar, getDoctorPublicCalendar, getInstitutePublicCalendar,
+    getDepartmentAvailability,
 } from "../controllers/schedule.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
@@ -14,5 +15,6 @@ router.get("/get-availability", protectRoute, getAvailability);
 router.get("/doctor-calendar", protectRoute, getDoctorCalendar);
 router.get("/public-doctor-calendar", protectRoute, getDoctorPublicCalendar);
 router.get("/public-institute-calendar", protectRoute, getInstitutePublicCalendar);
+router.get("/department-availability", protectRoute, getDepartmentAvailability);
 
 export default router;
