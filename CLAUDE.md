@@ -164,6 +164,7 @@ Student project — actively in development.
 - **Dispute Resolution** (`/admin/reports`): View dispute details, set outcome (`provider_right` / `patient_right` / `split`), add admin note. When outcome is `patient_right`, optional "Issue full refund" checkbox notifies patient of refund amount.
 - **User Management** (`/admin/users`): Search/filter all users by role. View account details. Force-delete cleans S3 files and `emailregistry`.
 - **App Reports**: View user-submitted bug/UX/feature reports. Advance status (`pending → viewed → resolved`).
+- **Analytics** (`/admin/analytics`): Date-range filtered dashboard — totalRevenue, platformRevenue, revenueByDay, revenueByDoctor (top 20), appointmentVolume breakdown, topProviders (top 10), cancellationRate, disputeRate. CSV + Excel export.
 - **Notifications**: Receives `notifyAllAdmins` broadcasts for new pending accounts, permit renewals, and disputes.
 
 **Standards:**
@@ -276,17 +277,17 @@ Admin (separate admins collection — not a discriminator)
 ```
 
 ### Base User Fields (all roles inherit)
-`email`, `password` (bcrypt), `role`, `status`, `phoneNumber`, `phoneType`, `profilePic {url,key}`, `approvedBy` (ref Admin), `pendingDeletion`, `deletionRequestedAt`, `resetPasswordCode/Expiry`, `lastPasswordChange`, `twoFactorEnabled`, `loginAttempts`, `loginLockedAt`, `birthDate`, `createdAt`
+`email`, `password` (bcrypt), `role`, `status`, `signupMethod` (email/phone), `phoneNumber`, `phoneType`, `phoneVerified` (bool, default false), `emailVerified` (bool, default false), `profilePic {url,key}`, `approvedBy` (ref Admin), `pendingDeletion`, `deletionRequestedAt`, `resetPasswordCode/Expiry`, `lastPasswordChange`, `twoFactorEnabled`, `loginAttempts`, `loginLockedAt`, `birthDate`, `lastSeen` (Date, for online status), `emailNotificationsEnabled` (bool, default true), `createdAt`
 
 ### Role-Specific Fields
 | Role | Key Fields |
 |---|---|
 | Patient | `firstName`, `lastName`, `sex`, `bio`, `languages[]`, `address` |
-| Doctor | `firstName`, `lastName`, `sex`, `bio`, `languages[]`, `address`, `licenseNumber` (encrypted), `licenseExpiration`, `licenseImage {key}`, `legalIDImage {key}`, `specialty[]`, `subSpecialty[]` |
+| Doctor | `firstName`, `lastName`, `sex`, `bio`, `languages[]`, `address`, `licenseNumber` (encrypted), `licenseExpiration`, `licenseImage {key}`, `legalIDImage {key}`, `specialty[]`, `subSpecialty[]`, `blockedPatients[]` (ObjectId refs), `maxPatientsPerDay` (Number, default null) |
 | Pharmacy | `pharmacyName`, `pharmacistFirstName/LastName`, `sex`, `bio`, `address`, `businessPermit {key}`, `fdaLicense {key}`, `pharmacistLicenseNumber` (encrypted), `pharmacistLicenseExpiration`, `pharmacistLicenseImage {key}`, `pharmacistLegalIDImage {key}` |
 | Institute | `instituteName`, `instituteType` (clinic/hospital), `contactFirstName/LastName`, `licensingAgency`, `address`, `businessPermit {key}`, `constructionPermit {key}` (hospital only), `departmentAccounts []` (ObjectId refs to Department users) |
 | Department | `technologistFirstName/LastName`, `sex`, `bio`, `address`, `departmentId`, `departmentType`, `rootInstitute` (ref User/Institute), `technologistLicenseNumber` (encrypted), `technologistLicenseExpiration`, `technologistLicenseImage {key}`, `technologistLegalIDImage {key}` |
-| Admin | `firstName`, `lastName`, `email`, `password`, `adminCode` (bcrypt-hashed), `profilePic`, `status`, `twoFactorEnabled`, `loginAttempts`, `loginLockedAt`, `role: "admin"` (immutable) |
+| Admin | `firstName`, `lastName`, `email`, `password`, `adminCode` (bcrypt-hashed), `adminCodeKey` (HMAC-SHA256 of adminCode, unique sparse — enforces uniqueness without exposing plaintext), `profilePic`, `status`, `phoneNumber`, `phoneType`, `phoneVerified` (bool, default false), `twoFactorEnabled`, `loginAttempts`, `loginLockedAt`, `emailNotificationsEnabled` (bool, default true), `role: "admin"` (immutable) |
 
 ### Status Enum (User + Admin)
 `notOnBoarded` → `pending` → `onBoarded` → `needsRenewal` → `pendingRenewal` → `pendingRenewalExpired` → `suspended`
@@ -302,6 +303,7 @@ Also: `rejected`
 | `doctorspecialties` | Link: doctor ↔ specialty/subspecialty claim; `status`, `claimType`, `approvedBy` |
 | `institutedepartmentservices` | Link: department ↔ service claim; `status`, `durationMinutes` |
 | `emailregistry` | Tracks email → model mapping for global uniqueness |
+| `phoneregistry` | Tracks phone number → userId mapping for global uniqueness (same pattern as emailregistry) |
 | `verificationcodes` | OTP codes for signup, email change, password change, permit renewal, 2FA; TTL index on `expiresAt` |
 | `notifications` | In-app: `recipient`, `type` (enum), `title`, `body`, `isRead`; indexes on `{recipient, isRead}`, `{recipient, createdAt}` |
 | `permitrenewals` | Staging: `userId`, `type`, `newImage {key}`, `newLicenseNumber`, `newExpiration`, `status`, `approvedBy`, `rejectionReason` |
@@ -312,6 +314,7 @@ Also: `rejected`
 | `appreports` | User bug/UX/feature reports: `userId`, `category`, `subject`, `description`, `status` (pending/viewed/resolved) |
 | `schedules` | Provider availability: `doctorId` or `instituteId`, `daysOfWeek[]`, `startHour`, `endHour` |
 | `pricing` | `providerId`, `serviceId`, `price` |
+| `appointmentqueues` | Queue per provider per day; unique `{providerId, date}`; `slots[]` array with position/type/status per appointment |
 
 ---
 
@@ -370,7 +373,7 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 `POST /book` (accepts `preConsultationMarkdown`), `POST /pay-deposit`, `POST /accept`, `POST /reject`, `POST /cancel`, `POST /complete`, `POST /pay-balance`, `POST /dispute`, `POST /review`, `GET /my-appointments`, `GET /transaction-history` (institute: queries all dept sub-accounts; accepts `?departmentId=`), `GET /reviews/:providerId`
 
 ### `/api/chat`
-`GET /token` (Stream Chat token), `POST /translate` (MyMemory proxy)
+`GET /token` (Stream Chat token), `POST /translate` (MyMemory proxy), `GET /appointment-attachments` (fetch appointment files for chat context)
 
 ### `/api/doctor-schedule`
 `POST /availability`, `GET /get-availability`
@@ -397,7 +400,15 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 `POST /` (any authenticated user), `GET /` (admin), `PATCH /:id/status` (admin)
 
 ### `/api/chatbot`
-`POST /message` — authenticated; body `{ message, history[] }`; rate-limited 20/hr per user; calls Groq API (llama3-8b-8192); returns `{ reply }`
+`POST /message` — authenticated; body `{ message, history[] }`; rate-limited 20/hr per user; calls Groq API (`llama-3.1-8b-instant`); returns `{ reply }`
+
+### `/api/gcash`
+`GET /info` — public (no auth); returns mock platform GCash number + account name. Defaults to env vars `MOCK_GCASH_NUMBER` / `MOCK_GCASH_NAME` if set, else hardcoded demo values.
+
+### `/api/pharmacyorder`
+**Products:** `GET /products` (public listing), `GET /products/mine` (pharmacy's own), `POST /products`, `PATCH /products/:productId`, `DELETE /products/:productId`  
+**Orders:** `POST /orders/pay-now`, `POST /orders/prescription-review`, `PATCH /orders/:orderId/prescription/approve`, `PATCH /orders/:orderId/prescription/reject`, `PATCH /orders/:orderId/ready`, `PATCH /orders/:orderId/start-fulfillment`, `PATCH /orders/:orderId/pay-approved`, `GET /orders/dashboard`  
+**Income:** `GET /income`, `POST /income/manual`
 
 ### `/api/admin/analytics`
 `GET /` — admin only; query params `?from=YYYY-MM-DD&to=YYYY-MM-DD` (default last 30 days); returns full analytics payload
@@ -445,6 +456,9 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 | `/admin/users` | `UserManagementPage` | Admin |
 | `/admin/specialties` | `AdminSpecialtiesPage` | Admin |
 | `/admin/reports` | `AdminReportsPage` | Admin |
+| `/admin/analytics` | `AdminAnalyticsPage` | Admin |
+| `/terms-of-service` | `TermsOfServicePage` | Public |
+| `/privacy-policy` | `PrivacyPolicyPage` | Public |
 | `/login` | `LoginPage` | Public |
 | `/signup` | `SignUpPage` | Public |
 | `/forgot-password` | `ForgotPasswordPage` | Public |
@@ -457,7 +471,7 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 
 **Doctor (`HomePageDoctor`)** — pending banner; Join Call banner (virtual, 30 min before / ongoing); tabbed: **Appointments** (setup warning or success card, pricing card, schedule card, max patients card, **`QueuePanel`** (auto-builds on mount; today's queue with walk-in/advance/no-show — no manual build button), `AppointmentCalendar` (active only) + `ViewPendingAppointmentDoctorPopup`) | **Transactions** (`TransactionList`). Appointments polled every 30s.
 
-**Pharmacy (`HomePagePharmacy`)** — pending banner; tabbed: **Manage Catalogue** (placeholder) | **Transactions** (`TransactionList`).
+**Pharmacy (`HomePagePharmacy`)** — pending banner; tabbed: **Orders** (Order List, Shipping & Pickup queue, Completed orders, Prescription review modals) | **Manage Catalogue** (`PharmacyCataloguePage`) | **Transactions** (`TransactionList`).
 
 **Institute (`HomePageInstitute`)** — pending banner; tabbed: **Overview** (sub-account setup prompt or dept count card, institute info cards) | **Transactions** (`TransactionList` with department dropdown filter).
 
@@ -492,10 +506,11 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 | `SuggestServicePopup.jsx` | Department modal to suggest a new service; posts to `POST /api/services/suggest` |
 
 ### Login Flow (LoginPage.jsx)
-Three steps via component state:
+Four steps via component state:
 1. `"user"` — email + password. Subtle "Admin Login →" text link at bottom.
 2. `"admin"` — email + password + admin code all at once.
 3. `"twoFactor"` — 6-digit code entry (both user and admin paths).
+4. `"locked"` — brute-force lockout recovery; email + 6-digit reset code + new password; calls `POST /api/auth/forgot-password/reset`; triggered automatically when login/adminLogin return HTTP 429.
 
 ### Forgot Password Flow
 `ForgotPasswordPage` → role picker modal on mount (User / Admin) → `ForgotPasswordVerifyPage` → `ForgotPasswordResetPage`. Admin path requires adminCode field.
@@ -527,6 +542,7 @@ Three steps via component state:
 |---|---|
 | Every 30s | `accepted → ongoing` transition |
 | Every 5 min | `ongoing → awaiting_balance/fully_paid` + delete rejected appointments after 24h |
+| Daily 6am (Manila) | Build appointment queues for all doctors/departments with accepted appointments today |
 | Daily midnight | 30-day soft-delete sweep + S3 cleanup |
 | Daily 1am | License expiry checker: `onBoarded → needsRenewal` (60 days before), `needsRenewal → suspended` (expired) |
 
@@ -567,6 +583,8 @@ STREAM_SECRET
 ENCRYPTION_KEY
 ADMIN_CODE
 GROQ_API_KEY        ← required for AI chatbot; free key at console.groq.com
+MOCK_GCASH_NUMBER   ← optional; defaults to "0917-000-0000" if unset
+MOCK_GCASH_NAME     ← optional; defaults to "MedConnect Platform" if unset
 ```
 
 ---
@@ -684,7 +702,7 @@ Tests updated to import from proper modules:
 
 **Admin analytics (#75):** New `/api/admin/analytics` route (`analytics.route.js` + `analytics.controller.js`). Returns totalRevenue, platformRevenue, revenueByDay, revenueByDoctor (top 20), appointmentVolume breakdown, topProviders (top 10), cancellationRate, disputeRate. Frontend: `AdminAnalyticsPage.jsx` at `/admin/analytics` — date range filter, stat cards, tables, CSV + Excel export (.xlsx as CSV). "Analytics →" link added to HomePageAdmin tab row.
 
-**AI chatbot (#80):** `chatbot.controller.js` calls Groq API via fetch (no npm package — uses `fetch` directly with `llama3-8b-8192` model). Rate limit: 20 messages/hour per user (in-memory Map, server-side). System prompt constrains it to MedConnect feature help only. `GROQ_API_KEY` env var required. Frontend: `ChatbotWidget.jsx` — floating bottom-right button (fixed, z-50), chat panel with message thread, quick prompts on open, `/path` links rendered as `<Link>`. Added to `Layout.jsx` so it appears on all authenticated pages for all roles.
+**AI chatbot (#80):** `chatbot.controller.js` calls Groq API via fetch (no npm package — uses `fetch` directly with `llama-3.1-8b-instant` model, 12s timeout, max 300 tokens, temperature 0.4). Rate limit: 20 messages/hour per user (in-memory Map via `rateLimiter.js`, server-side). System prompt constrains to MedConnect feature help only — refuses medical diagnoses, redirects symptom questions to `/consultation`, redirects doctor search to `/search`. `GROQ_API_KEY` env var required; missing → 503. Frontend: `ChatbotWidget.jsx` — floating bottom-right button (fixed, z-50), panel 80–96 chars wide, message history (last 8 sent to API), 6 role-aware quick-prompt chips on open, `/path` links rendered as `<Link>`, rate-limit 429 shows modal message. Added to `Layout.jsx` so it appears on all authenticated pages for all roles.
 
 **PSGC dropdowns (#86):** `PSGCAddressFields.jsx` fetches from `psgc.cloud` public API (no bundled data). Cascading Region → Province → City/Municipality. Integrated into `AddressFields` in `OnboardingShared.jsx` — replaces city/province free-text inputs. Falls back gracefully (shows message) if API unreachable.
 
@@ -882,9 +900,9 @@ The queue system (#71/#72/#87) is a new collection and the most complex feature.
 - Walk-ins (type `walkin`) are appended to the end. Emergencies (type `emergency`) are inserted at position 1 and everyone else shifts down (+1 position). Both are doctor-created only — patients cannot create these.
 - The active slot (position 1 with status `active`) corresponds to the `ongoing` appointment in the main appointments collection.
 - **Advance to next**: Doctor can only call next when current appointment is `completed`, `awaiting_balance`, or `fully_paid`. Cannot skip manually — skip only triggers via the 5-minute no-show window.
-- **No-show / skip**: After 5 minutes with no activity (patient hasn't joined virtual or doctor hasn't marked started), system auto-prompts doctor. If doctor confirms skip:
-  - Patient accepts skip → moved to end of queue (position updates, `appointment.start` adjusted, notifications sent).
-  - Patient doesn't accept → treated as `cancelled`, no refund. Appointment status → `cancelled`.
+- **No-show / skip**: Doctor manually triggers `POST /api/queue/no-show` (there is no automatic 5-min timer — doctor decides when a patient is a no-show). Doctor chooses outcome:
+  - `outcome: "skip"` → patient moved to end of queue (position updates, `appointment.start` adjusted, notifications sent).
+  - `outcome: "cancel"` → treated as `cancelled`, no refund. Appointment status → `cancelled`.
 - **Emergency bump**: When doctor adds an emergency walk-in mid-session, the currently `ongoing` appointment reverts to `accepted` (current patient notified + all others notified they've been pushed back one slot). Emergency slot becomes `active` / `ongoing`.
 - **Position notifications**: Sent at 10, 5, and 2 slots ahead (in-app + email if `emailNotificationsEnabled`). Notification type: `queue_position_update`.
 - **Patient dashboard**: If the patient has an appointment today, their dashboard shows their live queue position ("You are #N in queue — N people ahead of you"). Polls every 60s.
