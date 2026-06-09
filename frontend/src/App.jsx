@@ -43,11 +43,8 @@ import ConsultationPage from "./pages/ConsultationPage.jsx";
 import UserManagementPage from "./pages/UserManagementPage.jsx";
 import AdminSpecialtiesPage from "./pages/AdminSpecialtiesPage.jsx";
 import AdminReportsPage from "./pages/AdminReportsPage.jsx";
-<<<<<<< HEAD
 import AdminServiceClaimsPage from "./pages/AdminServiceClaimsPage.jsx";
-=======
 import AdminAnalyticsPage from "./pages/AdminAnalyticsPage.jsx";
->>>>>>> 901f75f47db0b175a71fb88b7d6b409ae6d08016
 
 // Onboarding & Auth flow
 import OnboardingPage from "./pages/OnboardingPage.jsx";
