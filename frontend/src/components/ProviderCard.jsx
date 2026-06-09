@@ -188,8 +188,15 @@ const ProviderCard = ({ provider }) => {
                 </div>
             </div>
 
-            {showBooking && (
+            {showBooking && isDoctor && (
                 <CreateBookingPopup
+                    provider={provider}
+                    onClose={() => setShowBooking(false)}
+                    onBookingCreated={(appt) => { setShowBooking(false); setBookedAppointment(appt); }}
+                />
+            )}
+            {showBooking && isDepartment && (
+                <CreateDepartmentBookingPopup
                     provider={provider}
                     onClose={() => setShowBooking(false)}
                     onBookingCreated={(appt) => { setShowBooking(false); setBookedAppointment(appt); }}
