@@ -93,8 +93,9 @@ const Sidebar = () => {
                         {navItem("/", HomeIcon, "Home")}
                         {navItem("/notifications", BellIcon, "Notifications")}
                         {navItem("/admin/users", UsersIcon, "User Management")}
+                        {navItem("/admin/analytics", ActivityIcon, "Analytics")}
                         {navItem("/admin/specialties", BookOpenIcon, "Specialties & Services")}
-                        {navItem("/admin/services", ActivityIcon, "Service Claims")}
+                        {navItem("/admin/services", ClipboardListIcon, "Service Claims")}
                         {navItem("/admin/reports", FlagIcon, "Reports")}
                         {navItem("/settings", SettingsIcon, "Settings")}
                     </>

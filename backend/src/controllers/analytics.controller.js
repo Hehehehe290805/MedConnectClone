@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Appointment from "../models/Appointment.js";
+import PharmacyOrder from "../models/PharmacyOrder.js";
 import Transaction from "../models/Transaction.js";
 import User from "../models/User.js";
 import asyncHandler from "../utils/asyncHandler.js";
@@ -25,24 +26,53 @@ export const getAnalytics = asyncHandler(async (req, res) => {
 
     const fromUtc = fromDate.toDate();
     const toUtc = toDate.toDate();
+    const dateRange = { $gte: fromUtc, $lte: toUtc };
+    const transactionDateFilter = { createdAt: dateRange };
+    const paidPharmacyOrderDateFilter = {
+        paymentStatus: "paid",
+        $or: [
+            { paidAt: dateRange },
+            { paidAt: { $exists: false }, createdAt: dateRange },
+            { paidAt: null, createdAt: dateRange },
+        ],
+    };
 
     // ── 1. Total revenue across all transactions ───────────────────────────
-    const [revenueTotals] = await Transaction.aggregate([
+    const [appointmentRevenueTotals] = await Transaction.aggregate([
+        { $match: transactionDateFilter },
         {
             $group: {
                 _id: null,
-                totalRevenue: { $sum: "$amount" },
+                appointmentRevenue: { $sum: "$amount" },
                 platformRevenue: { $sum: "$platformFee" },
             },
         },
     ]).exec();
 
-    const totalRevenue = revenueTotals?.totalRevenue ?? 0;
-    const platformRevenue = revenueTotals?.platformRevenue ?? 0;
+    const [pharmacyRevenueTotals] = await PharmacyOrder.aggregate([
+        { $match: paidPharmacyOrderDateFilter },
+        {
+            $group: {
+                _id: null,
+                pharmacyRevenue: { $sum: "$totalAmount" },
+                pharmacyDeliveryFees: { $sum: "$deliveryFee" },
+                pharmacyOrderCount: { $sum: 1 },
+            },
+        },
+    ]).exec();
+
+    const appointmentRevenue = appointmentRevenueTotals?.appointmentRevenue ?? 0;
+    const appointmentPlatformFees = appointmentRevenueTotals?.platformRevenue ?? 0;
+    const pharmacyRevenue = pharmacyRevenueTotals?.pharmacyRevenue ?? 0;
+    const pharmacyDeliveryFees = pharmacyRevenueTotals?.pharmacyDeliveryFees ?? 0;
+    const pharmacyOrderCount = pharmacyRevenueTotals?.pharmacyOrderCount ?? 0;
+    const additionalFees = 0;
+    const totalRevenue = appointmentRevenue + pharmacyRevenue;
+    const platformRevenue = appointmentPlatformFees + pharmacyDeliveryFees + additionalFees;
 
     // ── 2. Revenue by day (within date range) ─────────────────────────────
     const revenueByDayRaw = await Transaction.aggregate([
-        { $match: { createdAt: { $gte: fromUtc, $lte: toUtc } } },
+        { $match: transactionDateFilter },
         {
             $group: {
                 _id: {
@@ -66,6 +96,36 @@ export const getAnalytics = asyncHandler(async (req, res) => {
         revenue: r.revenue,
         platformRevenue: r.platformRevenue,
     }));
+
+    const pharmacyRevenueByDayRaw = await PharmacyOrder.aggregate([
+        { $match: paidPharmacyOrderDateFilter },
+        {
+            $group: {
+                _id: {
+                    day: {
+                        $dateToString: {
+                            format: "%Y-%m-%d",
+                            date: { $ifNull: ["$paidAt", "$createdAt"] },
+                            timezone: "Asia/Manila",
+                        },
+                    },
+                },
+                revenue: { $sum: "$totalAmount" },
+                platformRevenue: { $sum: "$deliveryFee" },
+            },
+        },
+        { $sort: { "_id.day": 1 } },
+    ]).exec();
+
+    const revenueByDayMap = new Map(revenueByDay.map((row) => [row.date, { ...row }]));
+    for (const row of pharmacyRevenueByDayRaw) {
+        const date = dayjs.utc(row._id.day).tz("Asia/Manila").format("YYYY-MM-DD");
+        const current = revenueByDayMap.get(date) || { date, revenue: 0, platformRevenue: 0 };
+        current.revenue += row.revenue;
+        current.platformRevenue += row.platformRevenue;
+        revenueByDayMap.set(date, current);
+    }
+    const combinedRevenueByDay = [...revenueByDayMap.values()].sort((a, b) => a.date.localeCompare(b.date));
 
     // ── 3. Revenue by doctor (top 20) ─────────────────────────────────────
     // Transactions go to the payeeId (the provider). We only want doctor payees.
@@ -197,7 +257,15 @@ export const getAnalytics = asyncHandler(async (req, res) => {
     return sendSuccess(res, 200, "Analytics fetched successfully.", {
         totalRevenue,
         platformRevenue,
-        revenueByDay,
+        salesBreakdown: {
+            appointmentRevenue,
+            appointmentPlatformFees,
+            pharmacyRevenue,
+            pharmacyDeliveryFees,
+            pharmacyOrderCount,
+            additionalFees,
+        },
+        revenueByDay: combinedRevenueByDay,
         revenueByDoctor,
         appointmentVolume,
         topProviders,

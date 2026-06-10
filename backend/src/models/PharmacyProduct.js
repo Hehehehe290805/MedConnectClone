@@ -14,6 +14,7 @@ const pharmacyProductSchema = new mongoose.Schema(
             index: true,
         },
         name: { type: String, required: true, trim: true },
+        nameKey: { type: String, required: true, trim: true, lowercase: true },
         image: { type: imageSchema, default: () => ({}) },
         quantityValue: { type: Number, required: true, min: 0 },
         quantityUnit: {
@@ -31,6 +32,14 @@ const pharmacyProductSchema = new mongoose.Schema(
 
 pharmacyProductSchema.index({ name: "text" });
 pharmacyProductSchema.index({ pharmacyId: 1, createdAt: -1 });
+pharmacyProductSchema.index({ pharmacyId: 1, nameKey: 1, isActive: 1 });
+
+pharmacyProductSchema.pre("validate", function setNameKey(next) {
+    if (this.name) {
+        this.nameKey = this.name.trim().replace(/\s+/g, " ").toLowerCase();
+    }
+    next();
+});
 
 const PharmacyProduct = mongoose.model("PharmacyProduct", pharmacyProductSchema);
 export default PharmacyProduct;
