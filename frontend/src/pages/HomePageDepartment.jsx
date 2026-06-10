@@ -23,7 +23,7 @@ const HomePageDepartment = () => {
 
     useEffect(() => {
         axiosInstance.get("/services/my-services")
-            .then(res => { if (res.data.success) setServices(res.data.services || []); })
+            .then(res => { if (res.data.success) setServices(res.data.data?.services || []); })
             .catch(() => setServices([]))
             .finally(() => setServicesLoaded(true));
 
@@ -37,8 +37,9 @@ const HomePageDepartment = () => {
             setLoading(true);
             setError(null);
             const res = await axiosInstance.get("/booking/my-appointments");
-            if (res.data.success && Array.isArray(res.data.appointments)) {
-                setAppointments(res.data.appointments.sort((a, b) => new Date(a.start) - new Date(b.start)));
+            const appts = res.data.data?.appointments;
+            if (res.data.success && Array.isArray(appts)) {
+                setAppointments(appts.sort((a, b) => new Date(a.start) - new Date(b.start)));
             } else {
                 setAppointments([]);
             }
