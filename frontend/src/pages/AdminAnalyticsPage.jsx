@@ -13,6 +13,12 @@ const fmtPct = (val) => `${Number(val ?? 0).toFixed(2)}%`;
 const defaultFrom = () => dayjs().subtract(29, "day").format("YYYY-MM-DD");
 const defaultTo = () => dayjs().format("YYYY-MM-DD");
 
+const quickRanges = [
+    { label: "Today", getRange: () => ({ from: dayjs().format("YYYY-MM-DD"), to: defaultTo() }) },
+    { label: "Last 7 Days", getRange: () => ({ from: dayjs().subtract(6, "day").format("YYYY-MM-DD"), to: defaultTo() }) },
+    { label: "Last 3 Months", getRange: () => ({ from: dayjs().subtract(3, "month").format("YYYY-MM-DD"), to: defaultTo() }) },
+];
+
 // Build and trigger a browser download of a text blob
 const triggerDownload = (content, filename, mimeType) => {
     const blob = new Blob([content], { type: mimeType });
@@ -70,6 +76,12 @@ const AdminAnalyticsPage = () => {
     const [from, setFrom] = useState(defaultFrom());
     const [to, setTo] = useState(defaultTo());
 
+    const applyQuickRange = (getRange) => {
+        const range = getRange();
+        setFrom(range.from);
+        setTo(range.to);
+    };
+
     const { data, isLoading, isError, refetch } = useQuery({
         queryKey: ["adminAnalytics", from, to],
         queryFn: async () => {
@@ -86,6 +98,9 @@ const AdminAnalyticsPage = () => {
         const summaryRows = [
             { label: "Total Revenue", value: data.totalRevenue ?? 0 },
             { label: "Platform Revenue", value: data.platformRevenue ?? 0 },
+            { label: "Appointment Platform Fees", value: data.salesBreakdown?.appointmentPlatformFees ?? 0 },
+            { label: "Pharmacy Delivery Fees", value: data.salesBreakdown?.pharmacyDeliveryFees ?? 0 },
+            { label: "Additional Fees", value: data.salesBreakdown?.additionalFees ?? 0 },
             { label: "Total Appointments", value: data.appointmentVolume?.total ?? 0 },
             { label: "Cancellation Rate (%)", value: data.cancellationRate ?? 0 },
             { label: "Dispute Rate (%)", value: data.disputeRate ?? 0 },
@@ -148,7 +163,7 @@ const AdminAnalyticsPage = () => {
             <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold">Analytics</h1>
-                    <p className="text-sm opacity-60 mt-0.5">Platform revenue and appointment insights</p>
+                    <p className="text-sm opacity-60 mt-0.5">MedConnect platform sales, revenue, and appointment insights</p>
                 </div>
                 <div className="flex gap-2">
                     <button
@@ -171,6 +186,18 @@ const AdminAnalyticsPage = () => {
             {/* Date range filter */}
             <div className="card bg-base-200 border border-base-300 rounded-xl p-4">
                 <p className="text-xs font-semibold opacity-50 uppercase tracking-wide mb-3">Date Range</p>
+                <div className="flex flex-wrap gap-2 mb-3">
+                    {quickRanges.map((range) => (
+                        <button
+                            key={range.label}
+                            type="button"
+                            className="btn btn-xs btn-outline"
+                            onClick={() => applyQuickRange(range.getRange)}
+                        >
+                            {range.label}
+                        </button>
+                    ))}
+                </div>
                 <div className="flex flex-wrap gap-3 items-end">
                     <div className="flex flex-col gap-1">
                         <label className="text-xs opacity-60">From</label>
@@ -218,16 +245,31 @@ const AdminAnalyticsPage = () => {
             {data && !isLoading && (
                 <>
                     {/* Summary stat cards */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                         <StatCard
-                            label="Total Revenue"
+                            label="Total Sales"
                             value={fmtPHP(data.totalRevenue)}
-                            sub="All transactions"
+                            sub="Appointments + pharmacy orders"
                         />
                         <StatCard
-                            label="Platform Revenue"
+                            label="MedConnect Sales"
                             value={fmtPHP(data.platformRevenue)}
-                            sub="Platform fees (10%)"
+                            sub="Admin-owned fees only"
+                        />
+                        <StatCard
+                            label="Appointment Fees"
+                            value={fmtPHP(data.salesBreakdown?.appointmentPlatformFees)}
+                            sub="10% platform fees"
+                        />
+                        <StatCard
+                            label="Pharmacy Fees"
+                            value={fmtPHP(data.salesBreakdown?.pharmacyDeliveryFees)}
+                            sub={`${data.salesBreakdown?.pharmacyOrderCount ?? 0} pharmacy order(s)`}
+                        />
+                        <StatCard
+                            label="Additional Fees"
+                            value={fmtPHP(data.salesBreakdown?.additionalFees)}
+                            sub="No separate fee source yet"
                         />
                         <StatCard
                             label="Total Appointments"

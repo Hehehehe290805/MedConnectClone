@@ -17,6 +17,28 @@ const parseSort = (sort) => {
     return { createdAt: -1 };
 };
 
+const normalizeProductName = (name = "") => name.trim().replace(/\s+/g, " ").toLowerCase();
+
+const escapeRegex = (value = "") => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const hasDuplicateProductName = async ({ pharmacyId, name, excludeProductId }) => {
+    const normalizedName = normalizeProductName(name);
+    const filter = {
+        pharmacyId,
+        isActive: true,
+        $or: [
+            { nameKey: normalizedName },
+            { name: { $regex: `^${escapeRegex(name.trim())}$`, $options: "i" } },
+        ],
+    };
+
+    if (excludeProductId) {
+        filter._id = { $ne: excludeProductId };
+    }
+
+    return PharmacyProduct.exists(filter);
+};
+
 export const listPublicPharmacyProducts = asyncHandler(async (req, res) => {
     const { q = "", sort = "newest" } = req.query;
     const filter = { isActive: true, stock: { $gt: 0 } };
@@ -47,6 +69,10 @@ export const listMyPharmacyProducts = asyncHandler(async (req, res) => {
 export const createPharmacyProduct = asyncHandler(async (req, res) => {
     if (!ensurePharmacy(req, res)) return;
 
+    if (await hasDuplicateProductName({ pharmacyId: req.user._id, name: req.body.name })) {
+        return sendError(res, 409, "A product with this medicine name already exists in your catalogue.");
+    }
+
     const product = await PharmacyProduct.create({
         pharmacyId: req.user._id,
         name: req.body.name,
@@ -74,6 +100,17 @@ export const updatePharmacyProduct = asyncHandler(async (req, res) => {
 
     const oldImageKey = product.image?.key;
     const nextImageKey = req.body.image?.key;
+
+    if (
+        req.body.name !== undefined
+        && await hasDuplicateProductName({
+            pharmacyId: req.user._id,
+            name: req.body.name,
+            excludeProductId: product._id,
+        })
+    ) {
+        return sendError(res, 409, "A product with this medicine name already exists in your catalogue.");
+    }
 
     for (const field of ["name", "image", "quantityValue", "quantityUnit", "stock", "price", "overTheCounter"]) {
         if (req.body[field] !== undefined) product[field] = req.body[field];

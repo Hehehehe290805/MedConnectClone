@@ -106,6 +106,73 @@ const CartLineDetails = ({ item }) => (
     </div>
 );
 
+const ProductDetailModal = ({ product, onClose, onAddToCart }) => {
+    if (!product) return null;
+
+    const pharmacyAddress = addressText(product.pharmacyId?.address);
+
+    return (
+        <div className="modal modal-open">
+            <div className="modal-box max-w-2xl">
+                <div className="flex items-start justify-between gap-3 mb-4">
+                    <div>
+                        <h2 className="font-bold text-lg">{product.name}</h2>
+                        <p className="text-sm opacity-60">{product.pharmacyId?.pharmacyName || "Pharmacy"}</p>
+                    </div>
+                    <button className="btn btn-ghost btn-sm btn-circle" onClick={onClose}>
+                        <XIcon className="size-4" />
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-4">
+                    <ProductImage product={product} className="w-full aspect-square" />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                        <div className="bg-base-200 rounded-lg p-3">
+                            <p className="opacity-60">Medicine name</p>
+                            <p className="font-semibold">{product.name}</p>
+                        </div>
+                        <div className="bg-base-200 rounded-lg p-3">
+                            <p className="opacity-60">Price</p>
+                            <p className="font-semibold">{currency(product.price)}</p>
+                        </div>
+                        <div className="bg-base-200 rounded-lg p-3">
+                            <p className="opacity-60">Amount</p>
+                            <p className="font-semibold">{product.quantityValue} {product.quantityUnit}</p>
+                        </div>
+                        <div className="bg-base-200 rounded-lg p-3">
+                            <p className="opacity-60">Available stock</p>
+                            <p className="font-semibold">{product.stock}</p>
+                        </div>
+                        <div className="bg-base-200 rounded-lg p-3">
+                            <p className="opacity-60">Prescription</p>
+                            <p className="font-semibold">{product.overTheCounter ? "Not required" : "Required before payment"}</p>
+                        </div>
+                        <div className="bg-base-200 rounded-lg p-3">
+                            <p className="opacity-60">Pharmacy</p>
+                            <p className="font-semibold">{product.pharmacyId?.pharmacyName || "Pharmacy"}</p>
+                        </div>
+                        {pharmacyAddress && (
+                            <div className="bg-base-200 rounded-lg p-3 sm:col-span-2">
+                                <p className="opacity-60">Pharmacy address</p>
+                                <p className="font-semibold">{pharmacyAddress}</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="modal-action">
+                    <button className="btn btn-ghost" onClick={onClose}>Close</button>
+                    <button className="btn btn-primary gap-2" onClick={() => onAddToCart(product)} disabled={product.stock <= 0}>
+                        <ShoppingCartIcon className="size-4" />
+                        Add to cart
+                    </button>
+                </div>
+            </div>
+            <div className="modal-backdrop" onClick={onClose} />
+        </div>
+    );
+};
+
 const CustomerPharmacyPage = () => {
     const { authUser } = useAuthUser();
     const queryClient = useQueryClient();
@@ -125,6 +192,7 @@ const CustomerPharmacyPage = () => {
     const [approvedPaymentOrder, setApprovedPaymentOrder] = useState(null);
     const [approvedTermsAccepted, setApprovedTermsAccepted] = useState(false);
     const [termsOpen, setTermsOpen] = useState(false);
+    const [detailProduct, setDetailProduct] = useState(null);
 
     const { data, isLoading } = useQuery({
         queryKey: ["public-pharmacy-products", submittedQuery, sort],
@@ -332,7 +400,11 @@ const CustomerPharmacyPage = () => {
                     ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                             {products.map((product) => (
-                                <div key={product._id} className="card bg-base-200 shadow-sm h-[360px]">
+                                <div
+                                    key={product._id}
+                                    className="card bg-base-200 shadow-sm h-[360px] cursor-pointer transition-shadow hover:shadow-md"
+                                    onClick={() => setDetailProduct(product)}
+                                >
                                     <div className="card-body h-full">
                                         <ProductImage product={product} />
                                         <div className="min-h-[76px]">
@@ -346,7 +418,10 @@ const CustomerPharmacyPage = () => {
                                                 {product.overTheCounter ? "OTC" : "Prescription"}
                                             </span>
                                         </div>
-                                        <button className="btn btn-primary btn-sm gap-2 mt-auto" onClick={() => addToCart(product)} disabled={product.stock <= 0}>
+                                        <button className="btn btn-primary btn-sm gap-2 mt-auto" onClick={(e) => {
+                                            e.stopPropagation();
+                                            addToCart(product);
+                                        }} disabled={product.stock <= 0}>
                                             <ShoppingCartIcon className="size-4" />
                                             Add to cart
                                         </button>
@@ -645,6 +720,14 @@ const CustomerPharmacyPage = () => {
                 </div>
             )}
             <TermsModal isOpen={termsOpen} onClose={() => setTermsOpen(false)} />
+            <ProductDetailModal
+                product={detailProduct}
+                onClose={() => setDetailProduct(null)}
+                onAddToCart={(product) => {
+                    addToCart(product);
+                    setDetailProduct(null);
+                }}
+            />
         </div>
     );
 };
