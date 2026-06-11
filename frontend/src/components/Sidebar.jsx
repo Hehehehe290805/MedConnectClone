@@ -73,7 +73,7 @@ const Sidebar = () => {
                 return (
                     <>
                         {navItem("/", HomeIcon, "Home")}
-                        {navItem("/setup-departments", BuildingIcon, "Departments")}
+                        {navItem("/manage-departments", BuildingIcon, "Departments")}
                         {navItem("/transactions", ReceiptIcon, "Transactions", isPending)}
                         {navItem("/settings", SettingsIcon, "Settings")}
                     </>
