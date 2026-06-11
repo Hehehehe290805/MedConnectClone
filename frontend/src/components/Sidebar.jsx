@@ -22,8 +22,9 @@ const Sidebar = () => {
 
     const isPending = authUser?.status === "pending";
 
-    const navItem = (to, icon, label, disabled = false) => {
+    const navItem = (to, icon, label, disabled = false, extraActivePaths = []) => {
         const Icon = icon;
+        const isActive = currentPath === to || extraActivePaths.includes(currentPath);
         if (disabled) {
             return (
                 <div
@@ -38,7 +39,7 @@ const Sidebar = () => {
         return (
             <Link
                 to={to}
-                className={`btn btn-ghost justify-start w-full gap-3 px-3 normal-case ${currentPath === to ? "btn-active" : ""}`}
+                className={`btn btn-ghost justify-start w-full gap-3 px-3 normal-case ${isActive ? "btn-active" : ""}`}
             >
                 <Icon className="size-5 text-base-content opacity-70" />
                 <span>{label}</span>
@@ -73,7 +74,7 @@ const Sidebar = () => {
                 return (
                     <>
                         {navItem("/", HomeIcon, "Home")}
-                        {navItem("/manage-departments", BuildingIcon, "Departments")}
+                        {navItem("/manage-departments", BuildingIcon, "Departments", false, ["/setup-departments"])}
                         {navItem("/transactions", ReceiptIcon, "Transactions", isPending)}
                         {navItem("/settings", SettingsIcon, "Settings")}
                     </>
