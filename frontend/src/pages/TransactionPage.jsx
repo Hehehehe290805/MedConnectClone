@@ -34,6 +34,7 @@ const STATUS_STYLES = {
     ready_for_pickup: "bg-primary/10 text-primary border-primary/20",
     out_for_delivery: "bg-yellow-100 text-yellow-900 border-yellow-200",
     pickup_in_progress: "bg-yellow-100 text-yellow-900 border-yellow-200",
+    refunded: "bg-emerald-100 text-emerald-800 border-emerald-200",
 };
 
 const currency = (value) =>
@@ -44,6 +45,7 @@ const TYPE_LABEL = {
     balance: "Balance",
     rebook_fee: "Rebook Fee",
     cashback: "Cashback",
+    refund: "Refund",
 };
 const REBOOKABLE_STATUSES = ["missed_by_patient", "missed_by_provider", "missed_by_both"];
 const rebookOutcomeLabel = (appt) => {
@@ -60,9 +62,14 @@ const rebookOutcomeLabel = (appt) => {
     if (appt?.rebooked && REBOOKABLE_STATUSES.includes(appt.status)) return "Rebooked";
     return null;
 };
-const cashbackReason = (transaction, appt, isCashOut) => {
-    if (transaction.type !== "cashback") return null;
+const adjustmentReason = (transaction, appt, isCashOut) => {
+    if (!["cashback", "refund"].includes(transaction.type)) return null;
     const ref = transaction.referenceNumber || "";
+    if (transaction.type === "refund") {
+        return isCashOut
+            ? "You refunded the patient's deposit because you rejected this paid booking request. MedConnect's platform fee stays with the platform."
+            : "You received your deposit back because the provider rejected this paid booking request.";
+    }
     if (ref.startsWith("RB-BOTH-REJ")) {
         return isCashOut
             ? "You paid a 10% refund because you rejected a free rebook after both parties missed the original virtual appointment. MedConnect's platform fee stays with the platform."
@@ -173,18 +180,19 @@ const AppointmentTransactionModal = ({ transaction, isDoctor, currentUserId, onC
         ? `${appt.patientId.firstName} ${appt.patientId.lastName}`
         : "Patient";
     const counterpart = isDoctor ? patientName : providerName;
-    const isCashOut = (t) => t.type === "cashback" && (t.payerId?._id ?? t.payerId)?.toString() === currentUserId;
+    const isCashOut = (t) => ["cashback", "refund"].includes(t.type) && (t.payerId?._id ?? t.payerId)?.toString() === currentUserId;
     const providerNet = (t) => isCashOut(t) ? -(t.amount ?? 0) : (t.netAmount ?? 0);
-    const isCashback = transaction.type === "cashback";
-    const reason = cashbackReason(transaction, appt, isCashOut(transaction));
+    const isAdjustment = ["cashback", "refund"].includes(transaction.type);
+    const reason = adjustmentReason(transaction, appt, isCashOut(transaction));
+    const status = transaction.type === "refund" ? "refunded" : appt?.status;
 
     return (
         <div className="modal modal-open">
             <div className="modal-box max-w-lg p-0 overflow-hidden">
-                <div className={`${isCashback ? "bg-emerald-600" : "bg-primary"} text-primary-content px-5 py-4`}>
+                <div className={`${isAdjustment ? "bg-emerald-600" : "bg-primary"} text-primary-content px-5 py-4`}>
                     <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                            <p className="text-xs uppercase tracking-wide opacity-80">{isCashback ? "Cashback Receipt" : "Appointment Transaction"}</p>
+                            <p className="text-xs uppercase tracking-wide opacity-80">{isAdjustment ? `${TYPE_LABEL[transaction.type]} Receipt` : "Appointment Transaction"}</p>
                             <h2 className="font-mono text-lg font-bold break-all">{transaction.referenceNumber}</h2>
                         </div>
                         <button className="btn btn-ghost btn-sm btn-circle text-primary-content" onClick={onClose}>
@@ -201,7 +209,7 @@ const AppointmentTransactionModal = ({ transaction, isDoctor, currentUserId, onC
                         </div>
                         <div className="rounded-lg border border-base-300 bg-base-100 p-2.5">
                             <p className="text-xs opacity-50">Status</p>
-                            <div className="mt-1">{appt?.status ? statusPill(appt.status) : "Recorded"}</div>
+                            <div className="mt-1">{status ? statusPill(status) : "Recorded"}</div>
                         </div>
                         {appt?.start && (
                             <div className="rounded-lg border border-base-300 bg-base-100 p-2.5 sm:col-span-2">
@@ -224,13 +232,13 @@ const AppointmentTransactionModal = ({ transaction, isDoctor, currentUserId, onC
                         )}
                         {isDoctor && (
                             <div className="flex justify-between py-1.5 text-sm">
-                                <span className="opacity-60">{isCashOut(transaction) ? "Cashback paid" : "Net received"}</span>
+                                <span className="opacity-60">{isCashOut(transaction) ? `${TYPE_LABEL[transaction.type]} paid` : "Net received"}</span>
                                 <span className={`font-semibold ${isCashOut(transaction) ? "text-error" : ""}`}>
                                     {isCashOut(transaction) ? "-" : ""}{currency(Math.abs(providerNet(transaction)))}
                                 </span>
                             </div>
                         )}
-                        {isCashback && (
+                        {isAdjustment && (
                             <>
                                 <div className="divider my-1" />
                                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm">
@@ -296,7 +304,7 @@ const TransactionPage = () => {
         const payeeId = (t.payeeId?._id ?? t.payeeId)?.toString();
         const payerId = (t.payerId?._id ?? t.payerId)?.toString();
         if (payeeId === authUser?._id) return sum + (t.netAmount ?? 0);
-        if (t.type === "cashback" && payerId === authUser?._id) return sum - (t.amount ?? 0);
+        if (["cashback", "refund"].includes(t.type) && payerId === authUser?._id) return sum - (t.amount ?? 0);
         return sum;
     }, 0);
 
@@ -308,8 +316,14 @@ const TransactionPage = () => {
     const totalPaid = appointmentPaid + pharmacyPaid;
     const transactionCount = transactions.length + pharmacyOrders.length;
     const currentUserId = authUser?._id?.toString();
-    const isCashOut = (t) => t.type === "cashback" && (t.payerId?._id ?? t.payerId)?.toString() === currentUserId;
+    const isCashOut = (t) => ["cashback", "refund"].includes(t.type) && (t.payerId?._id ?? t.payerId)?.toString() === currentUserId;
     const providerNet = (t) => isCashOut(t) ? -(t.amount ?? 0) : (t.netAmount ?? 0);
+    const refundedReceived = transactions
+        .filter(t => ["cashback", "refund"].includes(t.type) && (t.payeeId?._id ?? t.payeeId)?.toString() === currentUserId)
+        .reduce((sum, t) => sum + (t.amount ?? 0), 0);
+    const refundsPaid = transactions
+        .filter(t => ["cashback", "refund"].includes(t.type) && (t.payerId?._id ?? t.payerId)?.toString() === currentUserId)
+        .reduce((sum, t) => sum + (t.amount ?? 0), 0);
 
     return (
         <div className="min-h-screen bg-base-100 p-4 py-8">
@@ -337,7 +351,7 @@ const TransactionPage = () => {
                 )}
 
                 {transactionCount > 0 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         {isDoctor ? (
                             <div className="stat bg-base-100 border-2 border-base-300 rounded-xl shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
                                 <div className="stat-title">Total Received (net)</div>
@@ -351,6 +365,13 @@ const TransactionPage = () => {
                                 <div className="stat-desc">{transactionCount} transaction(s)</div>
                             </div>
                         )}
+                        <div className="stat bg-base-100 border-2 border-base-300 rounded-xl shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
+                            <div className="stat-title">{isDoctor ? "Refunds / Cashback Paid" : "Refunded"}</div>
+                            <div className={`stat-value text-2xl ${isDoctor ? "text-error" : "text-success"}`}>
+                                {currency(isDoctor ? refundsPaid : refundedReceived)}
+                            </div>
+                            <div className="stat-desc">{isDoctor ? "Provider-shouldered adjustments" : "Money returned to you"}</div>
+                        </div>
                         <div className="stat bg-base-100 border-2 border-base-300 rounded-xl shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
                             <div className="stat-title">Transactions</div>
                             <div className="stat-value text-2xl">{transactionCount}</div>
@@ -415,7 +436,7 @@ const TransactionPage = () => {
                                                 {appt?.start && <p className="opacity-50">{dayjs(appt.start).tz(PH_TZ).format("MMM D [at] h:mm A")}</p>}
                                             </td>
                                             <td>
-                                                {appt?.status && statusPill(appt.status)}
+                                                {(t.type === "refund" || appt?.status) && statusPill(t.type === "refund" ? "refunded" : appt.status)}
                                             </td>
                                             <td className="font-mono text-xs text-primary">{t.referenceNumber}</td>
                                         </tr>

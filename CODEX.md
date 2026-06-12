@@ -334,6 +334,8 @@ Transaction/receipt behavior:
 
 - Rebook details are added to the original appointment receipt/details.
 - Cashback has its own separate receipt because it adds money to the user and subtracts from doctor.
+- Rejected paid booking requests create a separate `refund` transaction so both patient and provider can see the financial movement.
+- Rejected-booking refunds should display as `Refunded` in transaction history, not only as `Rejected`.
 - Cashback receipt states reason and whether it is money received/sent.
 - Doctor transaction side must show cashback/refund as a negative amount from doctor earnings.
 - User and doctor receive notifications when appointment history is updated by rebook outcome.
@@ -387,6 +389,7 @@ Files involved in this area:
   - net received for providers
   - rebook details if applicable
   - cashback receipt if applicable
+  - refund receipt if a paid booking request was rejected
 - Pharmacy order transaction modal should show:
   - reference
   - fulfillment

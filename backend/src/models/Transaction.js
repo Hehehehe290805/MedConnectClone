@@ -20,7 +20,7 @@ const TransactionSchema = new mongoose.Schema(
         amount:          { type: Number, required: true },  // what the patient paid
         platformFee:     { type: Number, required: true },  // 10% of appointment total
         netAmount:       { type: Number, required: true },  // amount - platformFee (goes to provider)
-        type:            { type: String, enum: ["deposit", "balance", "rebook_fee", "cashback"], required: true },
+        type:            { type: String, enum: ["deposit", "balance", "rebook_fee", "cashback", "refund"], required: true },
         referenceNumber: { type: String, required: true },
     },
     { timestamps: true }
