@@ -9,7 +9,7 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 const PH_TZ = "Asia/Manila";
 
-const TYPE_LABEL = { deposit: "Deposit", balance: "Balance", rebook_fee: "Rebook Fee", cashback: "Cashback" };
+const TYPE_LABEL = { deposit: "Deposit", balance: "Balance", rebook_fee: "Rebook Fee", cashback: "Cashback", refund: "Refund" };
 
 const STATUS_STYLES = {
     pending_payment: "border-amber-200 bg-white text-amber-700",
@@ -26,6 +26,7 @@ const STATUS_STYLES = {
     missed_by_patient: "border-amber-200 bg-white text-amber-700",
     missed_by_provider: "border-primary/30 bg-white text-primary",
     missed_by_both: "border-primary/30 bg-white text-primary",
+    refunded: "border-emerald-200 bg-white text-emerald-700",
 };
 
 const StatusPill = ({ status }) => (
@@ -50,7 +51,7 @@ const TransactionList = ({ departmentId }) => {
 
     const transactions = [...(data?.data?.transactions ?? [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     const currentUserId = authUser?._id?.toString();
-    const isCashOut = (t) => t.type === "cashback" && (t.payerId?._id ?? t.payerId)?.toString() === currentUserId;
+    const isCashOut = (t) => ["cashback", "refund"].includes(t.type) && (t.payerId?._id ?? t.payerId)?.toString() === currentUserId;
     const providerNet = (t) => isCashOut(t) ? -(t.amount ?? 0) : (t.netAmount ?? 0);
 
     // For institute, all fetched transactions are their departments' — sum everything.
@@ -67,6 +68,12 @@ const TransactionList = ({ departmentId }) => {
 
     const totalPaid = transactions
         .filter(t => (t.payerId?._id ?? t.payerId)?.toString() === authUser?._id?.toString())
+        .reduce((sum, t) => sum + (t.amount ?? 0), 0);
+    const refundedReceived = transactions
+        .filter(t => ["cashback", "refund"].includes(t.type) && (t.payeeId?._id ?? t.payeeId)?.toString() === currentUserId)
+        .reduce((sum, t) => sum + (t.amount ?? 0), 0);
+    const refundsPaid = transactions
+        .filter(t => ["cashback", "refund"].includes(t.type) && (t.payerId?._id ?? t.payerId)?.toString() === currentUserId)
         .reduce((sum, t) => sum + (t.amount ?? 0), 0);
 
     if (isLoading) {
@@ -90,7 +97,7 @@ const TransactionList = ({ departmentId }) => {
     return (
         <div className="space-y-4">
             {/* Summary cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {isProvider ? (
                     <div className="stat bg-base-100 border-2 border-base-300 rounded-xl shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
                         <div className="stat-title">Total Received (net)</div>
@@ -108,6 +115,13 @@ const TransactionList = ({ departmentId }) => {
                         <div className="stat-desc">{transactions.length} transaction(s)</div>
                     </div>
                 )}
+                <div className="stat bg-base-100 border-2 border-base-300 rounded-xl shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
+                    <div className="stat-title">{isProvider ? "Refunds / Cashback Paid" : "Refunded"}</div>
+                    <div className={`stat-value text-2xl ${isProvider ? "text-error" : "text-success"}`}>
+                        â‚±{(isProvider ? refundsPaid : refundedReceived).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                    </div>
+                    <div className="stat-desc">{isProvider ? "Provider-shouldered adjustments" : "Money returned to you"}</div>
+                </div>
                 <div className="stat bg-base-100 border-2 border-base-300 rounded-xl shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
                     <div className="stat-title">Transactions</div>
                     <div className="stat-value text-2xl">{transactions.length}</div>
@@ -169,7 +183,7 @@ const TransactionList = ({ departmentId }) => {
                                         )}
                                     </td>
                                     <td>
-                                        {appt?.status && <StatusPill status={appt.status} />}
+                                        {(t.type === "refund" || appt?.status) && <StatusPill status={t.type === "refund" ? "refunded" : appt.status} />}
                                     </td>
                                     <td className="font-mono text-xs text-primary">{t.referenceNumber}</td>
                                 </tr>

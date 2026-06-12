@@ -362,8 +362,26 @@ export const rejectAppointment = asyncHandler(async (req, res) => {
     await appointment.save();
 
     // Provider rejected — full deposit refund to patient
+    const refundAmount = roundPeso(appointment.depositAmount);
+    let refundRef = "";
+    if (refundAmount > 0) {
+        const refund = await Transaction.create({
+            appointmentId: appointment._id,
+            payerId: providerId,
+            payeeId: appointment.patientId,
+            amount: refundAmount,
+            platformFee: 0,
+            netAmount: refundAmount,
+            type: "refund",
+            referenceNumber: `RF-${Date.now()}-${String(appointment._id).slice(-4)}`,
+        });
+        refundRef = refund.referenceNumber;
+    }
+
     notify(appointment.patientId, "appointment_rejected", "Appointment Rejected — Deposit Refunded",
-        `Your appointment on ${toPhTime(appointment.start).format("MMM D, YYYY [at] h:mm A")} was rejected.${reason ? ` Reason: ${reason}` : ""} Your deposit of ₱${appointment.depositAmount} will be fully refunded.`);
+        `Your appointment on ${toPhTime(appointment.start).format("MMM D, YYYY [at] h:mm A")} was rejected.${reason ? ` Reason: ${reason}` : ""} Your deposit of ₱${appointment.depositAmount} was refunded.${refundRef ? ` Refund reference: ${refundRef}.` : ""}`);
+    notify(providerId, "appointment_rejected", "Appointment Rejected — Refund Recorded",
+        `You rejected the appointment on ${toPhTime(appointment.start).format("MMM D, YYYY [at] h:mm A")}. The patient's deposit refund of ₱${refundAmount} was recorded.${refundRef ? ` Refund reference: ${refundRef}.` : ""}`);
 
     return sendSuccess(res, 200, "Appointment rejected.", { appointment });
 });
