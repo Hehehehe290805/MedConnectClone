@@ -44,9 +44,11 @@ const Sidebar = () => {
         appt.status === "deposit_paid" || Boolean(appt.rebooked && rebookableStatuses.includes(appt.status))
     ).length;
 
-    const navItem = (to, icon, label, disabled = false, count = 0) => {
+    const navItem = (to, icon, label, disabled = false, countOrExtraActivePaths = 0, extraActivePaths = []) => {
         const Icon = icon;
-        const isActive = currentPath === to;
+        const count = Array.isArray(countOrExtraActivePaths) ? 0 : countOrExtraActivePaths;
+        const activePaths = Array.isArray(countOrExtraActivePaths) ? countOrExtraActivePaths : extraActivePaths;
+        const isActive = currentPath === to || activePaths.includes(currentPath);
         if (disabled) {
             return (
                 <div
@@ -106,7 +108,7 @@ const Sidebar = () => {
                 return (
                     <>
                         {navItem("/", HomeIcon, "Home")}
-                        {navItem("/setup-departments", BuildingIcon, "Departments")}
+                        {navItem("/manage-departments", BuildingIcon, "Departments", false, ["/setup-departments"])}
                         {navItem("/transactions", ReceiptIcon, "Transactions", isPending)}
                         {navItem("/settings", SettingsIcon, "Settings")}
                     </>
