@@ -1,4 +1,4 @@
-import { generateStreamToken, getChannelAttachments } from "../lib/stream.js";
+import { generateStreamToken, getChannelAttachments, getStreamApiKey } from "../lib/stream.js";
 import Appointment from "../models/Appointment.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
@@ -29,7 +29,9 @@ export const getAppointmentChatAttachments = asyncHandler(async (req, res) => {
 
 export const getStreamToken = asyncHandler(async (req, res) => {
   const token = generateStreamToken(req.user._id);
-  return sendSuccess(res, 200, "Stream token generated", { token });
+  const apiKey = getStreamApiKey();
+  if (!token || !apiKey) return sendError(res, 500, "Stream is not configured correctly");
+  return sendSuccess(res, 200, "Stream token generated", { token, apiKey });
 });
 
 // Proxies translation requests to the MyMemory free API (no key, 10k chars/day).

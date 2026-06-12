@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { axiosInstance } from "../lib/axios";
-import { ArrowLeftIcon, PackageIcon, ReceiptIcon } from "lucide-react";
+import { ArrowLeftIcon, PackageIcon, ReceiptIcon, XIcon } from "lucide-react";
 import { useNavigate } from "react-router";
 import useAuthUser from "../hooks/useAuthUser";
 import { getMyPharmacyOrders } from "../lib/api";
@@ -14,34 +14,265 @@ dayjs.extend(timezone);
 
 const PH_TZ = "Asia/Manila";
 
-const TYPE_LABEL = { deposit: "Deposit", balance: "Balance" };
-
-const STATUS_COLORS = {
-    pending_payment: "badge-warning",
-    deposit_paid: "badge-info",
-    accepted: "badge-info",
-    ongoing: "badge-accent",
-    completed: "badge-success",
-    awaiting_balance: "badge-warning",
-    fully_paid: "badge-success",
-    cancelled: "badge-error",
-    rejected: "badge-error",
-    disputed: "badge-warning",
-    resolved: "badge-ghost",
-    paid: "badge-success",
-    ready_for_shipping: "badge-info",
-    ready_for_pickup: "badge-info",
-    out_for_delivery: "badge-warning",
-    pickup_in_progress: "badge-warning",
+const STATUS_STYLES = {
+    pending_payment: "bg-amber-100 text-amber-800 border-amber-200",
+    deposit_paid: "bg-primary/10 text-primary border-primary/20",
+    accepted: "bg-primary/10 text-primary border-primary/20",
+    ongoing: "bg-primary/10 text-primary border-primary/20",
+    completed: "bg-emerald-100 text-emerald-800 border-emerald-200",
+    awaiting_balance: "bg-amber-100 text-amber-800 border-amber-200",
+    fully_paid: "bg-emerald-100 text-emerald-800 border-emerald-200",
+    cancelled: "bg-rose-100 text-rose-800 border-rose-200",
+    rejected: "bg-rose-100 text-rose-800 border-rose-200",
+    disputed: "bg-amber-100 text-amber-800 border-amber-200",
+    resolved: "bg-slate-200 text-slate-700 border-slate-300",
+    missed_by_patient: "bg-amber-100 text-amber-800 border-amber-200",
+    missed_by_provider: "bg-primary/10 text-primary border-primary/20",
+    missed_by_both: "bg-primary/10 text-primary border-primary/20",
+    paid: "bg-primary/10 text-primary border-primary/20",
+    ready_for_shipping: "bg-primary/10 text-primary border-primary/20",
+    ready_for_pickup: "bg-primary/10 text-primary border-primary/20",
+    out_for_delivery: "bg-yellow-100 text-yellow-900 border-yellow-200",
+    pickup_in_progress: "bg-yellow-100 text-yellow-900 border-yellow-200",
 };
 
 const currency = (value) =>
     `PHP ${(value ?? 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
 
+const TYPE_LABEL = {
+    deposit: "Deposit",
+    balance: "Balance",
+    rebook_fee: "Rebook Fee",
+    cashback: "Cashback",
+};
+const REBOOKABLE_STATUSES = ["missed_by_patient", "missed_by_provider", "missed_by_both"];
+const rebookOutcomeLabel = (appt) => {
+    if (!appt?.rebooked && appt?.missedBy) return "Rebooking available";
+    if (appt?.status === "cancelled") {
+        const reason = (appt.rejectionReason || "").toLowerCase();
+        if (reason.includes("missed")) return "Missed and cancelled";
+        if (reason.includes("rejected")) return "Rejected and cancelled";
+        if (reason.includes("passed")) return "Expired and cancelled";
+        return "Cancelled";
+    }
+    if (appt?.status === "deposit_paid") return "Rebooked - pending provider approval";
+    if (["accepted", "ongoing", "awaiting_balance", "completed", "fully_paid"].includes(appt?.status)) return "Rebooked successfully";
+    if (appt?.rebooked && REBOOKABLE_STATUSES.includes(appt.status)) return "Rebooked";
+    return null;
+};
+const cashbackReason = (transaction, appt, isCashOut) => {
+    if (transaction.type !== "cashback") return null;
+    const ref = transaction.referenceNumber || "";
+    if (ref.startsWith("RB-BOTH-REJ")) {
+        return isCashOut
+            ? "You paid a 10% refund because you rejected a free rebook after both parties missed the original virtual appointment. MedConnect's platform fee stays with the platform."
+            : "You received a 10% refund because the provider rejected the free rebook after both parties missed the original virtual appointment. MedConnect's platform fee was not reversed.";
+    }
+    if (ref.startsWith("RB-PROV-REJ")) {
+        return isCashOut
+            ? "You paid the deposit refund because you rejected the rebook after missing the original virtual appointment. MedConnect's platform fee stays with the platform."
+            : "You received a provider-shouldered deposit refund because the provider rejected the rebook after missing the original virtual appointment. MedConnect's platform fee was not reversed.";
+    }
+    if (ref.startsWith("RB-PAT-REJ")) {
+        return isCashOut
+            ? "You returned the paid rebooking fee because you rejected the patient's rebook request."
+            : "You received your rebooking fee back because the provider rejected your paid rebook request.";
+    }
+    if (ref.startsWith("CB-") || appt?.missedBy === "provider") {
+        return isCashOut
+            ? "You paid mock cashback because you were not able to complete the virtual appointment. MedConnect's platform fee stays with the platform."
+            : "You received provider-shouldered mock cashback because the provider was not able to complete the virtual appointment. MedConnect's platform fee was not reversed.";
+    }
+    return isCashOut
+        ? "Cashback was paid for this appointment adjustment."
+        : "Cashback was received for this appointment adjustment.";
+};
+
+const statusPill = (status) => (
+    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold capitalize ${STATUS_STYLES[status] || "bg-slate-100 text-slate-700 border-slate-200"}`}>
+        {status?.replace(/_/g, " ")}
+    </span>
+);
+
+const PharmacyOrderModal = ({ order, onClose }) => {
+    if (!order) return null;
+    const paidAt = order.paidAt || order.createdAt;
+
+    return (
+        <div className="modal modal-open">
+            <div className="modal-box max-w-lg p-0 overflow-hidden">
+                <div className="bg-primary text-primary-content px-5 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <p className="text-xs uppercase tracking-wide opacity-80">Pharmacy Order</p>
+                            <h2 className="font-mono text-lg font-bold break-all">{order.referenceNumber}</h2>
+                        </div>
+                        <button className="btn btn-ghost btn-sm btn-circle text-primary-content" onClick={onClose}>
+                            <XIcon className="size-4" />
+                        </button>
+                    </div>
+                    <p className="mt-2 text-xs opacity-80">{dayjs(paidAt).tz(PH_TZ).format("MMM D, YYYY h:mm A")}</p>
+                </div>
+                <div className="p-5 space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-sm">
+                        <div className="rounded-lg border border-base-300 bg-base-100 p-2.5">
+                            <p className="text-xs opacity-50">Fulfillment</p>
+                            <p className="font-semibold capitalize">{order.fulfillmentMethod}</p>
+                        </div>
+                        <div className="rounded-lg border border-base-300 bg-base-100 p-2.5">
+                            <p className="text-xs opacity-50">Status</p>
+                            <div className="mt-1">{statusPill(order.status)}</div>
+                        </div>
+                    </div>
+
+                    <div className="rounded-xl border border-base-300 bg-base-100 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide opacity-50 mb-2">Items</p>
+                        <div className="space-y-2">
+                            {(order.items || []).map((item, index) => (
+                                <div key={`${item.name}-${index}`} className="flex justify-between gap-3 text-sm">
+                                    <span>{item.name} x{item.quantity}</span>
+                                    <span className="font-semibold">{currency(item.unitPrice * item.quantity)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="rounded-xl border-2 border-dashed border-base-300 bg-base-100 p-3">
+                        <div className="flex justify-between py-1.5 text-sm">
+                            <span className="opacity-60">Subtotal</span>
+                            <span className="font-semibold">{currency(order.subtotal)}</span>
+                        </div>
+                        <div className="flex justify-between py-1.5 text-sm">
+                            <span className="opacity-60">Delivery fee</span>
+                            <span className="font-semibold">{currency(order.deliveryFee)}</span>
+                        </div>
+                        <div className="flex justify-between py-1.5 text-sm">
+                            <span className="opacity-60">Platform fee</span>
+                            <span className="font-semibold">{currency(order.platformFee)}</span>
+                        </div>
+                        <div className="divider my-1" />
+                        <div className="flex justify-between py-1.5">
+                            <span className="font-semibold">Total paid</span>
+                            <span className="text-xl font-bold text-primary">{currency(order.totalAmount)}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div className="modal-backdrop" onClick={onClose} />
+        </div>
+    );
+};
+
+const AppointmentTransactionModal = ({ transaction, isDoctor, currentUserId, onClose }) => {
+    if (!transaction) return null;
+    const appt = transaction.appointmentId;
+    const providerName = appt?.doctorId
+        ? `Dr. ${appt.doctorId.firstName} ${appt.doctorId.lastName}`
+        : "Institute";
+    const patientName = appt?.patientId
+        ? `${appt.patientId.firstName} ${appt.patientId.lastName}`
+        : "Patient";
+    const counterpart = isDoctor ? patientName : providerName;
+    const isCashOut = (t) => t.type === "cashback" && (t.payerId?._id ?? t.payerId)?.toString() === currentUserId;
+    const providerNet = (t) => isCashOut(t) ? -(t.amount ?? 0) : (t.netAmount ?? 0);
+    const isCashback = transaction.type === "cashback";
+    const reason = cashbackReason(transaction, appt, isCashOut(transaction));
+
+    return (
+        <div className="modal modal-open">
+            <div className="modal-box max-w-lg p-0 overflow-hidden">
+                <div className={`${isCashback ? "bg-emerald-600" : "bg-primary"} text-primary-content px-5 py-4`}>
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <p className="text-xs uppercase tracking-wide opacity-80">{isCashback ? "Cashback Receipt" : "Appointment Transaction"}</p>
+                            <h2 className="font-mono text-lg font-bold break-all">{transaction.referenceNumber}</h2>
+                        </div>
+                        <button className="btn btn-ghost btn-sm btn-circle text-primary-content" onClick={onClose}>
+                            <XIcon className="size-4" />
+                        </button>
+                    </div>
+                    <p className="mt-2 text-xs opacity-80">{dayjs(transaction.createdAt).tz(PH_TZ).format("MMM D, YYYY h:mm A")}</p>
+                </div>
+                <div className="p-5 space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-sm">
+                        <div className="rounded-lg border border-base-300 bg-base-100 p-2.5">
+                            <p className="text-xs opacity-50">{isDoctor ? "Patient" : "Provider"}</p>
+                            <p className="font-semibold">{counterpart}</p>
+                        </div>
+                        <div className="rounded-lg border border-base-300 bg-base-100 p-2.5">
+                            <p className="text-xs opacity-50">Status</p>
+                            <div className="mt-1">{appt?.status ? statusPill(appt.status) : "Recorded"}</div>
+                        </div>
+                        {appt?.start && (
+                            <div className="rounded-lg border border-base-300 bg-base-100 p-2.5 sm:col-span-2">
+                                <p className="text-xs opacity-50">Appointment Schedule</p>
+                                <p className="font-semibold">{dayjs(appt.start).tz(PH_TZ).format("MMM D, YYYY [at] h:mm A")}</p>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="rounded-xl border-2 border-dashed border-base-300 bg-base-100 p-3">
+                        <div className="flex justify-between py-1.5 text-sm">
+                            <span className="opacity-60">{TYPE_LABEL[transaction.type] || "Amount paid"}</span>
+                            <span className="font-semibold">{currency(transaction.amount)}</span>
+                        </div>
+                        {!isDoctor && (
+                            <div className="flex justify-between py-1.5 text-sm">
+                                <span className="opacity-60">Platform fee</span>
+                                <span className="font-semibold text-error">-{currency(transaction.platformFee)}</span>
+                            </div>
+                        )}
+                        {isDoctor && (
+                            <div className="flex justify-between py-1.5 text-sm">
+                                <span className="opacity-60">{isCashOut(transaction) ? "Cashback paid" : "Net received"}</span>
+                                <span className={`font-semibold ${isCashOut(transaction) ? "text-error" : ""}`}>
+                                    {isCashOut(transaction) ? "-" : ""}{currency(Math.abs(providerNet(transaction)))}
+                                </span>
+                            </div>
+                        )}
+                        {isCashback && (
+                            <>
+                                <div className="divider my-1" />
+                                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                                        {isCashOut(transaction) ? "Money sent" : "Money received"}
+                                    </p>
+                                    <p className="mt-1 text-2xl font-bold text-emerald-700">{currency(transaction.amount)}</p>
+                                    <p className="mt-2 text-xs leading-relaxed text-emerald-900">{reason}</p>
+                                </div>
+                            </>
+                        )}
+                        {(appt?.rebooked || appt?.missedBy) && (
+                            <div className="mt-2 border-t border-base-300 pt-2 text-sm space-y-1">
+                                <div className="flex justify-between gap-3">
+                                    <span className="font-semibold text-primary">Rebook Details</span>
+                                    <span className="font-semibold text-right">{rebookOutcomeLabel(appt)}</span>
+                                </div>
+                                {appt.rebookedAt && (
+                                    <div className="flex justify-between gap-3 text-xs opacity-70">
+                                        <span>Requested</span>
+                                        <span className="text-right">{dayjs(appt.rebookedAt).tz(PH_TZ).format("MMM D, YYYY [at] h:mm A")}</span>
+                                    </div>
+                                )}
+                                {appt.rebookFeeRef && (
+                                    <p className="text-xs opacity-60">Rebooking fee ref: <span className="font-mono">{appt.rebookFeeRef}</span></p>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+            <div className="modal-backdrop" onClick={onClose} />
+        </div>
+    );
+};
+
 const TransactionPage = () => {
     const navigate = useNavigate();
     const { authUser } = useAuthUser();
     const [tab, setTab] = useState("appointments");
+    const [selectedPharmacyOrder, setSelectedPharmacyOrder] = useState(null);
+    const [selectedAppointmentTransaction, setSelectedAppointmentTransaction] = useState(null);
 
     const { data, isLoading } = useQuery({
         queryKey: ["transactions"],
@@ -54,14 +285,20 @@ const TransactionPage = () => {
         enabled: authUser?.role === "patient",
     });
 
-    const transactions = data?.data?.transactions ?? [];
-    const pharmacyOrders = (pharmacyOrdersData?.data?.orders ?? []).filter((order) => order.paymentStatus === "paid");
+    const transactions = [...(data?.data?.transactions ?? [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const pharmacyOrders = [...(pharmacyOrdersData?.data?.orders ?? [])]
+        .filter((order) => order.paymentStatus === "paid")
+        .sort((a, b) => new Date(b.paidAt || b.createdAt) - new Date(a.paidAt || a.createdAt));
     const isDoctor = authUser?.role === "doctor" || authUser?.role === "institute" || authUser?.role === "department";
     const canShowPharmacyTab = authUser?.role === "patient";
 
-    const totalReceived = transactions
-        .filter(t => t.payeeId?._id === authUser?._id || t.payeeId === authUser?._id)
-        .reduce((sum, t) => sum + (t.netAmount ?? 0), 0);
+    const totalReceived = transactions.reduce((sum, t) => {
+        const payeeId = (t.payeeId?._id ?? t.payeeId)?.toString();
+        const payerId = (t.payerId?._id ?? t.payerId)?.toString();
+        if (payeeId === authUser?._id) return sum + (t.netAmount ?? 0);
+        if (t.type === "cashback" && payerId === authUser?._id) return sum - (t.amount ?? 0);
+        return sum;
+    }, 0);
 
     const appointmentPaid = transactions
         .filter(t => t.payerId?._id === authUser?._id || t.payerId === authUser?._id)
@@ -70,6 +307,9 @@ const TransactionPage = () => {
     const pharmacyPaid = pharmacyOrders.reduce((sum, order) => sum + (order.totalAmount ?? 0), 0);
     const totalPaid = appointmentPaid + pharmacyPaid;
     const transactionCount = transactions.length + pharmacyOrders.length;
+    const currentUserId = authUser?._id?.toString();
+    const isCashOut = (t) => t.type === "cashback" && (t.payerId?._id ?? t.payerId)?.toString() === currentUserId;
+    const providerNet = (t) => isCashOut(t) ? -(t.amount ?? 0) : (t.netAmount ?? 0);
 
     return (
         <div className="min-h-screen bg-base-100 p-4 py-8">
@@ -99,19 +339,19 @@ const TransactionPage = () => {
                 {transactionCount > 0 && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {isDoctor ? (
-                            <div className="stat bg-base-200 rounded-xl">
+                            <div className="stat bg-base-100 border-2 border-base-300 rounded-xl shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
                                 <div className="stat-title">Total Received (net)</div>
-                                <div className="stat-value text-success text-2xl">{currency(totalReceived)}</div>
+                                <div className="stat-value text-primary text-2xl">{currency(totalReceived)}</div>
                                 <div className="stat-desc">After platform fee</div>
                             </div>
                         ) : (
-                            <div className="stat bg-base-200 rounded-xl">
+                            <div className="stat bg-base-100 border-2 border-base-300 rounded-xl shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
                                 <div className="stat-title">Total Paid</div>
                                 <div className="stat-value text-primary text-2xl">{currency(totalPaid)}</div>
                                 <div className="stat-desc">{transactionCount} transaction(s)</div>
                             </div>
                         )}
-                        <div className="stat bg-base-200 rounded-xl">
+                        <div className="stat bg-base-100 border-2 border-base-300 rounded-xl shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
                             <div className="stat-title">Transactions</div>
                             <div className="stat-value text-2xl">{transactionCount}</div>
                             <div className="stat-desc">All time</div>
@@ -130,7 +370,7 @@ const TransactionPage = () => {
                         <p className="text-sm">Your payment history will appear here.</p>
                     </div>
                 ) : tab === "appointments" ? (
-                    <div className="card bg-base-200 shadow-xl overflow-x-auto">
+                    <div className="card bg-base-100 border-2 border-base-300 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_26px_rgba(15,23,42,0.20)] overflow-x-auto">
                         <table className="table table-zebra w-full">
                             <thead>
                                 <tr>
@@ -156,30 +396,26 @@ const TransactionPage = () => {
                                     const counterpart = isDoctor ? patientName : providerName;
 
                                     return (
-                                        <tr key={t._id}>
+                                        <tr key={t._id} className="cursor-pointer hover:bg-base-200/80" onClick={() => setSelectedAppointmentTransaction(t)}>
                                             <td className="text-xs whitespace-nowrap">
                                                 {dayjs(t.createdAt).tz(PH_TZ).format("MMM D, YYYY")}
                                                 <br />
                                                 <span className="opacity-50">{dayjs(t.createdAt).tz(PH_TZ).format("h:mm A")}</span>
                                             </td>
-                                            <td>
-                                                <span className={`badge badge-sm ${t.type === "deposit" ? "badge-info" : "badge-accent"}`}>
-                                                    {TYPE_LABEL[t.type]}
-                                                </span>
-                                            </td>
+                                            <td className="text-xs font-semibold">{TYPE_LABEL[t.type] || t.type}</td>
                                             <td className="font-semibold">{currency(t.amount)}</td>
                                             {!isDoctor && <td className="text-error text-sm">-{currency(t.platformFee)}</td>}
-                                            {isDoctor && <td className="text-success font-semibold">{currency(t.netAmount)}</td>}
+                                            {isDoctor && (
+                                                <td className={`${providerNet(t) < 0 ? "text-error" : "text-success"} font-semibold`}>
+                                                    {providerNet(t) < 0 ? "-" : ""}{currency(Math.abs(providerNet(t)))}
+                                                </td>
+                                            )}
                                             <td className="text-xs">
                                                 <p>{counterpart}</p>
                                                 {appt?.start && <p className="opacity-50">{dayjs(appt.start).tz(PH_TZ).format("MMM D [at] h:mm A")}</p>}
                                             </td>
                                             <td>
-                                                {appt?.status && (
-                                                    <span className={`badge badge-sm ${STATUS_COLORS[appt.status] || "badge-ghost"} capitalize`}>
-                                                        {appt.status.replace(/_/g, " ")}
-                                                    </span>
-                                                )}
+                                                {appt?.status && statusPill(appt.status)}
                                             </td>
                                             <td className="font-mono text-xs text-primary">{t.referenceNumber}</td>
                                         </tr>
@@ -195,12 +431,11 @@ const TransactionPage = () => {
                         <p className="text-sm">Paid pharmacy orders will appear here.</p>
                     </div>
                 ) : (
-                    <div className="card bg-base-200 shadow-xl overflow-x-auto">
+                    <div className="card bg-base-100 border-2 border-base-300 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_26px_rgba(15,23,42,0.20)] overflow-hidden">
                         <table className="table table-zebra w-full">
                             <thead>
                                 <tr>
                                     <th>Date</th>
-                                    <th>Type</th>
                                     <th>Items</th>
                                     <th>Fulfillment</th>
                                     <th>Status</th>
@@ -210,13 +445,12 @@ const TransactionPage = () => {
                             </thead>
                             <tbody>
                                 {pharmacyOrders.map((order) => (
-                                    <tr key={order._id}>
+                                    <tr key={order._id} className="cursor-pointer hover:bg-base-200/80" onClick={() => setSelectedPharmacyOrder(order)}>
                                         <td className="text-xs whitespace-nowrap">
                                             {dayjs(order.paidAt || order.createdAt).tz(PH_TZ).format("MMM D, YYYY")}
                                             <br />
                                             <span className="opacity-50">{dayjs(order.paidAt || order.createdAt).tz(PH_TZ).format("h:mm A")}</span>
                                         </td>
-                                        <td><span className="badge badge-sm badge-info">Pharmacy order</span></td>
                                         <td className="text-xs">
                                             {(order.items || []).map((item) => (
                                                 <p key={`${order._id}-${item.name}`}>
@@ -226,9 +460,7 @@ const TransactionPage = () => {
                                         </td>
                                         <td className="capitalize">{order.fulfillmentMethod}</td>
                                         <td>
-                                            <span className={`badge badge-sm ${STATUS_COLORS[order.status] || "badge-ghost"} capitalize`}>
-                                                {order.status?.replace(/_/g, " ")}
-                                            </span>
+                                            {statusPill(order.status)}
                                         </td>
                                         <td className="font-semibold">{currency(order.totalAmount)}</td>
                                         <td className="font-mono text-xs text-primary">{order.referenceNumber}</td>
@@ -238,6 +470,13 @@ const TransactionPage = () => {
                         </table>
                     </div>
                 )}
+                <AppointmentTransactionModal
+                    transaction={selectedAppointmentTransaction}
+                    isDoctor={isDoctor}
+                    currentUserId={currentUserId}
+                    onClose={() => setSelectedAppointmentTransaction(null)}
+                />
+                <PharmacyOrderModal order={selectedPharmacyOrder} onClose={() => setSelectedPharmacyOrder(null)} />
             </div>
         </div>
     );

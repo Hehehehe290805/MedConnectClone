@@ -27,6 +27,44 @@ const GAP_MINUTES = 5;
 
 // Only these statuses block the slot — completed/cancelled/rejected do not.
 const ACTIVE_STATUSES = ["pending_payment", "deposit_paid", "accepted", "ongoing"];
+const REBOOKABLE_STATUSES = ["missed_by_patient", "missed_by_provider", "missed_by_both"];
+const isRebookApprovalRequest = (appointment) =>
+    Boolean(appointment?.rebooked && REBOOKABLE_STATUSES.includes(appointment.status));
+
+const createRebookRejectionCashback = async ({ appointment, providerId, patientId }) => {
+    let amount = 0;
+    let reason = "";
+    let referencePrefix = "RB-REJ";
+
+    if (appointment.missedBy === "both") {
+        amount = roundPeso(appointment.amount * 0.1);
+        reason = "10% refund because the provider rejected a free rebook after both parties missed the original virtual appointment. MedConnect's platform fee remains with the platform.";
+        referencePrefix = "RB-BOTH-REJ";
+    } else if (appointment.missedBy === "provider") {
+        amount = roundPeso(appointment.depositAmount || appointment.amount * 0.5);
+        reason = "Provider-shouldered deposit refund because the provider rejected a rebook after missing the original virtual appointment. MedConnect's platform fee remains with the platform.";
+        referencePrefix = "RB-PROV-REJ";
+    } else if (appointment.missedBy === "patient") {
+        amount = roundPeso(appointment.amount * 0.1);
+        reason = "Rebooking fee returned because the provider rejected the paid rebook request.";
+        referencePrefix = "RB-PAT-REJ";
+    }
+
+    if (amount <= 0) return null;
+
+    const transaction = await Transaction.create({
+        appointmentId: appointment._id,
+        payerId: providerId,
+        payeeId: patientId,
+        amount,
+        platformFee: 0,
+        netAmount: amount,
+        type: "cashback",
+        referenceNumber: `${referencePrefix}-${Date.now()}-${String(appointment._id).slice(-4)}`,
+    });
+
+    return { amount, reason, referenceNumber: transaction.referenceNumber };
+};
 
 // Returns true when [start, end] overlaps an existing appointment (including the buffer).
 // Uses dayjs for correct timezone-aware comparison across DST boundaries.
@@ -40,6 +78,8 @@ function applyTimeToDate(date, timeStr) {
     const [hour, minute] = timeStr.split(":").map(Number);
     return dayjs(date).tz("Asia/Manila").hour(hour).minute(minute).second(0).millisecond(0);
 }
+
+const roundPeso = (value) => Math.round((value || 0) * 100) / 100;
 
 // ── BOOK ──────────────────────────────────────────────────────────────────────
 export const bookAppointment = asyncHandler(async (req, res) => {
@@ -85,6 +125,20 @@ export const bookAppointment = asyncHandler(async (req, res) => {
 
     if (startTimePH.isBefore(dayStart) || endTimePH.isAfter(dayEnd))
         return sendError(res, 400, "Booking out of operating hours.");
+
+    const unpaidBalanceAppointment = await Appointment.findOne({
+        patientId,
+        virtual: true,
+        balancePaid: false,
+        status: { $in: ["completed", "awaiting_balance"] },
+    }).select("_id start balanceAmount status");
+    if (unpaidBalanceAppointment) {
+        return sendError(
+            res,
+            400,
+            "Please pay your pending appointment balance before booking another appointment."
+        );
+    }
 
     // Overlap checks
     const providerAppts = await Appointment.find({
@@ -245,7 +299,18 @@ export const acceptAppointment = asyncHandler(async (req, res) => {
         appointment.doctorId?.toString() === providerId.toString() ||
         appointment.instituteId?.toString() === providerId.toString();
     if (!isProvider) return sendError(res, 403, "Not authorized");
-    if (appointment.status !== "deposit_paid") return sendError(res, 400, "Appointment cannot be accepted at this stage");
+    const rebookApprovalRequest = isRebookApprovalRequest(appointment);
+    if (appointment.status !== "deposit_paid" && !rebookApprovalRequest) {
+        return sendError(res, 400, "Appointment cannot be accepted at this stage");
+    }
+    if (rebookApprovalRequest && dayjs().tz("Asia/Manila").isAfter(dayjs(appointment.start))) {
+        appointment.status = "cancelled";
+        appointment.rejectionReason = "Rebooked appointment schedule passed before provider confirmation.";
+        await appointment.save();
+        notify(appointment.patientId, "appointment_cancelled", "Rebooked Appointment Cancelled",
+            `The rebooked appointment schedule on ${toPhTime(appointment.start).format("MMM D, YYYY [at] h:mm A")} passed before provider confirmation, so it has been cancelled.`);
+        return sendError(res, 400, "Rebooked appointment schedule has passed and was cancelled.");
+    }
 
     appointment.status = "accepted";
     await appointment.save();
@@ -268,7 +333,28 @@ export const rejectAppointment = asyncHandler(async (req, res) => {
         appointment.doctorId?.toString() === providerId.toString() ||
         appointment.instituteId?.toString() === providerId.toString();
     if (!isProvider) return sendError(res, 403, "Not authorized");
-    if (appointment.status !== "deposit_paid") return sendError(res, 400, "Appointment cannot be rejected at this stage");
+    const rebookApprovalRequest = isRebookApprovalRequest(appointment);
+    if (appointment.status !== "deposit_paid" && !rebookApprovalRequest) {
+        return sendError(res, 400, "Appointment cannot be rejected at this stage");
+    }
+
+    if (rebookApprovalRequest) {
+        const refund = await createRebookRejectionCashback({ appointment, providerId, patientId: appointment.patientId });
+        appointment.status = "cancelled";
+        appointment.rejectionReason = reason || "Rebook request rejected by provider";
+        appointment.rejectedAt = new Date();
+        await appointment.save();
+
+        const refundText = refund
+            ? ` ${refund.reason} Amount: ${refund.amount.toLocaleString("en-PH", { style: "currency", currency: "PHP" })}. Reference: ${refund.referenceNumber}.`
+            : "";
+        notify(appointment.patientId, "appointment_rejected", "Rebook Request Rejected",
+            `Your rebook request for ${toPhTime(appointment.start).format("MMM D, YYYY [at] h:mm A")} was rejected and the appointment history was updated.${reason ? ` Reason: ${reason}.` : ""}${refundText}`);
+        notify(providerId, "appointment_rejected", "Rebook History Updated",
+            `You rejected the rebook request for ${toPhTime(appointment.start).format("MMM D, YYYY [at] h:mm A")}. The appointment is now cancelled and the rebook details were added to history.${refundText}`);
+
+        return sendSuccess(res, 200, "Rebook request rejected and appointment cancelled.", { appointment });
+    }
 
     appointment.status = "rejected";
     appointment.rejectionReason = reason || "No reason provided";
@@ -389,6 +475,111 @@ export const payBalance = asyncHandler(async (req, res) => {
 });
 
 // ── DISPUTE ───────────────────────────────────────────────────────────────────
+export const rebookAppointment = asyncHandler(async (req, res) => {
+    const patientId = req.user._id;
+    const { appointmentId, start, referenceNumber } = req.body;
+
+    const appointment = await Appointment.findById(appointmentId);
+    if (!appointment) return sendError(res, 404, "Appointment not found");
+    if (appointment.patientId.toString() !== patientId.toString()) return sendError(res, 403, "Not authorized");
+    if (!appointment.virtual) return sendError(res, 400, "Only virtual appointments can be rebooked through this flow");
+    if (!REBOOKABLE_STATUSES.includes(appointment.status)) return sendError(res, 400, "Appointment is not eligible for rebooking");
+    if (appointment.rebookUsed) return sendError(res, 400, "This appointment has already been rebooked");
+    if (!appointment.rebookDeadline || dayjs().tz("Asia/Manila").isAfter(dayjs(appointment.rebookDeadline))) {
+        return sendError(res, 400, "The 3-day rebook window has expired");
+    }
+
+    const providerId = appointment.doctorId || appointment.instituteId;
+    if (!providerId) return sendError(res, 400, "Provider not found for this appointment");
+
+    const durationMinutes = Math.round((new Date(appointment.end) - new Date(appointment.start)) / 60000);
+    const startTimePH = dayjs(start).tz("Asia/Manila");
+    if (!startTimePH.isAfter(dayjs().tz("Asia/Manila"))) {
+        return sendError(res, 400, "Rebooked appointment must be scheduled in the future.");
+    }
+    const startTimeUTC = startTimePH.utc();
+    const endTimeUTC = startTimeUTC.add(durationMinutes, "minute");
+    const endTimePH = endTimeUTC.tz("Asia/Manila");
+
+    const schedule = await Schedule.findOne({ $or: [{ doctorId: providerId }, { instituteId: providerId }] });
+    if (!schedule) return sendError(res, 400, "Provider schedule not found.");
+
+    if (!schedule.daysOfWeek.includes(startTimePH.day())) {
+        return sendError(res, 400, "Rebooked appointment is outside provider operating days.");
+    }
+
+    let endHour = schedule.endHour;
+    if (endHour === "24:00") endHour = "00:00";
+    const dayStart = applyTimeToDate(startTimePH, schedule.startHour);
+    let dayEnd = applyTimeToDate(startTimePH, endHour);
+    if (endHour === "00:00") dayEnd = dayEnd.add(1, "day");
+
+    if (startTimePH.isBefore(dayStart) || endTimePH.isAfter(dayEnd)) {
+        return sendError(res, 400, "Rebooked appointment is out of operating hours.");
+    }
+
+    const providerQuery = appointment.doctorId ? { doctorId: providerId } : { instituteId: providerId };
+    const providerAppts = await Appointment.find({
+        ...providerQuery,
+        _id: { $ne: appointment._id },
+        status: { $in: ACTIVE_STATUSES },
+    });
+    if (providerAppts.some((a) => hasOverlap(a, startTimeUTC, endTimeUTC))) {
+        return sendError(res, 400, "Timeslot already taken.");
+    }
+
+    const patientAppts = await Appointment.find({
+        patientId,
+        _id: { $ne: appointment._id },
+        status: { $in: ACTIVE_STATUSES },
+    });
+    if (patientAppts.some((a) => hasOverlap(a, startTimeUTC, endTimeUTC))) {
+        return sendError(res, 400, "You already have a booking that overlaps.");
+    }
+
+    const missedByPatient = appointment.status === "missed_by_patient";
+    const rebookFee = roundPeso(appointment.amount * 0.1);
+    if (missedByPatient && !referenceNumber) {
+        return sendError(res, 400, "Reference number is required for the rebooking fee");
+    }
+
+    appointment.start = startTimeUTC.toDate();
+    appointment.end = endTimeUTC.toDate();
+    appointment.status = "deposit_paid";
+    appointment.rebooked = true;
+    appointment.rebookedAt = new Date();
+    appointment.rebookUsed = true;
+    appointment.patientJoined = false;
+    appointment.providerJoined = false;
+
+    if (missedByPatient) {
+        appointment.rebookFeePaid = true;
+        appointment.rebookFeeRef = referenceNumber;
+        await Transaction.create({
+            appointmentId: appointment._id,
+            payerId: patientId,
+            payeeId: providerId,
+            amount: rebookFee,
+            platformFee: 0,
+            netAmount: rebookFee,
+            type: "rebook_fee",
+            referenceNumber,
+        });
+    }
+
+    await appointment.save();
+
+    const when = toPhTime(appointment.start).format("MMM D, YYYY [at] h:mm A");
+    notify(patientId, "appointment_accepted", "Rebook Request Sent",
+        `Your appointment rebook request for ${when} has been sent to the provider for confirmation.${missedByPatient ? ` Rebooking fee reference: ${referenceNumber}.` : ""}`);
+    if (providerId) {
+        notify(providerId, "appointment_booked", "Rebooked Appointment Needs Approval",
+            `A missed appointment was rebooked for ${when}. Please approve or reject it from your appointment requests.`);
+    }
+
+    return sendSuccess(res, 200, "Rebook request sent for provider approval.", { appointment });
+});
+
 export const fileDispute = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     const { appointmentId, complaint } = req.body;
@@ -591,7 +782,7 @@ export const getTransactionHistory = asyncHandler(async (req, res) => {
     const transactions = await Transaction.find(query)
         .populate({
             path: "appointmentId",
-            select: "start end status virtual amount doctorId patientId",
+            select: "start end status virtual amount doctorId patientId missedBy rebooked rebookedAt rebookFeePaid rebookFeeRef cashbackAmount rejectionReason",
             populate: [
                 { path: "doctorId", select: "firstName lastName" },
                 { path: "patientId", select: "firstName lastName" },

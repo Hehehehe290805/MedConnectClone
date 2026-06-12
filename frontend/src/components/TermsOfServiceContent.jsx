@@ -19,7 +19,14 @@ const TermsOfServiceContent = () => (
         </section>
         <section>
             <h2 className="font-bold text-lg mb-2">4. Appointment & Payment Policy</h2>
-            <p>A 50% deposit is required to confirm appointments. Platform fees (10%) are deducted from provider payments. Deposits are non-refundable once an appointment is accepted, except where a dispute is resolved in the patient's favor by an admin.</p>
+            <p>A 50% deposit is required to confirm appointments. Platform fees (10%) are collected for MedConnect and deducted from provider-side payouts. Deposits are non-refundable once an appointment is accepted, except where a dispute is resolved in the patient's favor by an admin.</p>
+            <ul className="list-disc list-inside space-y-1 opacity-80 mt-2">
+                <li>For virtual appointments, the system tracks whether the patient and provider joined the call after the appointment starts.</li>
+                <li>If the patient misses the virtual appointment, the same appointment may be rebooked once within three days by paying a rebooking fee equal to 10% of the appointment amount. If the three-day window expires, the appointment is cancelled with no refund.</li>
+                <li>If the provider misses the virtual appointment, the patient receives a mock cashback equal to 10% of the appointment amount and may rebook the same appointment once within three days for free. Provider-liable cashback or refunds are shouldered by the provider and do not reverse MedConnect's platform fee.</li>
+                <li>If both parties miss the virtual appointment, the same appointment may be rebooked once within three days for free, with no payment exchange recorded for the missed session.</li>
+                <li>In-person appointments are recorded manually by the provider and are not covered by automatic virtual no-show detection.</li>
+            </ul>
         </section>
         <section>
             <h2 className="font-bold text-lg mb-2">5. Pharmacy Orders & Prescription Review</h2>

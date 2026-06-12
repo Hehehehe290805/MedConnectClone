@@ -245,7 +245,7 @@ const PharmacyCataloguePage = () => {
     return (
         <div className="p-8 space-y-6">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                <h1 className="text-2xl font-bold">Manage Catalogue</h1>
+                <h1 className="text-3xl font-bold">Manage Catalogue</h1>
                 <button className="btn btn-primary gap-2" onClick={() => setIsAdding(true)}>
                     <PlusIcon className="size-4" />
                     Add Product
@@ -267,7 +267,7 @@ const PharmacyCataloguePage = () => {
                     {products.map((product) => (
                         <div
                             key={product._id}
-                            className="card bg-base-200 shadow-sm cursor-pointer transition-shadow hover:shadow-md"
+                            className="card bg-base-100 border-2 border-base-300 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)] cursor-pointer transition-shadow hover:shadow-[0_0_0_1px_rgba(15,23,42,0.14),0_10px_28px_rgba(15,23,42,0.22)]"
                             onClick={() => setDetailProduct(product)}
                         >
                             <div className="card-body">
@@ -285,11 +285,21 @@ const PharmacyCataloguePage = () => {
                                         <p className="font-bold">{currency(product.price)}</p>
                                     </div>
                                 </div>
-                                <div className="flex flex-wrap gap-2">
-                                    <span className="badge badge-info">Stock {product.stock}</span>
-                                    <span className={`badge ${product.overTheCounter ? "badge-success" : "badge-warning"}`}>
-                                        {product.overTheCounter ? "OTC" : "Prescription"}
-                                    </span>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="rounded-lg bg-base-200 px-3 py-2">
+                                        <p className="text-xs opacity-50">Stock</p>
+                                        <p className="text-lg font-bold text-primary">{product.stock}</p>
+                                    </div>
+                                    <div className="rounded-lg bg-base-200 px-3 py-2">
+                                        <p className="text-xs opacity-50">Type</p>
+                                        <span className={`mt-1 inline-flex rounded-full border px-3 py-1 text-sm font-semibold ${
+                                            product.overTheCounter
+                                                ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                                                : "bg-amber-100 text-amber-800 border-amber-200"
+                                        }`}>
+                                            {product.overTheCounter ? "OTC" : "Prescription"}
+                                        </span>
+                                    </div>
                                 </div>
                                 <div className="card-actions justify-end">
                                     <button className="btn btn-ghost btn-sm gap-2" onClick={(e) => {

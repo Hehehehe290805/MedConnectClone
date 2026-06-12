@@ -27,9 +27,12 @@ export const protectRoute = async (req, res, next) => {
     req.user = user;
 
     // Update lastSeen non-fatally for regular users (not admins — Admin model is separate)
-    if (user.constructor.modelName !== "Admin") {
-        User.findByIdAndUpdate(user._id, { lastSeen: new Date() }).catch(() => {});
-    }
+    const PresenceModel = user.constructor.modelName === "Admin" ? Admin : User;
+    const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
+    PresenceModel.updateOne(
+      { _id: user._id, $or: [{ lastSeen: null }, { lastSeen: { $lt: oneMinuteAgo } }] },
+      { $set: { lastSeen: new Date() } }
+    ).catch(() => {});
 
     next();
   } catch (error) {

@@ -38,7 +38,7 @@ const EditableRow = ({ name, onSave, onDelete }) => {
     };
 
     return (
-        <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-base-200 group">
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-base-100 border border-base-300 shadow-[0_0_0_1px_rgba(15,23,42,0.06),0_4px_12px_rgba(15,23,42,0.12)] hover:bg-base-200 group">
             {editing ? (
                 <>
                     <input
@@ -77,7 +77,7 @@ const AddForm = ({ placeholder, onAdd, loading }) => {
     };
 
     return (
-        <div className="flex items-center gap-2 mt-2">
+        <div className="flex items-center gap-2">
             <input
                 className="input input-sm input-bordered flex-1"
                 placeholder={placeholder}
@@ -206,7 +206,9 @@ const AdminSpecialtiesPage = () => {
     // ── render helpers ───────────────────────────────────────────────────────
 
     const renderSpecialties = () => (
-        <div className="space-y-2">
+        <div className="space-y-3">
+            <AddForm placeholder="New specialty name..." onAdd={createSpecialty} loading={mutating} />
+            <div className="space-y-2">
             {data.specialties.map(s => (
                 <EditableRow
                     key={s._id}
@@ -215,7 +217,7 @@ const AdminSpecialtiesPage = () => {
                     onDelete={() => setDeleteTarget({ type: "specialty", id: s._id, name: s.name })}
                 />
             ))}
-            <AddForm placeholder="New specialty name..." onAdd={createSpecialty} loading={mutating} />
+            </div>
         </div>
     );
 
@@ -232,6 +234,14 @@ const AdminSpecialtiesPage = () => {
                         {data.specialties.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
                     </select>
                 </div>
+                <div>
+                    <p className="text-xs opacity-50 mb-1">Parent specialty for new item:</p>
+                    <select className="select select-bordered select-sm w-full max-w-xs mb-2" value={selectedSpecialty} onChange={e => setSelectedSpecialty(e.target.value)}>
+                        <option value="">Select specialty...</option>
+                        {data.specialties.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                    </select>
+                    <AddForm placeholder="New subspecialty name..." onAdd={createSubspecialty} loading={mutating} />
+                </div>
                 <div className="space-y-2">
                     {filtered.length === 0 && <p className="text-sm opacity-50">No subspecialties found.</p>}
                     {filtered.map(s => (
@@ -243,20 +253,14 @@ const AdminSpecialtiesPage = () => {
                         />
                     ))}
                 </div>
-                <div>
-                    <p className="text-xs opacity-50 mb-1">Parent specialty for new item:</p>
-                    <select className="select select-bordered select-sm w-full max-w-xs mb-2" value={selectedSpecialty} onChange={e => setSelectedSpecialty(e.target.value)}>
-                        <option value="">Select specialty...</option>
-                        {data.specialties.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                    </select>
-                    <AddForm placeholder="New subspecialty name..." onAdd={createSubspecialty} loading={mutating} />
-                </div>
             </div>
         );
     };
 
     const renderDepartmentTypes = () => (
-        <div className="space-y-2">
+        <div className="space-y-3">
+            <AddForm placeholder="New department type name..." onAdd={createDepartmentType} loading={mutating} />
+            <div className="space-y-2">
             {data.departmentTypes.map(d => (
                 <EditableRow
                     key={d._id}
@@ -265,7 +269,7 @@ const AdminSpecialtiesPage = () => {
                     onDelete={() => setDeleteTarget({ type: "departmentType", id: d._id, name: d.name })}
                 />
             ))}
-            <AddForm placeholder="New department type name..." onAdd={createDepartmentType} loading={mutating} />
+            </div>
         </div>
     );
 
@@ -282,6 +286,14 @@ const AdminSpecialtiesPage = () => {
                         {data.departmentTypes.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
                     </select>
                 </div>
+                <div>
+                    <p className="text-xs opacity-50 mb-1">Parent department type for new item:</p>
+                    <select className="select select-bordered select-sm w-full max-w-xs mb-2" value={selectedDeptType} onChange={e => setSelectedDeptType(e.target.value)}>
+                        <option value="">Select department type...</option>
+                        {data.departmentTypes.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
+                    </select>
+                    <AddForm placeholder="New service name..." onAdd={createService} loading={mutating} />
+                </div>
                 <div className="space-y-2">
                     {filtered.length === 0 && <p className="text-sm opacity-50">No services found.</p>}
                     {filtered.map(s => (
@@ -292,14 +304,6 @@ const AdminSpecialtiesPage = () => {
                             onDelete={() => setDeleteTarget({ type: "service", id: s._id, name: s.name })}
                         />
                     ))}
-                </div>
-                <div>
-                    <p className="text-xs opacity-50 mb-1">Parent department type for new item:</p>
-                    <select className="select select-bordered select-sm w-full max-w-xs mb-2" value={selectedDeptType} onChange={e => setSelectedDeptType(e.target.value)}>
-                        <option value="">Select department type...</option>
-                        {data.departmentTypes.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
-                    </select>
-                    <AddForm placeholder="New service name..." onAdd={createService} loading={mutating} />
                 </div>
             </div>
         );
@@ -322,7 +326,7 @@ const AdminSpecialtiesPage = () => {
     return (
         <div className="p-4 sm:p-8 max-w-3xl mx-auto space-y-6">
             <div>
-                <h1 className="text-2xl font-bold">Specialties & Services</h1>
+                <h1 className="text-3xl font-bold">Specialties & Services</h1>
                 <p className="text-sm opacity-50">View, add, edit, or remove specialties, subspecialties, department types, and services. Changes take effect immediately — no approval queue.</p>
             </div>
 
@@ -341,7 +345,7 @@ const AdminSpecialtiesPage = () => {
             </div>
 
             {/* Content */}
-            <div className="card bg-base-200 rounded-xl p-4">
+            <div className="card bg-base-100 border-2 border-base-300 rounded-xl p-4 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_26px_rgba(15,23,42,0.20)]">
                 {loading ? (
                     <div className="flex justify-center py-8"><span className="loading loading-spinner loading-md text-primary" /></div>
                 ) : (

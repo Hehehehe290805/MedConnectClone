@@ -35,14 +35,12 @@ const PH_TZ = "Asia/Manila";
 const methodConfig = {
     delivery: {
         label: "Delivery",
-        badge: "badge-info",
         icon: TruckIcon,
         readyLabel: "Ready for shipping",
         startLabel: "Start shipping",
     },
     pickup: {
         label: "Pickup",
-        badge: "badge-accent",
         icon: ShoppingBagIcon,
         readyLabel: "Ready for pickup",
         startLabel: "Release pickup",
@@ -50,13 +48,13 @@ const methodConfig = {
 };
 
 const statusConfig = {
-    paid: { label: "Paid", badge: "badge-success" },
-    ready_for_shipping: { label: "Ready for shipping", badge: "badge-info" },
-    ready_for_pickup: { label: "Ready for pickup", badge: "badge-accent" },
-    out_for_delivery: { label: "Out for delivery", badge: "badge-warning" },
-    pickup_in_progress: { label: "Pickup in progress", badge: "badge-warning" },
-    completed: { label: "Completed", badge: "badge-success" },
-    cancelled: { label: "Cancelled", badge: "badge-error" },
+    paid: { label: "Paid" },
+    ready_for_shipping: { label: "Ready for shipping" },
+    ready_for_pickup: { label: "Ready for pickup" },
+    out_for_delivery: { label: "Out for delivery" },
+    pickup_in_progress: { label: "Pickup in progress" },
+    completed: { label: "Completed" },
+    cancelled: { label: "Cancelled" },
 };
 
 const currency = (value) =>
@@ -138,20 +136,20 @@ const SimpleOrderForm = ({ order }) => {
 const OrderCard = ({ order, actionLabel, actionIcon: ActionIcon, onAction, isActionLoading }) => {
     const method = methodConfig[order.fulfillmentMethod] ?? methodConfig.pickup;
     const MethodIcon = method.icon;
-    const status = statusConfig[order.status] ?? { label: order.status, badge: "badge-ghost" };
+    const status = statusConfig[order.status] ?? { label: order.status?.replace(/_/g, " ") };
 
     return (
-        <div className="card bg-base-200 shadow-sm">
+        <div className="card bg-base-100 border-2 border-base-300 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
             <div className="card-body gap-4">
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                     <div className="space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
-                            <span className={`badge ${method.badge} gap-1`}>
+                            <span className="inline-flex items-center gap-1 rounded-lg bg-base-200 px-3 py-1 text-xs font-semibold text-primary">
                                 <MethodIcon className="size-3" />
                                 {method.label}
                             </span>
-                            <span className={`badge ${status.badge}`}>{status.label}</span>
-                            <span className="badge badge-ghost font-mono">{order.referenceNumber}</span>
+                            <span className="rounded-lg bg-base-200 px-3 py-1 text-xs font-semibold capitalize text-primary">{status.label}</span>
+                            <span className="rounded-lg bg-base-200 px-3 py-1 font-mono text-xs">{order.referenceNumber}</span>
                         </div>
                         <div>
                             <p className="font-semibold">{order.customerName}</p>
@@ -252,8 +250,8 @@ const PrescriptionReviewModal = ({ isOpen, onClose, orders, onApprove, onRejectC
                                         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
                                             <div>
                                                 <div className="flex flex-wrap gap-2 mb-2">
-                                                    <span className="badge badge-warning">On hold</span>
-                                                    <span className="badge badge-ghost font-mono">{order.referenceNumber}</span>
+                                                    <span className="rounded-lg bg-base-200 px-3 py-1 text-xs font-semibold text-primary">On hold</span>
+                                                    <span className="rounded-lg bg-base-200 px-3 py-1 font-mono text-xs">{order.referenceNumber}</span>
                                                 </div>
                                                 <p className="font-semibold">{order.customerName}</p>
                                                 <p className="text-sm opacity-70">Needs review before payment</p>
@@ -394,7 +392,7 @@ const RejectedPrescriptionsModal = ({ isOpen, onClose, orders }) => {
                                     <p className="font-semibold">{order.customerName}</p>
                                     <p className="text-sm opacity-60 font-mono">{order.referenceNumber}</p>
                                 </div>
-                                <span className="badge badge-error">Rejected</span>
+                                <span className="text-sm font-semibold text-primary">Rejected</span>
                             </button>
                         ))}
                     </div>
@@ -478,7 +476,7 @@ const HomePagePharmacy = () => {
             )}
 
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                <h1 className="text-2xl font-bold">Welcome, {authUser?.pharmacyName || "Pharmacy"}</h1>
+                <h1 className="text-3xl font-bold">Pharmacy</h1>
                 <button className="btn btn-ghost btn-sm gap-2" onClick={() => refetch()} disabled={isFetching}>
                     {isFetching ? <span className="loading loading-spinner loading-xs" /> : <RefreshCwIcon className="size-4" />}
                     Refresh
@@ -514,7 +512,7 @@ const HomePagePharmacy = () => {
                                 <ShieldCheckIcon className="size-5" />
                                 Prescription Reviews
                             </span>
-                            <span className="badge badge-warning">{prescriptionReviews.length} pending</span>
+                            <span className="font-semibold text-primary">{prescriptionReviews.length} pending</span>
                         </button>
                         <button
                             className="btn btn-error btn-outline w-full min-h-14 h-auto justify-between px-5"
@@ -524,7 +522,7 @@ const HomePagePharmacy = () => {
                                 <ShieldXIcon className="size-5" />
                                 Rejected Prescription Requests
                             </span>
-                            <span className="badge badge-error">{rejectedPrescriptionReviews.length} rejected</span>
+                            <span className="font-semibold text-primary">{rejectedPrescriptionReviews.length} rejected</span>
                         </button>
                     </div>
                     <PrescriptionReviewModal

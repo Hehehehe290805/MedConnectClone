@@ -3,6 +3,7 @@ import User from "../models/User.js";
 import { Doctor, Pharmacy } from "../models/User.js";
 import Admin from "../models/Admin.js";
 import Appointment from "../models/Appointment.js";
+import Transaction from "../models/Transaction.js";
 import Notification from "../models/Notification.js";
 import Schedule from "../models/Schedule.js";
 import Pricing from "../models/Pricing.js";
@@ -20,6 +21,7 @@ import utc from "dayjs/plugin/utc.js";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 const toPhTime = (d) => dayjs(d).tz("Asia/Manila");
+const roundPeso = (value) => Math.round((value || 0) * 100) / 100;
 
 // Returns true if a license_expiring_soon notification was already sent to this user today
 async function alreadyNotifiedToday(userId) {
@@ -51,9 +53,9 @@ const checkStartedAppointments = async () => {
 };
 
 // ── CRON: virtual no-join timeout ────────────────────────────────────────
-// Runs every 30 seconds alongside the start checker. Cancels virtual
+// Runs every 30 seconds alongside the start checker. Handles virtual
 // appointments where 5+ minutes have passed since start and not both parties
-// joined. Patient no-show = deposit forfeited; Provider no-show = full refund.
+// joined. Missed virtual appointments open a one-time rebook window within 3 days.
 const checkVirtualNoJoin = async () => {
     const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
     const timedOut = await Appointment.find({
@@ -65,34 +67,121 @@ const checkVirtualNoJoin = async () => {
 
     for (const appt of timedOut) {
         const providerId = appt.doctorId || appt.instituteId;
-        if (!appt.patientJoined && !appt.providerJoined) {
-            // Neither joined — cancel, no refund
+        const rebookDeadline = dayjs().tz("Asia/Manila").add(3, "day").toDate();
+        if (appt.rebookUsed || appt.rebooked) {
             appt.status = "cancelled";
+            appt.missedAt = new Date();
+            appt.rejectionReason = "Rebooked virtual appointment was missed. The one-time rebook option has already been used.";
+            await appt.save();
+            notify(appt.patientId, "appointment_cancelled", "Rebooked Appointment Cancelled",
+                `The rebooked virtual appointment on ${toPhTime(appt.start).format("MMM D, YYYY [at] h:mm A")} was missed. The one-time rebook option has already been used, so this appointment is now cancelled and its history was updated.`);
+            if (providerId) notify(providerId, "appointment_cancelled", "Rebooked Appointment Cancelled",
+                `The rebooked virtual appointment on ${toPhTime(appt.start).format("MMM D, YYYY [at] h:mm A")} was missed and is now cancelled. No second rebook window is available. The appointment history was updated.`);
+            continue;
+        }
+
+        if (!appt.patientJoined && !appt.providerJoined) {
+            // Neither joined — allow one free rebook within 3 days, no payment exchange
+            appt.status = "missed_by_both";
+            appt.missedBy = "both";
+            appt.missedAt = new Date();
+            appt.rebookDeadline = rebookDeadline;
             appt.rejectionReason = "Neither party joined the video call within 5 minutes.";
             await appt.save();
-            notify(appt.patientId, "appointment_cancelled", "Appointment Cancelled — No-Show",
-                `Your appointment was cancelled because neither party joined the video call within 5 minutes. Your deposit is non-refundable.`);
-            if (providerId) notify(providerId, "appointment_cancelled", "Appointment Cancelled — No-Show",
-                `The appointment was cancelled because neither party joined within 5 minutes.`);
+            notify(appt.patientId, "appointment_cancelled", "Appointment Missed — Free Rebook Available",
+                `Neither party joined the video call within 5 minutes. You may rebook once within 3 days for free. No payment exchange will be made for this missed session.`);
+            if (providerId) notify(providerId, "appointment_cancelled", "Appointment Missed — Free Rebook Pending",
+                `Neither party joined within 5 minutes. The patient may rebook once until ${toPhTime(rebookDeadline).format("MMM D, YYYY [at] h:mm A")} for free.`);
         } else if (!appt.patientJoined) {
-            // Patient didn't join — cancel, deposit forfeited to provider
-            appt.status = "cancelled";
+            // Patient didn't join — allow one paid rebook within 3 days
+            const fee = roundPeso(appt.amount * 0.1);
+            appt.status = "missed_by_patient";
+            appt.missedBy = "patient";
+            appt.missedAt = new Date();
+            appt.rebookDeadline = rebookDeadline;
             appt.rejectionReason = "Patient did not join the video call within 5 minutes.";
             await appt.save();
-            const providerNet = Math.round((appt.depositAmount - appt.platformFee) * 100) / 100;
-            notify(appt.patientId, "appointment_cancelled", "Appointment Cancelled — You Didn't Join",
-                `Your appointment was cancelled because you did not join the video call within 5 minutes. Your deposit of ₱${appt.depositAmount} is non-refundable.`);
-            if (providerId) notify(providerId, "appointment_cancelled", "Patient No-Show — Deposit Released",
-                `The patient did not join the video call within 5 minutes. The deposit (₱${providerNet} after platform fee) has been released to you.`);
+            notify(appt.patientId, "appointment_cancelled", "Appointment Missed — Rebook Available",
+                `You missed your virtual appointment. You may rebook once within 3 days by paying ${fee.toLocaleString("en-PH", { style: "currency", currency: "PHP" })}. After the deadline, it will be cancelled with no refund.`);
+            if (providerId) notify(providerId, "appointment_cancelled", "Patient Missed Appointment",
+                `The patient did not join within 5 minutes. They may rebook once until ${toPhTime(rebookDeadline).format("MMM D, YYYY [at] h:mm A")}.`);
         } else if (!appt.providerJoined) {
-            // Provider didn't join — cancel, full refund to patient
-            appt.status = "cancelled";
+            // Provider didn't join — patient gets 10% cashback and one free rebook
+            const cashbackAmount = roundPeso(appt.amount * 0.1);
+            appt.status = "missed_by_provider";
+            appt.missedBy = "provider";
+            appt.missedAt = new Date();
+            appt.rebookDeadline = rebookDeadline;
+            appt.cashbackAmount = cashbackAmount;
             appt.rejectionReason = "Provider did not join the video call within 5 minutes.";
             await appt.save();
-            notify(appt.patientId, "appointment_cancelled", "Appointment Cancelled — Provider No-Show",
-                `Your appointment was cancelled because the provider did not join the video call within 5 minutes. Your full deposit of ₱${appt.depositAmount} will be refunded.`);
-            if (providerId) notify(providerId, "appointment_cancelled", "Appointment Cancelled — You Didn't Join",
-                `The appointment was cancelled because you did not join the video call within 5 minutes. The patient's deposit will be fully refunded.`);
+            if (providerId) {
+                await Transaction.create({
+                    appointmentId: appt._id,
+                    payerId: providerId,
+                    payeeId: appt.patientId,
+                    amount: cashbackAmount,
+                    platformFee: 0,
+                    netAmount: cashbackAmount,
+                    type: "cashback",
+                    referenceNumber: `CB-${Date.now()}-${String(appt._id).slice(-4)}`,
+                });
+            }
+            notify(appt.patientId, "appointment_cancelled", "Provider Missed Appointment — Rebook Available",
+                `The provider missed your virtual appointment. You received ${cashbackAmount.toLocaleString("en-PH", { style: "currency", currency: "PHP" })} mock cashback and may rebook once within 3 days for free.`);
+            if (providerId) notify(providerId, "appointment_cancelled", "Appointment Missed — Rebook Pending",
+                `You did not join within 5 minutes. The patient received ${cashbackAmount.toLocaleString("en-PH", { style: "currency", currency: "PHP" })} mock cashback and may rebook once until ${toPhTime(rebookDeadline).format("MMM D, YYYY [at] h:mm A")}.`);
+        }
+    }
+};
+
+const cancelExpiredRebookWindows = async () => {
+    const now = new Date();
+    const expired = await Appointment.find({
+        status: { $in: ["missed_by_patient", "missed_by_provider", "missed_by_both"] },
+        rebookUsed: false,
+        rebookDeadline: { $lte: now },
+    });
+
+    for (const appt of expired) {
+        const providerId = appt.doctorId || appt.instituteId;
+        appt.status = "cancelled";
+        appt.rejectionReason =
+            appt.missedBy === "patient"
+                ? "Rebook window expired after patient no-show."
+                : appt.missedBy === "provider"
+                    ? "Rebook window expired after provider no-show."
+                    : "Rebook window expired after both parties missed the appointment.";
+        await appt.save();
+
+        notify(appt.patientId, "appointment_cancelled", "Rebook Window Expired",
+            `The 3-day rebook window for your appointment on ${toPhTime(appt.start).format("MMM D, YYYY")} has expired.`);
+        if (providerId) {
+            notify(providerId, "appointment_cancelled", "Rebook Window Expired",
+                `The 3-day rebook window for the missed appointment on ${toPhTime(appt.start).format("MMM D, YYYY")} has expired.`);
+        }
+    }
+};
+
+const cancelExpiredRebookApprovalRequests = async () => {
+    const now = new Date();
+    const expired = await Appointment.find({
+        status: { $in: ["missed_by_patient", "missed_by_provider", "missed_by_both"] },
+        rebooked: true,
+        start: { $lte: now },
+    });
+
+    for (const appt of expired) {
+        const providerId = appt.doctorId || appt.instituteId;
+        appt.status = "cancelled";
+        appt.rejectionReason = "Rebooked appointment schedule passed before provider confirmation.";
+        await appt.save();
+
+        notify(appt.patientId, "appointment_cancelled", "Rebooked Appointment Cancelled",
+            `The rebooked appointment schedule on ${toPhTime(appt.start).format("MMM D, YYYY [at] h:mm A")} passed before provider confirmation, so it has been cancelled. No second rebook window is available. The appointment history was updated.`);
+        if (providerId) {
+            notify(providerId, "appointment_cancelled", "Rebooked Appointment Cancelled",
+                `The rebooked appointment schedule on ${toPhTime(appt.start).format("MMM D, YYYY [at] h:mm A")} passed before confirmation, so it has been cancelled and the appointment history was updated.`);
         }
     }
 };
@@ -195,6 +284,8 @@ export function startCronJobs() {
         try {
             await sendPreAppointmentReminders();
             await completeDuePharmacyOrders();
+            await cancelExpiredRebookWindows();
+            await cancelExpiredRebookApprovalRequests();
         } catch (err) {
             console.error("[CRON] Minute cron:", err.message);
             await logError("CRON", err);

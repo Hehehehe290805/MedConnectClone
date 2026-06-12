@@ -58,6 +58,7 @@ const adminSchema = new mongoose.Schema({
     emailNotificationsEnabled: { type: Boolean, default: true },
     loginAttempts: { type: Number, default: 0 },
     loginLockedAt: { type: Date, default: null },
+    lastSeen: { type: Date, default: null },
     phoneNumber: { type: String },
     phoneType: {
         type: String,

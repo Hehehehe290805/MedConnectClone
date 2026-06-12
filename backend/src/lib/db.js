@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import Schedule from "../models/Schedule.js";
 
 export const connectDB = async () => {
   try {
@@ -8,6 +9,7 @@ export const connectDB = async () => {
     if (collections.length > 0) {
       await conn.connection.db.dropCollection("friendrequests");
     }
+    await Schedule.syncIndexes();
   } catch (error) {
     console.error("[DB] Connection failed:", error.message);
     process.exit(1);

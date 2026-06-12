@@ -5,7 +5,12 @@ import toast from "react-hot-toast";
 import { ArrowRightCircleIcon, UserXIcon, ZapIcon, RefreshCwIcon } from "lucide-react";
 
 const TYPE_BADGE = { booked: "badge-ghost", walkin: "badge-primary", emergency: "badge-error" };
-const TYPE_LABEL = { booked: "Booked", walkin: "Walk-in", emergency: "Emergency" };
+const TYPE_LABEL = { booked: "Appointment", walkin: "Walk-in", emergency: "Emergency" };
+const typePillClass = (type) => {
+    if (type === "emergency") return "border-rose-200 bg-white text-rose-700";
+    if (type === "walkin") return "border-primary/30 bg-white text-primary";
+    return "border-base-300 bg-white text-slate-700";
+};
 
 const QueuePanel = ({ showWalkinForm, setShowWalkinForm }) => {
     const queryClient = useQueryClient();
@@ -14,10 +19,11 @@ const QueuePanel = ({ showWalkinForm, setShowWalkinForm }) => {
     const [walkinType, setWalkinType] = useState("walkin");
     const [showNoShowConfirm, setShowNoShowConfirm] = useState(false);
 
-    const { data, isLoading, refetch } = useQuery({
+    const { data, isLoading, isError, error, refetch } = useQuery({
         queryKey: ["queue-today"],
         queryFn: () => axiosInstance.get("/queue/today").then(r => r.data.data),
         refetchInterval: 30_000,
+        retry: false,
     });
 
     const queue = data?.queue;
@@ -25,6 +31,25 @@ const QueuePanel = ({ showWalkinForm, setShowWalkinForm }) => {
     const activeSlot = slots.find(s => s.status === "active");
     const waitingSlots = slots.filter(s => s.status === "waiting");
     const doneSlots = slots.filter(s => ["done", "cancelled", "skipped"].includes(s.status));
+
+    const slotAppointment = (slot) => slot?.appointmentId && typeof slot.appointmentId === "object" ? slot.appointmentId : null;
+    const slotPatient = (slot) => slotAppointment(slot)?.patientId;
+    const slotPatientName = (slot) => {
+        if (slot.type === "walkin" || slot.type === "emergency") return "Walk-in Patient";
+        const patient = slotPatient(slot);
+        if (patient?.firstName) return `${patient.firstName} ${patient.lastName || ""}`.trim();
+        return "Patient";
+    };
+    const slotMeta = (slot) => {
+        const appt = slotAppointment(slot);
+        if (!appt) return null;
+        const parts = [
+            appt.virtual ? "Virtual appointment" : "In-person appointment",
+            appt.start ? new Date(appt.start).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" }) : null,
+            appt.amount ? `PHP ${appt.amount.toLocaleString("en-PH")}` : null,
+        ].filter(Boolean);
+        return parts.join(" • ");
+    };
 
     const inval = () => queryClient.invalidateQueries({ queryKey: ["queue-today"] });
 
@@ -38,7 +63,7 @@ const QueuePanel = ({ showWalkinForm, setShowWalkinForm }) => {
     }, [isLoading, queue]);
 
     const { mutate: buildQueue, isPending: isBuilding } = useMutation({
-        mutationFn: () => axiosInstance.post("/queue/build"),
+        mutationFn: () => axiosInstance.post("/queue/build", undefined, { timeout: 10000 }),
         onSuccess: () => { toast.success("Queue built for today."); inval(); },
         onError: (e) => toast.error(e?.response?.data?.message || "Failed to build queue."),
     });
@@ -74,15 +99,48 @@ const QueuePanel = ({ showWalkinForm, setShowWalkinForm }) => {
         onError: (e) => toast.error(e?.response?.data?.message || "Failed to add."),
     });
 
-    if (isLoading || isBuilding) return null;
-    if (!queue || !queue.isActive) return null;
+    if (isLoading) {
+        return (
+            <div className="card bg-base-100 border-2 border-base-300 p-5 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
+                <div className="flex justify-center py-4">
+                    <span className="loading loading-spinner loading-sm text-primary" />
+                </div>
+            </div>
+        );
+    }
+    if (isError) {
+        return (
+            <div className="card bg-base-100 border-2 border-base-300 p-5 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
+                <div className="flex items-center justify-between gap-3">
+                    <div>
+                        <p className="text-sm font-semibold text-error">Queue unavailable</p>
+                        <p className="text-sm opacity-60 mt-1">{error?.response?.data?.message || "Could not load today's queue."}</p>
+                    </div>
+                    <button className="btn btn-outline btn-sm" onClick={() => refetch()}>
+                        Retry
+                    </button>
+                </div>
+            </div>
+        );
+    }
+    if (!queue || !queue.isActive) {
+        return (
+            <div className="card bg-base-100 border-2 border-base-300 p-5 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
+                <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold">No queue for today</p>
+                    {isBuilding && <span className="loading loading-spinner loading-xs text-primary" />}
+                </div>
+                <p className="text-sm opacity-60 mt-1">Today's queue appears when there are confirmed appointments or walk-ins to serve.</p>
+            </div>
+        );
+    }
 
     return (
-        <div className="card bg-base-200 border border-base-300 p-5 space-y-4">
+        <div className="card bg-base-100 border-2 border-base-300 p-5 space-y-4 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
             {/* Status badges + refresh */}
             <div className="flex items-center gap-2">
-                <span className="badge badge-primary badge-sm">{waitingSlots.length} waiting</span>
-                {doneSlots.length > 0 && <span className="badge badge-ghost badge-sm">{doneSlots.length} done</span>}
+                <span className="inline-flex rounded-full border border-primary/30 bg-white px-3 py-1 text-xs font-semibold text-primary">{waitingSlots.length} waiting</span>
+                {doneSlots.length > 0 && <span className="inline-flex rounded-full border border-base-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700">{doneSlots.length} done</span>}
                 <button className="btn btn-ghost btn-xs ml-auto" onClick={() => refetch()}>
                     <RefreshCwIcon className="size-3" />
                 </button>
@@ -119,8 +177,9 @@ const QueuePanel = ({ showWalkinForm, setShowWalkinForm }) => {
                     <div className="flex items-center justify-between flex-wrap gap-2">
                         <div>
                             <p className="text-xs font-medium text-success uppercase tracking-wide">Now Serving — Slot #{activeSlot.position}</p>
-                            <p className="font-bold text-lg">{activeSlot.patientName || "Patient"}</p>
-                            <span className={`badge badge-xs ${TYPE_BADGE[activeSlot.type]}`}>{TYPE_LABEL[activeSlot.type]}</span>
+                            <p className="font-bold text-lg">{slotPatientName(activeSlot)}</p>
+                            {slotMeta(activeSlot) && <p className="text-xs opacity-60 mt-0.5">{slotMeta(activeSlot)}</p>}
+                            <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${typePillClass(activeSlot.type)}`}>{TYPE_LABEL[activeSlot.type]}</span>
                         </div>
                         <div className="flex gap-2">
                             {!showNoShowConfirm ? (
@@ -167,8 +226,11 @@ const QueuePanel = ({ showWalkinForm, setShowWalkinForm }) => {
                             <span className="size-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0">
                                 {slot.position}
                             </span>
-                            <span className="text-sm font-medium flex-1 truncate">{slot.patientName || "Patient"}</span>
-                            <span className={`badge badge-xs ${TYPE_BADGE[slot.type]}`}>{TYPE_LABEL[slot.type]}</span>
+                            <span className="text-sm font-medium flex-1 truncate">
+                                {slotPatientName(slot)}
+                                {slotMeta(slot) && <span className="block text-xs font-normal opacity-50 truncate">{slotMeta(slot)}</span>}
+                            </span>
+                            <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${typePillClass(slot.type)}`}>{TYPE_LABEL[slot.type]}</span>
                         </div>
                     ))}
                 </div>

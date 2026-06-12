@@ -1,13 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { axiosInstance } from "../lib/axios.js";
 import AppointmentCalendar from "../components/AppointmentCalendar.jsx";
-import TransactionList from "../components/TransactionList.jsx";
 import ViewPendingAppointmentDoctorPopup from "./ViewPendingAppointmentDoctorPopup.jsx";
 import SetPricePopup from "./SetPricePopup.jsx";
 import SetSchedulePopup from "./SetSchedulePopup.jsx";
 import toast from "react-hot-toast";
-import { ClockIcon, CheckCircleIcon, AlertTriangleIcon, CalendarCheckIcon, ReceiptIcon, CalendarIcon, VideoIcon, UsersIcon, UserPlusIcon } from "lucide-react";
+import { ClockIcon, CheckCircleIcon, AlertTriangleIcon, VideoIcon, UsersIcon, UserPlusIcon } from "lucide-react";
 import useAuthUser from "../hooks/useAuthUser";
 import QueuePanel from "../components/QueuePanel";
 import dayjs from "dayjs";
@@ -16,16 +15,20 @@ import timezone from "dayjs/plugin/timezone";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 const PH_TZ = "Asia/Manila";
+const REBOOKABLE_STATUSES = ["missed_by_patient", "missed_by_provider", "missed_by_both"];
+const isRebookApprovalRequest = (appt) =>
+    Boolean(appt?.rebooked && REBOOKABLE_STATUSES.includes(appt.status));
+const profileReadyStorageKey = (doctorId) => `medconnect:doctor-profile-ready-confirmed:${doctorId || "unknown"}`;
 
 const HomePageDoctor = () => {
     const { authUser } = useAuthUser();
     const isPending = authUser?.status === "pending";
 
-    const [tab, setTab] = useState("appointments");
     const [appointments, setAppointments] = useState([]);
     const [selectedAppointment, setSelectedAppointment] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const appointmentsLoadedRef = useRef(false);
 
     const [currentPrice, setCurrentPrice] = useState(null);
     const [priceLoading, setPriceLoading] = useState(false);
@@ -38,6 +41,7 @@ const HomePageDoctor = () => {
     const [showMaxPatients, setShowMaxPatients] = useState(false);
     const [savingMaxPatients, setSavingMaxPatients] = useState(false);
     const [showWalkinForm, setShowWalkinForm] = useState(false);
+    const [profileReadyConfirmed, setProfileReadyConfirmed] = useState(false);
 
     useEffect(() => {
         fetchAppointments();
@@ -53,9 +57,14 @@ const HomePageDoctor = () => {
         return () => clearInterval(id);
     }, []);
 
+    useEffect(() => {
+        if (!authUser?._id) return;
+        setProfileReadyConfirmed(localStorage.getItem(profileReadyStorageKey(authUser._id)) === "true");
+    }, [authUser?._id]);
+
     const fetchAppointments = async () => {
         try {
-            setLoading(true);
+            if (!appointmentsLoadedRef.current) setLoading(true);
             setError(null);
             const res = await axiosInstance.get("/booking/my-appointments");
             const appts = res.data.data?.appointments;
@@ -68,6 +77,7 @@ const HomePageDoctor = () => {
             setError("Failed to load appointments.");
             setAppointments([]);
         } finally {
+            appointmentsLoadedRef.current = true;
             setLoading(false);
         }
     };
@@ -146,7 +156,18 @@ const HomePageDoctor = () => {
         }
     };
 
-    const activeCount = appointments.filter(a => ["accepted", "ongoing"].includes(a.status)).length;
+    const profileReady = currentPrice !== null && workTime !== null;
+    const calendarAppointments = appointments.filter((appt) =>
+        !["pending_payment", "deposit_paid"].includes(appt.status) && !isRebookApprovalRequest(appt)
+    );
+
+    const confirmProfileReady = () => {
+        if (authUser?._id) {
+            localStorage.setItem(profileReadyStorageKey(authUser._id), "true");
+        }
+        setProfileReadyConfirmed(true);
+        toast.success("Profile ready card dismissed.");
+    };
 
     const joinCallAppt = appointments.find(a => {
         if (!a.virtual) return false;
@@ -158,13 +179,11 @@ const HomePageDoctor = () => {
         return false;
     });
 
-    const callPartnerId = joinCallAppt
-        ? (joinCallAppt.patientId?._id || joinCallAppt.patientId)
-        : null;
+    const doctorName = [authUser?.firstName, authUser?.lastName].filter(Boolean).join(" ") || "Doctor";
 
     return (
         <div className="p-8 space-y-6">
-            {joinCallAppt && callPartnerId && (
+            {joinCallAppt && (
                 <div className="alert bg-success/10 border border-success/30 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                         <VideoIcon className="size-5 text-success shrink-0" />
@@ -179,7 +198,7 @@ const HomePageDoctor = () => {
                             </p>
                         </div>
                     </div>
-                    <Link to={`/call/${callPartnerId}`} className="btn btn-success btn-sm gap-2 shrink-0">
+                    <Link to={`/call/${joinCallAppt._id}`} className="btn btn-success btn-sm gap-2 shrink-0">
                         <VideoIcon className="size-4" /> Join Call
                     </Link>
                 </div>
@@ -198,29 +217,10 @@ const HomePageDoctor = () => {
             )}
 
             <div>
-                <h1 className="text-2xl font-bold">Welcome to MedConnect</h1>
+                <h1 className="text-2xl font-bold">Hello, {doctorName}</h1>
             </div>
 
-            {/* Tabs */}
-            <div role="tablist" className="tabs tabs-bordered">
-                <button
-                    role="tab"
-                    className={`tab gap-2 ${tab === "appointments" ? "tab-active" : ""}`}
-                    onClick={() => setTab("appointments")}
-                >
-                    <CalendarIcon className="size-4" /> Appointments
-                </button>
-                <button
-                    role="tab"
-                    className={`tab gap-2 ${tab === "transactions" ? "tab-active" : ""}`}
-                    onClick={() => setTab("transactions")}
-                >
-                    <ReceiptIcon className="size-4" /> Transactions
-                </button>
-            </div>
-
-            {tab === "appointments" && (
-                <div className="space-y-6">
+            <div className="space-y-6">
                     {/* Setup / status card */}
                     {currentPrice === null || workTime === null ? (
                         <div className="card bg-warning/5 border border-warning/20 p-4 rounded-xl">
@@ -248,27 +248,27 @@ const HomePageDoctor = () => {
                                 </div>
                             </div>
                         </div>
-                    ) : (
+                    ) : !profileReadyConfirmed ? (
                         <div className="card bg-info/5 border border-info/20 p-4 rounded-xl">
                             <div className="flex items-center justify-between gap-4 flex-wrap">
                                 <div className="flex items-center gap-3">
                                     <CheckCircleIcon className="size-5 text-info shrink-0" />
                                     <div>
                                         <p className="font-semibold">Profile Ready</p>
-                                        <p className="text-sm opacity-70">Your profile is set up. Patients can book with you.</p>
+                                        <p className="text-sm opacity-70">Your profile is set up. Confirm this once to remove this reminder.</p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2 text-sm opacity-50 shrink-0">
-                                    <CalendarCheckIcon className="size-4" />
-                                    <span>{activeCount} active</span>
-                                </div>
+                                <button className="btn btn-primary btn-sm gap-2" onClick={confirmProfileReady}>
+                                    <CheckCircleIcon className="size-4" />
+                                    Confirm
+                                </button>
                             </div>
                         </div>
-                    )}
+                    ) : null}
 
                     {/* Price + Schedule + Max Patients cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="card bg-base-100 shadow-sm border p-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        <div className="card bg-base-100 border-2 border-base-300 p-4 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
                             <h3 className="font-bold text-lg mb-2">Consultation Pricing</h3>
                             <div className="flex items-center justify-between">
                                 <div>
@@ -284,7 +284,7 @@ const HomePageDoctor = () => {
                                 </button>
                             </div>
                         </div>
-                        <div className="card bg-base-100 shadow-sm border p-4">
+                        <div className="card bg-base-100 border-2 border-base-300 p-4 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
                             <h3 className="font-bold text-lg mb-2">Work Schedule</h3>
                             <div className="flex items-center justify-between gap-3">
                                 {workTime ? (
@@ -300,7 +300,7 @@ const HomePageDoctor = () => {
                                 </button>
                             </div>
                         </div>
-                        <div className="card bg-base-100 shadow-sm border p-4 md:col-span-2">
+                        <div className="card bg-base-100 border-2 border-base-300 p-4 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
                             <h3 className="font-bold text-lg mb-2">Max Patients Per Day</h3>
                             {!showMaxPatients ? (
                                 <div className="flex items-center justify-between">
@@ -349,14 +349,11 @@ const HomePageDoctor = () => {
                     </div>
 
                     <AppointmentCalendar
-                        appointments={appointments}
+                        appointments={calendarAppointments}
                         onViewDetails={setSelectedAppointment}
                         isLoading={loading}
                     />
-                </div>
-            )}
-
-            {tab === "transactions" && <TransactionList />}
+            </div>
 
             {selectedAppointment && (
                 <ViewPendingAppointmentDoctorPopup
