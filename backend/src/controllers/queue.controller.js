@@ -234,7 +234,11 @@ export const getTodayQueue = asyncHandler(async (req, res) => {
 
     const todayDate = toQueueDate(new Date());
     const queue = await AppointmentQueue.findOne({ providerId, date: todayDate })
-        .populate("slots.appointmentId", "patientId start end virtual status")
+        .populate({
+            path: "slots.appointmentId",
+            select: "patientId start end virtual status amount",
+            populate: { path: "patientId", select: "firstName lastName profilePic email" },
+        })
         .lean();
 
     if (!queue) {

@@ -133,7 +133,7 @@ const ServicesPage = () => {
     return (
         <div className="p-6 max-w-5xl mx-auto space-y-6">
             <div>
-                <h1 className="text-2xl font-bold">My Services</h1>
+                <h1 className="text-3xl font-bold">My Services</h1>
                 <p className="text-sm opacity-70 mt-1">Manage the services offered by your department.</p>
             </div>
 

@@ -15,7 +15,7 @@ const PH_TZ = "Asia/Manila";
 // Completed, fully_paid, cancelled, rejected, and resolved are hidden.
 const ACTIVE_DOT_STATUSES = new Set([
     "pending_payment", "deposit_paid", "accepted", "ongoing",
-    "awaiting_balance", "disputed",
+    "awaiting_balance", "disputed", "missed_by_patient", "missed_by_provider", "missed_by_both",
 ]);
 
 const STATUS_DOT = {
@@ -27,6 +27,9 @@ const STATUS_DOT = {
     awaiting_balance: "bg-warning",
     fully_paid:       "bg-success",
     disputed:         "bg-warning",
+    missed_by_patient: "bg-warning",
+    missed_by_provider: "bg-info",
+    missed_by_both: "bg-info",
 };
 
 const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -63,6 +66,14 @@ const STATUS_LABEL = {
     rejected:         "Rejected",
     disputed:         "Disputed",
     resolved:         "Resolved",
+    missed_by_patient: "Missed - Rebook Available",
+    missed_by_provider: "Provider Missed - Rebook Available",
+    missed_by_both: "Missed - Free Rebook Available",
+};
+const MISSED_REBOOK_STATUSES = ["missed_by_patient", "missed_by_provider", "missed_by_both"];
+const getStatusLabel = (appt) => {
+    if (appt?.rebooked && MISSED_REBOOK_STATUSES.includes(appt.status)) return "Rebooked";
+    return STATUS_LABEL[appt?.status] || appt?.status;
 };
 
 const ListRow = ({ appt, userRole, onViewDetails, onChat, onToggleFiles, filesExpanded }) => {
@@ -86,7 +97,7 @@ const ListRow = ({ appt, userRole, onViewDetails, onChat, onToggleFiles, filesEx
                             {start.format("ddd, MMM D, YYYY")} · {start.format("h:mm A")} ({durationMin} min) · ₱{appt.amount?.toLocaleString("en-PH")}
                         </p>
                     </div>
-                    <span className="text-xs shrink-0 opacity-70">{STATUS_LABEL[appt.status] || appt.status}</span>
+                    <span className="text-xs shrink-0 opacity-70">{getStatusLabel(appt)}</span>
                 </button>
                 {showChat && (
                     <button
@@ -312,7 +323,7 @@ const AppointmentCalendar = ({ appointments = [], onViewDetails, isLoading }) =>
                                                     <p className="text-xs opacity-60">₱{a.amount.toLocaleString("en-PH")}</p>
                                                 )}
                                             </div>
-                                            <span className="text-xs opacity-70 shrink-0">{STATUS_LABEL[a.status] || a.status}</span>
+                                            <span className="text-xs opacity-70 shrink-0">{getStatusLabel(a)}</span>
                                         </div>
                                         <div className="flex gap-2">
                                             {canChat && (

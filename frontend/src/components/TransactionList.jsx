@@ -9,21 +9,30 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 const PH_TZ = "Asia/Manila";
 
-const TYPE_LABEL = { deposit: "Deposit", balance: "Balance" };
+const TYPE_LABEL = { deposit: "Deposit", balance: "Balance", rebook_fee: "Rebook Fee", cashback: "Cashback" };
 
-const STATUS_COLORS = {
-    pending_payment:  "badge-warning",
-    deposit_paid:     "badge-info",
-    accepted:         "badge-info",
-    ongoing:          "badge-accent",
-    completed:        "badge-success",
-    awaiting_balance: "badge-warning",
-    fully_paid:       "badge-success",
-    cancelled:        "badge-error",
-    rejected:         "badge-error",
-    disputed:         "badge-warning",
-    resolved:         "badge-ghost",
+const STATUS_STYLES = {
+    pending_payment: "border-amber-200 bg-white text-amber-700",
+    deposit_paid: "border-primary/30 bg-white text-primary",
+    accepted: "border-primary/30 bg-white text-primary",
+    ongoing: "border-primary/30 bg-white text-primary",
+    completed: "border-emerald-200 bg-white text-emerald-700",
+    awaiting_balance: "border-amber-200 bg-white text-amber-700",
+    fully_paid: "border-emerald-200 bg-white text-emerald-700",
+    cancelled: "border-rose-200 bg-white text-rose-700",
+    rejected: "border-rose-200 bg-white text-rose-700",
+    disputed: "border-amber-200 bg-white text-amber-700",
+    resolved: "border-base-300 bg-white text-slate-700",
+    missed_by_patient: "border-amber-200 bg-white text-amber-700",
+    missed_by_provider: "border-primary/30 bg-white text-primary",
+    missed_by_both: "border-primary/30 bg-white text-primary",
 };
+
+const StatusPill = ({ status }) => (
+    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold capitalize shadow-[0_0_0_1px_rgba(15,23,42,0.06),0_3px_10px_rgba(15,23,42,0.12)] ${STATUS_STYLES[status] || "border-base-300 bg-white text-slate-700"}`}>
+        {status.replace(/_/g, " ")}
+    </span>
+);
 
 // departmentId: optional ObjectId string — only used by institute role to filter by dept
 const TransactionList = ({ departmentId }) => {
@@ -39,15 +48,22 @@ const TransactionList = ({ departmentId }) => {
         },
     });
 
-    const transactions = data?.data?.transactions ?? [];
+    const transactions = [...(data?.data?.transactions ?? [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const currentUserId = authUser?._id?.toString();
+    const isCashOut = (t) => t.type === "cashback" && (t.payerId?._id ?? t.payerId)?.toString() === currentUserId;
+    const providerNet = (t) => isCashOut(t) ? -(t.amount ?? 0) : (t.netAmount ?? 0);
 
     // For institute, all fetched transactions are their departments' — sum everything.
     // For others, filter by matching payee/payer.
     const totalReceived = role === "institute"
-        ? transactions.reduce((sum, t) => sum + (t.netAmount ?? 0), 0)
+        ? transactions.reduce((sum, t) => sum + (isCashOut(t) ? -(t.amount ?? 0) : (t.netAmount ?? 0)), 0)
         : transactions
-            .filter(t => (t.payeeId?._id ?? t.payeeId)?.toString() === authUser?._id?.toString())
-            .reduce((sum, t) => sum + (t.netAmount ?? 0), 0);
+            .reduce((sum, t) => {
+                const payeeId = (t.payeeId?._id ?? t.payeeId)?.toString();
+                if (payeeId === authUser?._id?.toString()) return sum + (t.netAmount ?? 0);
+                if (isCashOut(t)) return sum - (t.amount ?? 0);
+                return sum;
+            }, 0);
 
     const totalPaid = transactions
         .filter(t => (t.payerId?._id ?? t.payerId)?.toString() === authUser?._id?.toString())
@@ -76,7 +92,7 @@ const TransactionList = ({ departmentId }) => {
             {/* Summary cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {isProvider ? (
-                    <div className="stat bg-base-200 rounded-xl">
+                    <div className="stat bg-base-100 border-2 border-base-300 rounded-xl shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
                         <div className="stat-title">Total Received (net)</div>
                         <div className="stat-value text-success text-2xl">
                             ₱{totalReceived.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
@@ -84,7 +100,7 @@ const TransactionList = ({ departmentId }) => {
                         <div className="stat-desc">After platform fee</div>
                     </div>
                 ) : (
-                    <div className="stat bg-base-200 rounded-xl">
+                    <div className="stat bg-base-100 border-2 border-base-300 rounded-xl shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
                         <div className="stat-title">Total Paid</div>
                         <div className="stat-value text-primary text-2xl">
                             ₱{totalPaid.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
@@ -92,7 +108,7 @@ const TransactionList = ({ departmentId }) => {
                         <div className="stat-desc">{transactions.length} transaction(s)</div>
                     </div>
                 )}
-                <div className="stat bg-base-200 rounded-xl">
+                <div className="stat bg-base-100 border-2 border-base-300 rounded-xl shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
                     <div className="stat-title">Transactions</div>
                     <div className="stat-value text-2xl">{transactions.length}</div>
                     <div className="stat-desc">All time</div>
@@ -100,7 +116,7 @@ const TransactionList = ({ departmentId }) => {
             </div>
 
             {/* Table */}
-            <div className="card bg-base-200 shadow overflow-x-auto">
+            <div className="card bg-base-100 border-2 border-base-300 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_26px_rgba(15,23,42,0.20)] overflow-x-auto">
                 <table className="table table-zebra w-full">
                     <thead>
                         <tr>
@@ -131,17 +147,13 @@ const TransactionList = ({ departmentId }) => {
                                         <br />
                                         <span className="opacity-50">{dayjs(t.createdAt).tz(PH_TZ).format("h:mm A")}</span>
                                     </td>
-                                    <td>
-                                        <span className={`badge badge-sm ${t.type === "deposit" ? "badge-info" : "badge-accent"}`}>
-                                            {TYPE_LABEL[t.type] ?? t.type}
-                                        </span>
-                                    </td>
+                                    <td className="text-xs font-semibold">{TYPE_LABEL[t.type] || t.type}</td>
                                     <td className="font-semibold">
                                         ₱{t.amount?.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
                                     </td>
                                     {isProvider ? (
-                                        <td className="text-success font-semibold">
-                                            ₱{t.netAmount?.toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                                        <td className={`${providerNet(t) < 0 ? "text-error" : "text-success"} font-semibold`}>
+                                            {providerNet(t) < 0 ? "-" : ""}₱{Math.abs(providerNet(t)).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
                                         </td>
                                     ) : (
                                         <td className="text-error text-sm">
@@ -157,11 +169,7 @@ const TransactionList = ({ departmentId }) => {
                                         )}
                                     </td>
                                     <td>
-                                        {appt?.status && (
-                                            <span className={`badge badge-sm ${STATUS_COLORS[appt.status] || "badge-ghost"} capitalize`}>
-                                                {appt.status.replace(/_/g, " ")}
-                                            </span>
-                                        )}
+                                        {appt?.status && <StatusPill status={appt.status} />}
                                     </td>
                                     <td className="font-mono text-xs text-primary">{t.referenceNumber}</td>
                                 </tr>

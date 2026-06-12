@@ -68,9 +68,9 @@ const Layout = ({ showSidebar = true }) => {
         {showSidebar && <Sidebar />}
 
         <div className="flex-1 flex flex-col">
-          <Navbar />
+          <Navbar offsetSidebar={showSidebar} />
 
-          <main className="flex-1 overflow-y-auto">
+          <main className="flex-1 overflow-y-auto pt-20">
             <Outlet />
           </main>
         </div>

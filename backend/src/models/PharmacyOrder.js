@@ -68,6 +68,7 @@ const pharmacyOrderSchema = new mongoose.Schema(
         },
         subtotal: { type: Number, required: true, min: 0 },
         deliveryFee: { type: Number, default: 0, min: 0 },
+        platformFee: { type: Number, default: 0, min: 0 },
         totalAmount: { type: Number, required: true, min: 0 },
         pickupTime: { type: Date },
         deliveryAddress: { type: String },

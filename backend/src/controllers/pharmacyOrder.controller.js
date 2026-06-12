@@ -23,7 +23,10 @@ const ACTIVE_STATUSES = [
 
 const RECENT_COMPLETED_DAYS = 7;
 const AUTO_COMPLETE_MINUTES = 10;
-const DELIVERY_FEE = 75;
+const DELIVERY_FEE_RATE = 0.15;
+const PLATFORM_FEE_RATE = 0.1;
+
+const roundCurrency = (value) => Math.round(value * 100) / 100;
 
 const ensurePharmacy = (req, res) => {
     if (req.user?.role !== "pharmacy") {
@@ -123,7 +126,8 @@ const buildOrderFromCart = async ({ user, items, fulfillmentMethod, pickupTime, 
         throw new Error("This cart does not contain any medicine that needs prescription review.");
     }
 
-    const deliveryFee = fulfillmentMethod === "delivery" ? DELIVERY_FEE : 0;
+    const deliveryFee = fulfillmentMethod === "delivery" ? roundCurrency(subtotal * DELIVERY_FEE_RATE) : 0;
+    const platformFee = roundCurrency(subtotal * PLATFORM_FEE_RATE);
     const order = await PharmacyOrder.create({
         pharmacyId,
         patientId: user._id,
@@ -133,7 +137,8 @@ const buildOrderFromCart = async ({ user, items, fulfillmentMethod, pickupTime, 
         paymentStatus,
         subtotal,
         deliveryFee,
-        totalAmount: subtotal + deliveryFee,
+        platformFee,
+        totalAmount: roundCurrency(subtotal + deliveryFee + platformFee),
         pickupTime,
         deliveryAddress,
         clientRequestId,
@@ -264,6 +269,7 @@ export const createPaidPharmacyOrder = asyncHandler(async (req, res) => {
         });
         await reduceStockForOrder(order);
         notify(order.pharmacyId, "pharmacy_order_paid", "New Paid Pharmacy Order", `Order ${order.referenceNumber} is ready for preparation.`);
+        notify(order.patientId, "pharmacy_order_paid", "Pharmacy Payment Confirmed", `Your pharmacy payment of PHP ${order.totalAmount.toFixed(2)} was received. Reference: ${order.referenceNumber}`);
         sendSuccess(res, 201, "Pharmacy order paid", { order: normalizeOrder(order) });
     } catch (error) {
         if (error.code === 11000 && clientRequestId && await sendExistingClientOrder({
@@ -451,6 +457,7 @@ export const payApprovedPrescriptionOrder = asyncHandler(async (req, res) => {
     await reduceStockForOrder(paidOrder);
 
     notify(paidOrder.pharmacyId, "pharmacy_order_paid", "Prescription Order Paid", `Order ${paidOrder.referenceNumber} is ready for preparation.`);
+    notify(paidOrder.patientId, "pharmacy_order_paid", "Pharmacy Payment Confirmed", `Your approved prescription payment of PHP ${paidOrder.totalAmount.toFixed(2)} was received. Reference: ${paidOrder.referenceNumber}`);
 
     sendSuccess(res, 200, "Prescription order paid", { order: normalizeOrder(paidOrder) });
 });
@@ -539,6 +546,7 @@ export const getPharmacyIncome = asyncHandler(async (req, res) => {
         acc.grossSales += order.totalAmount || 0;
         acc.productSales += order.subtotal || 0;
         acc.deliveryFees += order.deliveryFee || 0;
+        acc.platformFees += order.platformFee || 0;
         acc.orderCount += 1;
         acc.itemCount += (order.items || []).reduce((sum, item) => sum + item.quantity, 0);
         if (order.status === "completed") acc.completedSales += order.totalAmount || 0;
@@ -548,6 +556,7 @@ export const getPharmacyIncome = asyncHandler(async (req, res) => {
         grossSales: 0,
         productSales: 0,
         deliveryFees: 0,
+        platformFees: 0,
         completedSales: 0,
         activeSales: 0,
         orderCount: 0,

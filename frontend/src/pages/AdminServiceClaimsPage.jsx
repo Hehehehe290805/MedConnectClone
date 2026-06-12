@@ -5,9 +5,9 @@ import { ClockIcon, UsersIcon, RefreshCwIcon } from "lucide-react";
 import toast from "react-hot-toast";
 
 const STATUS_STYLES = {
-    pending: "badge-warning",
-    verified: "badge-success",
-    rejected: "badge-error",
+    pending: "border-amber-200 bg-white text-amber-700",
+    verified: "border-emerald-200 bg-white text-emerald-700",
+    rejected: "border-rose-200 bg-white text-rose-700",
 };
 
 const ClaimCard = ({ claim, onView }) => {
@@ -19,11 +19,13 @@ const ClaimCard = ({ claim, onView }) => {
     const serviceName = claim.serviceId?.name || "—";
 
     return (
-        <div className="bg-base-100 rounded-xl border border-base-300 p-4 flex items-start justify-between gap-4 shadow-sm hover:shadow-md transition-shadow">
+        <div className="bg-base-100 rounded-xl border-2 border-base-300 p-4 flex items-start justify-between gap-4 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)] hover:border-primary/30 hover:shadow-[0_0_0_2px_rgba(47,112,186,0.14),0_12px_30px_rgba(15,23,42,0.22)] transition-all">
             <div className="flex-1 min-w-0 space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-semibold text-sm">{serviceName}</p>
-                    <span className={`badge badge-xs ${STATUS_STYLES[claim.status] || "badge-ghost"}`}>{claim.status}</span>
+                    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold capitalize shadow-[0_0_0_1px_rgba(15,23,42,0.06),0_3px_10px_rgba(15,23,42,0.12)] ${STATUS_STYLES[claim.status] || "border-base-300 bg-white text-slate-700"}`}>
+                        {claim.status}
+                    </span>
                 </div>
                 <p className="text-xs opacity-60 truncate">{deptName}{instituteName && ` · ${instituteName}`}</p>
                 <div className="flex flex-wrap gap-3 text-xs opacity-50 mt-1">
@@ -95,7 +97,7 @@ const AdminServiceClaimsPage = () => {
         <div className="p-4 sm:p-8 max-w-4xl mx-auto space-y-6">
             <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
-                    <h1 className="text-2xl font-bold">Service Claims</h1>
+                    <h1 className="text-3xl font-bold">Service Claims</h1>
                     <p className="text-sm opacity-60 mt-0.5">Review service claims submitted by department accounts.</p>
                 </div>
                 <button
@@ -114,7 +116,7 @@ const AdminServiceClaimsPage = () => {
                     { label: "Approved", key: "verified", cls: "text-success" },
                     { label: "Rejected", key: "rejected", cls: "text-error" },
                 ].map(({ label, key, cls }) => (
-                    <div key={key} className="bg-base-200 rounded-xl p-4 text-center">
+                    <div key={key} className="bg-base-200 border-2 border-base-300 rounded-xl p-4 text-center shadow-[0_0_0_1px_rgba(15,23,42,0.08),0_6px_18px_rgba(15,23,42,0.16)]">
                         <p className={`text-2xl font-bold ${cls}`}>{counts[key]}</p>
                         <p className="text-xs opacity-50 mt-0.5">{label}</p>
                     </div>
@@ -136,7 +138,7 @@ const AdminServiceClaimsPage = () => {
                     >
                         {label}
                         {key !== "all" && counts[key] > 0 && (
-                            <span className={`badge badge-xs ml-1 ${filter === key ? "badge-primary-content" : "badge-info"}`}>
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${filter === key ? "border-white/70 bg-white text-primary" : "border-primary/30 bg-white text-primary"}`}>
                                 {counts[key]}
                             </span>
                         )}
