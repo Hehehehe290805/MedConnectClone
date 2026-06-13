@@ -6,6 +6,7 @@ import { useNavigate } from "react-router";
 import useAuthUser from "../hooks/useAuthUser";
 import { getMyPharmacyOrders } from "../lib/api";
 import DepartmentIncomeTab from "../components/DepartmentIncomeTab.jsx";
+import InstituteAnalyticsTab from "../components/InstituteAnalyticsTab.jsx";
 import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
@@ -301,6 +302,7 @@ const TransactionPage = () => {
     const isDoctor = authUser?.role === "doctor" || authUser?.role === "institute" || authUser?.role === "department";
     const canShowPharmacyTab = authUser?.role === "patient";
     const canShowDepartmentIncomeTab = authUser?.role === "department";
+    const canShowInstituteTab = authUser?.role === "institute";
 
     const totalReceived = transactions.reduce((sum, t) => {
         const payeeId = (t.payeeId?._id ?? t.payeeId)?.toString();
@@ -339,7 +341,7 @@ const TransactionPage = () => {
                     <h1 className="text-3xl font-bold">Transaction History</h1>
                 </div>
 
-                {(canShowPharmacyTab || canShowDepartmentIncomeTab) && (
+                {(canShowPharmacyTab || canShowDepartmentIncomeTab || canShowInstituteTab) && (
                     <div role="tablist" className="tabs tabs-bordered">
                         <button role="tab" className={`tab gap-2 ${tab === "appointments" ? "tab-active" : ""}`} onClick={() => setTab("appointments")}>
                             <ReceiptIcon className="size-4" />
@@ -357,10 +359,18 @@ const TransactionPage = () => {
                                 All Income
                             </button>
                         )}
+                        {canShowInstituteTab && (
+                            <button role="tab" className={`tab gap-2 ${tab === "institute-analytics" ? "tab-active" : ""}`} onClick={() => setTab("institute-analytics")}>
+                                <BarChart3Icon className="size-4" />
+                                Department Analytics
+                            </button>
+                        )}
                     </div>
                 )}
 
-                {tab !== "income" && (
+                {tab === "institute-analytics" && <InstituteAnalyticsTab />}
+
+                {tab !== "income" && tab !== "institute-analytics" && (
                     <>
                         {transactionCount > 0 && (
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

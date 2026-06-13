@@ -3,7 +3,8 @@ import {
     bookAppointment, payDeposit, acceptAppointment, rejectAppointment,
     cancelAppointment, completeAppointment, payBalance,
     rebookAppointment, fileDispute, submitReview, joinCall, getMyAppointments, getTransactionHistory,
-    getProviderReviews, deleteReview, getDepartmentIncome, createDepartmentManualTransaction
+    getProviderReviews, deleteReview, getDepartmentIncome, createDepartmentManualTransaction,
+    getInstituteAnalytics
 } from "../controllers/booking.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
@@ -30,12 +31,12 @@ router.post("/rebook", rebookAppointmentValidator, validate, rebookAppointment);
 router.post("/dispute",  fileDisputeValidator,        validate, fileDispute);
 router.post("/review",   submitReviewValidator,       validate, submitReview);
 router.post("/join-call", joinCallValidator, validate, joinCall);
-router.get("/my-appointments",        getMyAppointments);
-router.get("/transaction-history",    getTransactionHistory);
-router.get("/reviews/:providerId",    getProviderReviews);
+router.get("/my-appointments",          getMyAppointments);
+router.get("/transaction-history",      getTransactionHistory);
+router.get("/reviews/:providerId",      getProviderReviews);
 router.delete("/review/:appointmentId", deleteReviewValidator, validate, deleteReview);
+router.get("/department-income",        getDepartmentIncome);
+router.post("/department-manual-transaction", createDepartmentManualTransactionValidator, validate, createDepartmentManualTransaction);
+router.get("/institute-analytics",      getInstituteAnalytics);
 
 export default router;
-
-router.get('/department-income', getDepartmentIncome);
-router.post('/department-manual-transaction', createDepartmentManualTransactionValidator, validate, createDepartmentManualTransaction);
