@@ -317,3 +317,9 @@ export const getPharmacyIncome = (params = {}) =>
 
 export const createManualPharmacyTransaction = (data) =>
   axiosInstance.post("/pharmacy/income/manual", data).then(r => r.data);
+
+export const getDepartmentIncome = (params = {}) =>
+  axiosInstance.get('/booking/department-income', { params }).then(r => r.data);
+
+export const createDepartmentManualTransaction = (data) =>
+  axiosInstance.post('/booking/department-manual-transaction', data).then(r => r.data);
