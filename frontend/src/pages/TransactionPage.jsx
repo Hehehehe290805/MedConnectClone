@@ -178,7 +178,9 @@ const AppointmentTransactionModal = ({ transaction, isDoctor, currentUserId, onC
     const providerName = appt?.doctorId
         ? `Dr. ${appt.doctorId.firstName} ${appt.doctorId.lastName}`
         : "Institute";
-    const patientName = appt?.patientId
+    const patientName = appt?.walkInDetails?.firstName
+        ? `${appt.walkInDetails.firstName} ${appt.walkInDetails.lastName || ""}`.trim() + " (Walk-in)"
+        : appt?.patientId
         ? `${appt.patientId.firstName} ${appt.patientId.lastName}`
         : "Patient";
     const counterpart = isDoctor ? patientName : providerName;
@@ -433,7 +435,9 @@ const TransactionPage = () => {
                                     const providerName = appt?.doctorId
                                         ? `Dr. ${appt.doctorId.firstName} ${appt.doctorId.lastName}`
                                         : "Institute";
-                                    const patientName = appt?.patientId
+                                    const patientName = appt?.walkInDetails?.firstName
+                                        ? `${appt.walkInDetails.firstName} ${appt.walkInDetails.lastName || ""}`.trim() + " (Walk-in)"
+                                        : appt?.patientId
                                         ? `${appt.patientId.firstName} ${appt.patientId.lastName}`
                                         : "Patient";
                                     const counterpart = isDoctor ? patientName : providerName;

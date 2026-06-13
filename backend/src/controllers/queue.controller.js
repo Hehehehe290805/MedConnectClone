@@ -5,6 +5,10 @@ import timezone from "dayjs/plugin/timezone.js";
 import AppointmentQueue from "../models/AppointmentQueue.js";
 import Appointment from "../models/Appointment.js";
 import User from "../models/User.js";
+import InstituteDepartmentService from "../models/InstituteDepartmentService.js";
+import DepartmentManualTransaction from "../models/DepartmentManualTransaction.js";
+import Transaction from "../models/Transaction.js";
+import crypto from "crypto";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { notify } from "../services/notification.service.js";
@@ -120,9 +124,43 @@ export async function buildQueueForProvider(providerId, role) {
     );
 }
 
+// ── Get Walk-in Services Status ──────────────────────────────────────────────
+// GET /api/queue/services-status
+export const getWalkinServicesStatus = asyncHandler(async (req, res) => {
+    if (req.user.role !== "department") {
+        return sendError(res, 403, "Only departments can access this endpoint");
+    }
+
+    const todayStart = toQueueDate(new Date());
+    const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+    const services = await InstituteDepartmentService.find({ departmentId: req.user._id, status: "verified" })
+        .populate("serviceId", "name")
+        .lean();
+
+    const results = await Promise.all(services.map(async (srv) => {
+        const count = await Appointment.countDocuments({
+            serviceId: srv._id,
+            start: { $gte: todayStart, $lt: tomorrowStart },
+            status: { $nin: ["rejected", "cancelled", "missed_by_patient", "missed_by_provider", "missed_by_both"] }
+        });
+
+        return {
+            _id: srv._id,
+            serviceName: srv.serviceId?.name || "Unknown Service",
+            price: srv.price,
+            maxPatientsPerDay: srv.maxPatientsPerDay,
+            currentQueueCount: count,
+            isFull: srv.maxPatientsPerDay ? count >= srv.maxPatientsPerDay : false,
+        };
+    }));
+
+    return sendSuccess(res, 200, "Services capacity fetched", { services: results });
+});
+
 // ── Add Walk-in / Emergency ──────────────────────────────────────────────────
 // POST /api/queue/walkin
-// Body: { patientFirstName, patientLastName, type: "walkin"|"emergency" }
+// Body: { firstName, lastName, age, gender, address, contactDetails, serviceId, type: "walkin"|"emergency" }
 export const addWalkin = asyncHandler(async (req, res) => {
     const providerId = req.user._id;
 
@@ -130,8 +168,8 @@ export const addWalkin = asyncHandler(async (req, res) => {
         return sendError(res, 403, "Only doctors and departments can add walk-ins");
     }
 
-    const { patientFirstName, patientLastName, type } = req.body;
-    if (!patientFirstName || !patientLastName) {
+    const { firstName, lastName, age, gender, address, contactDetails, serviceId, type } = req.body;
+    if (!firstName || !lastName) {
         return sendError(res, 400, "Patient first and last name are required");
     }
     if (!["walkin", "emergency"].includes(type)) {
@@ -141,16 +179,46 @@ export const addWalkin = asyncHandler(async (req, res) => {
     const todayDate = toQueueDate(new Date());
     const tomorrowDate = new Date(todayDate.getTime() + 24 * 60 * 60 * 1000);
 
+    // Validate capacity if serviceId is provided and role is department
+    let finalServiceId = undefined;
+    let priceAmount = 0;
+    if (req.user.role === "department" && serviceId) {
+        const srv = await InstituteDepartmentService.findOne({ _id: serviceId, departmentId: providerId, status: "verified" });
+        if (!srv) return sendError(res, 400, "Invalid service selected");
+
+        if (srv.maxPatientsPerDay) {
+            const count = await Appointment.countDocuments({
+                serviceId: srv._id,
+                start: { $gte: todayDate, $lt: tomorrowDate },
+                status: { $nin: ["rejected", "cancelled", "missed_by_patient", "missed_by_provider", "missed_by_both"] }
+            });
+            if (count >= srv.maxPatientsPerDay) {
+                return sendError(res, 400, "Service is fully booked for today");
+            }
+        }
+        finalServiceId = srv._id;
+        priceAmount = srv.price || 0;
+    }
+
     // Build a minimal Appointment record for the walk-in
     const now = new Date();
     const apptData = {
         patientId: providerId,   // placeholder — walk-in has no real patient account
+        serviceId: finalServiceId,
+        walkInDetails: {
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            age: age ? Number(age) : undefined,
+            gender: gender || undefined,
+            address: address?.trim(),
+            contactDetails: contactDetails?.trim()
+        },
         status: "accepted",
         virtual: false,
         start: now,
         end: new Date(now.getTime() + 30 * 60 * 1000), // 30-min placeholder
-        amount: 0,
-        platformFee: 0,
+        amount: priceAmount,
+        platformFee: priceAmount * 0.1,
         depositAmount: 0,
         balanceAmount: 0,
         depositPaid: true,
@@ -224,6 +292,89 @@ export const addWalkin = asyncHandler(async (req, res) => {
 });
 
 // ── Get Today's Queue ────────────────────────────────────────────────────────
+// POST /api/queue/pay-complete-active
+export const payAndCompleteActiveSlot = asyncHandler(async (req, res) => {
+    const providerId = req.user._id;
+
+    if (req.user.role !== "department") {
+        return sendError(res, 403, "Only departments can pay and complete active slot");
+    }
+
+    const todayDate = toQueueDate(new Date());
+    const queue = await AppointmentQueue.findOne({ providerId, date: todayDate });
+    if (!queue) return sendError(res, 404, "No queue found for today");
+
+    const activeSlot = queue.slots.find(s => s.status === "active");
+    if (!activeSlot) return sendError(res, 400, "No active slot to complete");
+
+    const currentAppt = await Appointment.findById(activeSlot.appointmentId)
+        .populate("serviceId", "name");
+    if (!currentAppt) return sendError(res, 404, "Appointment not found");
+
+    if (["completed", "fully_paid"].includes(currentAppt.status)) {
+        return sendError(res, 400, "Appointment is already paid and completed");
+    }
+
+    const amount = currentAppt.amount || 0;
+    const platformFee = amount > 0
+        ? Math.round(amount * 0.10 * 100) / 100  // 10% platform fee
+        : 0;
+    const netAmount = Math.round((amount - platformFee) * 100) / 100;
+
+    const paymentMethod = req.body.paymentMethod || "cash";
+    const ref = "WLK-" + crypto.randomUUID().split("-")[0].toUpperCase();
+
+    // Determine customer name from walkInDetails
+    let customerName = "Walk-in patient";
+    if (currentAppt.walkInDetails?.firstName) {
+        customerName = `${currentAppt.walkInDetails.firstName} ${currentAppt.walkInDetails.lastName || ""}`.trim();
+    }
+    const serviceName = currentAppt.serviceId?.name || "Walk-in Service";
+
+    if (amount > 0) {
+        // 1. Create a proper Transaction record (visible in institute + department analytics)
+        //    payerId = providerId (walk-in patient has no account; department acts as payer proxy)
+        //    payeeId = providerId (the department receives the payment)
+        await Transaction.create({
+            appointmentId: currentAppt._id,
+            payerId: providerId,   // walk-in proxy — no patient account
+            payeeId: providerId,   // department is the payee
+            amount,
+            platformFee,
+            netAmount,
+            type: "deposit",       // use deposit type to match existing analytics queries
+            referenceNumber: ref,
+        });
+
+        // 2. Also store a DepartmentManualTransaction for the department income view
+        await DepartmentManualTransaction.create({
+            departmentId: providerId,
+            transactionDate: new Date(),
+            customerName,
+            itemSummary: `${serviceName} — Walk-in (${paymentMethod})`,
+            amount,
+            paymentMethod,
+            note: `Platform fee: PHP ${platformFee.toLocaleString("en-PH")} | Net to dept: PHP ${netAmount.toLocaleString("en-PH")} | Ref: ${ref}`,
+            referenceNumber: ref + "-MAN",
+        });
+
+        // 3. Update appointment's stored fee fields to match actual deduction
+        currentAppt.platformFee = platformFee;
+        currentAppt.amount = amount;
+    }
+
+    // 4. Mark appointment as fully paid
+    currentAppt.status = "fully_paid";
+    await currentAppt.save();
+
+    return sendSuccess(res, 200, "Payment recorded. Appointment completed.", {
+        amount,
+        platformFee,
+        netAmount,
+        referenceNumber: ref,
+    });
+});
+
 // GET /api/queue/today
 export const getTodayQueue = asyncHandler(async (req, res) => {
     const providerId = req.user._id;
@@ -236,8 +387,11 @@ export const getTodayQueue = asyncHandler(async (req, res) => {
     const queue = await AppointmentQueue.findOne({ providerId, date: todayDate })
         .populate({
             path: "slots.appointmentId",
-            select: "patientId start end virtual status amount",
-            populate: { path: "patientId", select: "firstName lastName profilePic email" },
+            select: "patientId start end virtual status amount walkInDetails serviceId",
+            populate: [
+                { path: "patientId", select: "firstName lastName profilePic email" },
+                { path: "serviceId", select: "name" },
+            ],
         })
         .lean();
 

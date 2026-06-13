@@ -31,6 +31,16 @@ const AppointmentSchema = new mongoose.Schema({
     default: "pending_payment",
   },
 
+  // For walk-in patients without accounts
+  walkInDetails: {
+    firstName: { type: String },
+    lastName: { type: String },
+    age: { type: Number },
+    gender: { type: String, enum: ["male", "female", "other"] },
+    address: { type: String },
+    contactDetails: { type: String },
+  },
+
   // Payment — all computed at booking time
   amount:        { type: Number, required: true },  // total price
   platformFee:   { type: Number, required: true },  // 10% of amount

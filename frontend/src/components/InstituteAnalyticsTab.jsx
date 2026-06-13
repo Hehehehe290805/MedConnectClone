@@ -47,7 +47,9 @@ const StatusPill = ({ status }) => (
 const TransactionModal = ({ transaction, onClose }) => {
     if (!transaction) return null;
     const appt = transaction.appointmentId;
-    const patientName = appt?.patientId
+    const patientName = appt?.walkInDetails?.firstName
+        ? `${appt.walkInDetails.firstName} ${appt.walkInDetails.lastName || ""}`.trim() + " (Walk-in)"
+        : appt?.patientId
         ? `${appt.patientId.firstName} ${appt.patientId.lastName}`
         : "Patient";
     const status = appt?.status ?? "—";
@@ -179,7 +181,9 @@ const DepartmentTransactionDrawer = ({ dept, onClose }) => {
                         <tbody>
                             {txns.map(t => {
                                 const appt = t.appointmentId;
-                                const patientName = appt?.patientId
+                                const patientName = appt?.walkInDetails?.firstName
+                                    ? `${appt.walkInDetails.firstName} ${appt.walkInDetails.lastName || ""}`.trim() + " (Walk-in)"
+                                    : appt?.patientId
                                     ? `${appt.patientId.firstName} ${appt.patientId.lastName}`
                                     : "—";
                                 return (
