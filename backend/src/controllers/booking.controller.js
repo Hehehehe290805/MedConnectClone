@@ -26,7 +26,7 @@ const toPhTime = (date) => dayjs(date).tz("Asia/Manila");
 // two appointments from colliding if one runs slightly over time.
 const GAP_MINUTES = 5;
 
-// Only these statuses block the slot — completed/cancelled/rejected do not.
+// Only these statuses block the slot ΓÇö completed/cancelled/rejected do not.
 const ACTIVE_STATUSES = ["pending_payment", "deposit_paid", "accepted", "ongoing"];
 const REBOOKABLE_STATUSES = ["missed_by_patient", "missed_by_provider", "missed_by_both"];
 const isRebookApprovalRequest = (appointment) =>
@@ -82,13 +82,13 @@ function applyTimeToDate(date, timeStr) {
 
 const roundPeso = (value) => Math.round((value || 0) * 100) / 100;
 
-// ── BOOK ──────────────────────────────────────────────────────────────────────
+// ΓöÇΓöÇ BOOK ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 export const bookAppointment = asyncHandler(async (req, res) => {
     const { doctorId, instituteId, serviceId: providedServiceId, start, preConsultationMarkdown, virtual: patientVirtual } = req.body;
     const patientId = req.user._id;
     const providerType = doctorId ? "doctor" : "institute";
 
-    // Doctor bookings have no service — pricing is keyed by providerId + serviceId: null.
+    // Doctor bookings have no service ΓÇö pricing is keyed by providerId + serviceId: null.
     // Institute bookings require a specific serviceId from their verified service claims.
     const serviceId = providerType === "doctor"
         ? null
@@ -225,7 +225,7 @@ export const bookAppointment = asyncHandler(async (req, res) => {
                 fileType: "preconsultation",
             });
         } catch (err) {
-            // Non-fatal — booking succeeds even if the file attachment fails
+            // Non-fatal ΓÇö booking succeeds even if the file attachment fails
 
         }
     }
@@ -248,7 +248,7 @@ export const bookAppointment = asyncHandler(async (req, res) => {
     });
 });
 
-// ── PAY DEPOSIT ───────────────────────────────────────────────────────────────
+// ΓöÇΓöÇ PAY DEPOSIT ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 export const payDeposit = asyncHandler(async (req, res) => {
     const patientId = req.user._id;
     const { appointmentId, referenceNumber } = req.body;
@@ -279,15 +279,15 @@ export const payDeposit = asyncHandler(async (req, res) => {
 
     if (providerId) {
         notify(providerId, "payment_received", "Deposit Received (Held)",
-            `The patient has paid the deposit (₱${appointment.depositAmount}). The deposit is held by the platform until the appointment is completed. Please accept or reject the appointment.`);
+            `The patient has paid the deposit (Γé▒${appointment.depositAmount}). The deposit is held by the platform until the appointment is completed. Please accept or reject the appointment.`);
     }
     notify(patientId, "payment_received", "Deposit Confirmed",
-        `Your deposit of ₱${appointment.depositAmount} has been recorded and is held by the platform. Reference: ${referenceNumber}`);
+        `Your deposit of Γé▒${appointment.depositAmount} has been recorded and is held by the platform. Reference: ${referenceNumber}`);
 
     return sendSuccess(res, 200, "Deposit paid. Awaiting provider confirmation.", { appointment });
 });
 
-// ── ACCEPT (Doctor or Institute) ─────────────────────────────────────────────
+// ΓöÇΓöÇ ACCEPT (Doctor or Institute) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 export const acceptAppointment = asyncHandler(async (req, res) => {
     const providerId = req.user._id;
     const { appointmentId } = req.body;
@@ -322,7 +322,7 @@ export const acceptAppointment = asyncHandler(async (req, res) => {
     return sendSuccess(res, 200, "Appointment accepted.", { appointment });
 });
 
-// ── REJECT (Doctor or Institute) ─────────────────────────────────────────────
+// ΓöÇΓöÇ REJECT (Doctor or Institute) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 export const rejectAppointment = asyncHandler(async (req, res) => {
     const providerId = req.user._id;
     const { appointmentId, reason } = req.body;
@@ -362,7 +362,7 @@ export const rejectAppointment = asyncHandler(async (req, res) => {
     appointment.rejectedAt = new Date();
     await appointment.save();
 
-    // Provider rejected — full deposit refund to patient
+    // Provider rejected ΓÇö full deposit refund to patient
     const refundAmount = roundPeso(appointment.depositAmount);
     let refundRef = "";
     if (refundAmount > 0) {
@@ -379,15 +379,15 @@ export const rejectAppointment = asyncHandler(async (req, res) => {
         refundRef = refund.referenceNumber;
     }
 
-    notify(appointment.patientId, "appointment_rejected", "Appointment Rejected — Deposit Refunded",
-        `Your appointment on ${toPhTime(appointment.start).format("MMM D, YYYY [at] h:mm A")} was rejected.${reason ? ` Reason: ${reason}` : ""} Your deposit of ₱${appointment.depositAmount} was refunded.${refundRef ? ` Refund reference: ${refundRef}.` : ""}`);
-    notify(providerId, "appointment_rejected", "Appointment Rejected — Refund Recorded",
-        `You rejected the appointment on ${toPhTime(appointment.start).format("MMM D, YYYY [at] h:mm A")}. The patient's deposit refund of ₱${refundAmount} was recorded.${refundRef ? ` Refund reference: ${refundRef}.` : ""}`);
+    notify(appointment.patientId, "appointment_rejected", "Appointment Rejected ΓÇö Deposit Refunded",
+        `Your appointment on ${toPhTime(appointment.start).format("MMM D, YYYY [at] h:mm A")} was rejected.${reason ? ` Reason: ${reason}` : ""} Your deposit of Γé▒${appointment.depositAmount} was refunded.${refundRef ? ` Refund reference: ${refundRef}.` : ""}`);
+    notify(providerId, "appointment_rejected", "Appointment Rejected ΓÇö Refund Recorded",
+        `You rejected the appointment on ${toPhTime(appointment.start).format("MMM D, YYYY [at] h:mm A")}. The patient's deposit refund of Γé▒${refundAmount} was recorded.${refundRef ? ` Refund reference: ${refundRef}.` : ""}`);
 
     return sendSuccess(res, 200, "Appointment rejected.", { appointment });
 });
 
-// ── CANCEL (Patient) ──────────────────────────────────────────────────────────
+// ΓöÇΓöÇ CANCEL (Patient) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 export const cancelAppointment = asyncHandler(async (req, res) => {
     const patientId = req.user._id;
     const { appointmentId } = req.body;
@@ -404,12 +404,12 @@ export const cancelAppointment = asyncHandler(async (req, res) => {
 
     const providerId = appointment.doctorId || appointment.instituteId;
     if (appointment.depositPaid && providerId) {
-        // Patient cancelled after paying deposit — deposit is forfeited to the provider
+        // Patient cancelled after paying deposit ΓÇö deposit is forfeited to the provider
         const providerNet = Math.round((appointment.depositAmount - appointment.platformFee) * 100) / 100;
-        notify(providerId, "appointment_cancelled", "Appointment Cancelled — Deposit Released",
-            `The patient cancelled their appointment on ${toPhTime(appointment.start).format("MMM D, YYYY [at] h:mm A")}. The deposit (₱${appointment.depositAmount} → ₱${providerNet} after platform fee) has been released to you.`);
+        notify(providerId, "appointment_cancelled", "Appointment Cancelled ΓÇö Deposit Released",
+            `The patient cancelled their appointment on ${toPhTime(appointment.start).format("MMM D, YYYY [at] h:mm A")}. The deposit (Γé▒${appointment.depositAmount} ΓåÆ Γé▒${providerNet} after platform fee) has been released to you.`);
         notify(patientId, "appointment_cancelled", "Appointment Cancelled",
-            `Your appointment on ${toPhTime(appointment.start).format("MMM D, YYYY [at] h:mm A")} was cancelled. Your deposit of ₱${appointment.depositAmount} is non-refundable.`);
+            `Your appointment on ${toPhTime(appointment.start).format("MMM D, YYYY [at] h:mm A")} was cancelled. Your deposit of Γé▒${appointment.depositAmount} is non-refundable.`);
     } else {
         if (providerId) {
             notify(providerId, "appointment_cancelled", "Appointment Cancelled",
@@ -422,7 +422,7 @@ export const cancelAppointment = asyncHandler(async (req, res) => {
     return sendSuccess(res, 200, "Appointment cancelled.", { appointment });
 });
 
-// ── COMPLETE (Either party) ───────────────────────────────────────────────────
+// ΓöÇΓöÇ COMPLETE (Either party) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 export const completeAppointment = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     const { appointmentId } = req.body;
@@ -437,7 +437,7 @@ export const completeAppointment = asyncHandler(async (req, res) => {
     if (!isParticipant) return sendError(res, 403, "Not authorized");
     if (appointment.status !== "ongoing") return sendError(res, 400, "Can only complete an ongoing appointment");
 
-    // Virtual → awaiting balance; in-person → fully paid
+    // Virtual ΓåÆ awaiting balance; in-person ΓåÆ fully paid
     appointment.status = appointment.virtual ? "awaiting_balance" : "fully_paid";
     await appointment.save();
 
@@ -456,7 +456,7 @@ export const completeAppointment = asyncHandler(async (req, res) => {
     return sendSuccess(res, 200, "Appointment marked as completed.", { appointment });
 });
 
-// ── PAY BALANCE (Patient, virtual only) ───────────────────────────────────────
+// ΓöÇΓöÇ PAY BALANCE (Patient, virtual only) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 export const payBalance = asyncHandler(async (req, res) => {
     const patientId = req.user._id;
     const { appointmentId, referenceNumber } = req.body;
@@ -485,15 +485,15 @@ export const payBalance = asyncHandler(async (req, res) => {
 
     if (providerId) {
         notify(providerId, "payment_received", "Balance Payment Received",
-            `The patient has paid the remaining balance (₱${appointment.balanceAmount}). Reference: ${referenceNumber}`);
+            `The patient has paid the remaining balance (Γé▒${appointment.balanceAmount}). Reference: ${referenceNumber}`);
     }
     notify(patientId, "payment_received", "Balance Payment Confirmed",
-        `Your balance payment of ₱${appointment.balanceAmount} has been recorded. Reference: ${referenceNumber}`);
+        `Your balance payment of Γé▒${appointment.balanceAmount} has been recorded. Reference: ${referenceNumber}`);
 
     return sendSuccess(res, 200, "Balance paid. Appointment fully paid.", { appointment });
 });
 
-// ── DISPUTE ───────────────────────────────────────────────────────────────────
+// ΓöÇΓöÇ DISPUTE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 export const rebookAppointment = asyncHandler(async (req, res) => {
     const patientId = req.user._id;
     const { appointmentId, start, referenceNumber } = req.body;
@@ -645,7 +645,7 @@ export const fileDispute = asyncHandler(async (req, res) => {
     return sendSuccess(res, 201, "Dispute filed. An admin will review your case.", { appointment });
 });
 
-// ── JOIN CALL (Virtual only) ──────────────────────────────────────────────────
+// ΓöÇΓöÇ JOIN CALL (Virtual only) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 // Marks the current user as having joined the video call. Both parties must join
 // within 5 minutes of the appointment start; the cron job handles timeouts.
 export const joinCall = asyncHandler(async (req, res) => {
@@ -669,7 +669,7 @@ export const joinCall = asyncHandler(async (req, res) => {
     return sendSuccess(res, 200, "Joined the call.", { appointment });
 });
 
-// ── SUBMIT REVIEW ─────────────────────────────────────────────────────────────
+// ΓöÇΓöÇ SUBMIT REVIEW ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 export const submitReview = asyncHandler(async (req, res) => {
     const patientId = req.user._id;
     const { appointmentId, rating, review } = req.body;
@@ -687,7 +687,7 @@ export const submitReview = asyncHandler(async (req, res) => {
     return sendSuccess(res, 200, "Review submitted.", { appointment });
 });
 
-// ── MY APPOINTMENTS ───────────────────────────────────────────────────────────
+// ΓöÇΓöÇ MY APPOINTMENTS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 export const getMyAppointments = asyncHandler(async (req, res) => {
     const userId = req.user._id;
 
@@ -722,7 +722,7 @@ export const getMyAppointments = asyncHandler(async (req, res) => {
     return sendSuccess(res, 200, "Appointments fetched", { appointments: formatted });
 });
 
-// ── PROVIDER REVIEWS ─────────────────────────────────────────────────────────
+// ΓöÇΓöÇ PROVIDER REVIEWS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 export const getProviderReviews = asyncHandler(async (req, res) => {
     const { providerId } = req.params;
 
@@ -769,7 +769,7 @@ export const getProviderReviews = asyncHandler(async (req, res) => {
     });
 });
 
-// ── DELETE REVIEW (doctor removes a review from their profile) ────────────────
+// ΓöÇΓöÇ DELETE REVIEW (doctor removes a review from their profile) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 export const deleteReview = asyncHandler(async (req, res) => {
     const doctorId = req.user._id;
     const { appointmentId } = req.params;
@@ -785,14 +785,16 @@ export const deleteReview = asyncHandler(async (req, res) => {
     return sendSuccess(res, 200, "Review deleted.");
 });
 
-// ── TRANSACTION HISTORY ───────────────────────────────────────────────────────
+// ΓöÇΓöÇ TRANSACTION HISTORY ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 export const getTransactionHistory = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     const role = req.user.role;
 
     let query;
     if (role === "institute") {
-        const deptIds = req.user.departmentAccounts || [];
+        const deptUsers = await User.find({ rootInstitute: userId, role: "department" }).select("_id").lean();
+        const deptIds = deptUsers.map(u => u._id);
+
         if (req.query.departmentId) {
             const reqDeptId = req.query.departmentId;
             const isOwned = deptIds.some((id) => id.toString() === reqDeptId);
@@ -913,3 +915,73 @@ export const getDepartmentIncome = asyncHandler(async (req, res) => {
     });
 });
 
+// ── INSTITUTE ANALYTICS ───────────────────────────────────────────────────────
+export const getInstituteAnalytics = asyncHandler(async (req, res) => {
+    if (req.user.role !== "institute") return sendError(res, 403, "Only institutes can access this endpoint");
+
+    const deptUsers = await User.find({ rootInstitute: req.user._id, role: "department" })
+        .populate("departmentType", "name")
+        .select("technologistFirstName technologistLastName departmentType departmentId profilePic")
+        .lean();
+
+    const deptIds = deptUsers.map(u => u._id.toString());
+
+    if (deptIds.length === 0) {
+        return sendSuccess(res, 200, "Institute analytics fetched", {
+            departments: [], grandTotal: 0, grandNetTotal: 0, grandPlatformFees: 0, totalTransactions: 0,
+        });
+    }
+
+    const allTransactions = await Transaction.find({ payeeId: { $in: deptIds } })
+        .populate({
+            path: "appointmentId",
+            select: "start end status virtual amount doctorId patientId missedBy rebooked rebookedAt rebookFeePaid rebookFeeRef cashbackAmount rejectionReason",
+            populate: [
+                { path: "doctorId", select: "firstName lastName" },
+                { path: "patientId", select: "firstName lastName" },
+            ],
+        })
+        .populate("payerId", "firstName lastName instituteName")
+        .populate("payeeId", "technologistFirstName technologistLastName departmentType departmentId")
+        .sort({ createdAt: -1 })
+        .lean();
+
+    const byDept = {};
+    for (const t of allTransactions) {
+        const deptId = (t.payeeId?._id ?? t.payeeId)?.toString();
+        if (!byDept[deptId]) byDept[deptId] = [];
+        byDept[deptId].push(t);
+    }
+
+    const departments = deptUsers.map(dept => {
+        const id = dept._id.toString();
+        const txns = byDept[id] || [];
+        const grossTotal = txns.reduce((s, t) => s + (t.amount || 0), 0);
+        const platformFees = txns.reduce((s, t) => s + (t.platformFee || 0), 0);
+        const netTotal = txns.reduce((s, t) => s + (t.netAmount || 0), 0);
+        return {
+            _id: id,
+            name: dept.departmentType?.name || `${dept.technologistFirstName} ${dept.technologistLastName}`,
+            departmentId: dept.departmentId,
+            profilePic: dept.profilePic?.url || null,
+            transactionCount: txns.length,
+            grossTotal: Math.round(grossTotal * 100) / 100,
+            platformFees: Math.round(platformFees * 100) / 100,
+            netTotal: Math.round(netTotal * 100) / 100,
+            transactions: txns,
+        };
+    });
+
+    const grandTotal = Math.round(departments.reduce((s, d) => s + d.grossTotal, 0) * 100) / 100;
+    const grandNetTotal = Math.round(departments.reduce((s, d) => s + d.netTotal, 0) * 100) / 100;
+    const grandPlatformFees = Math.round(departments.reduce((s, d) => s + d.platformFees, 0) * 100) / 100;
+    const totalTransactions = departments.reduce((s, d) => s + d.transactionCount, 0);
+
+    return sendSuccess(res, 200, "Institute analytics fetched", {
+        departments,
+        grandTotal,
+        grandNetTotal,
+        grandPlatformFees,
+        totalTransactions,
+    });
+});
