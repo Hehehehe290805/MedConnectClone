@@ -486,7 +486,11 @@ export const getMyAppointments = asyncHandler(async (req, res) => {
     })
         .populate("doctorId", "firstName lastName email profilePic")
         .populate("patientId", "firstName lastName email profilePic")
-        .populate("instituteId", "instituteName email profilePic")
+        .populate({
+            path: "instituteId",
+            select: "instituteName technologistFirstName technologistLastName departmentType email profilePic",
+            populate: { path: "departmentType", select: "name" },
+        })
         .populate("serviceId", "name")
         .sort({ start: 1 });
 
