@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from "react";
-import { Link } from "react-router";
 import { axiosInstance } from "../lib/axios.js";
 import {
     rejectRole, approveRoleWithItems, editSuggestion, rejectSuggestion, rejectClaim,
@@ -288,7 +287,6 @@ const ResolveModal = ({ complaint, onClose, onResolved }) => {
 const HomePageAdmin = () => {
     // "all" | "accounts" | "specialties" | "subspecialties" | "claims" | "renewals" | "reports"
     const [activeTab, setActiveTab] = useState("all");
-    const [viewMode, setViewMode] = useState("type"); // "type" | "account"
 
     // data
     const [pendingUsers, setPendingUsers] = useState([]);
@@ -595,20 +593,6 @@ const HomePageAdmin = () => {
                 </div>
             </div>
 
-            {/* View mode toggle — above tabs */}
-            <div className="flex items-center gap-2">
-                <span className="text-xs opacity-50">View by:</span>
-                {[["type", "Request Type"], ["account", "Account"]].map(([mode, label]) => (
-                    <button
-                        key={mode}
-                        className={`btn btn-xs ${viewMode === mode ? "btn-primary" : "btn-ghost border border-base-300"}`}
-                        onClick={() => setViewMode(mode)}
-                    >
-                        {label}
-                    </button>
-                ))}
-            </div>
-
             {/* Tabs — left: Renewals | Reports | Claims | Subspecialties | Specialties | Pending Accounts | All Requests (default) */}
             <div className="flex flex-wrap gap-1">
                 {[
@@ -640,12 +624,6 @@ const HomePageAdmin = () => {
                         )}
                     </div>
                 ))}
-                <Link
-                    to="/admin/analytics"
-                    className="btn btn-sm btn-ghost border border-base-300 gap-1"
-                >
-                    Analytics →
-                </Link>
             </div>
 
             {/* ── ACCOUNTS TAB ────────────────────────────────────────── */}
@@ -862,7 +840,7 @@ const HomePageAdmin = () => {
             )}
 
             {/* ── ALL REQUESTS (default) ──────────────────────────────── */}
-            {activeTab === "all" && viewMode === "type" && (
+            {activeTab === "all" && (
                 <div className="space-y-6">
                     {/* Pending Accounts */}
                     {pendingUsers.length > 0 && (
@@ -976,84 +954,6 @@ const HomePageAdmin = () => {
                 </div>
             )}
 
-            {/* ── ALL REQUESTS — view by account ─────────────────────────── */}
-            {activeTab === "all" && viewMode === "account" && (
-                <div className="space-y-4">
-                    {totalPending === 0 && <SectionEmpty label="pending requests" />}
-                    {pendingUsers.map(user => {
-                        const suggestions = userSuggestionsFor(user._id);
-                        const allClaims = [...pendingClaims, ...pendingServiceClaims];
-                        const claims = allClaims.filter(c => {
-                            const uid = user._id?.toString();
-                            return (c.doctorId?._id ?? c.doctorId)?.toString() === uid ||
-                                (c.departmentId?._id ?? c.departmentId)?.toString() === uid;
-                        });
-                        const displayName = user.firstName && user.lastName
-                            ? `${user.firstName} ${user.lastName}`
-                            : user.instituteName || user.facilityName || user.pharmacyName || user.email;
-                        return (
-                            <div key={user._id} className="card bg-base-100 border border-base-300 rounded-xl">
-                                <div className="card-body p-4 space-y-3">
-                                    {/* Account header */}
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <p className="font-semibold text-sm">{displayName}</p>
-                                            <span className="px-2 py-0.5 text-xs font-semibold rounded bg-primary/15 text-primary capitalize">{user.role}</span>
-                                            <span className="badge badge-xs badge-info">Pending approval</span>
-                                        </div>
-                                        <button className="btn btn-xs btn-primary shrink-0" onClick={() => setUserPopup(user)}>Review</button>
-                                    </div>
-                                    {/* Pending suggestions for this user */}
-                                    {suggestions.length > 0 && (
-                                        <div className="pl-3 border-l-2 border-info/30 space-y-1.5">
-                                            <p className="text-xs opacity-50 font-semibold uppercase tracking-wide">New items ({suggestions.length})</p>
-                                            {suggestions.map(s => (
-                                                <SuggestionRow key={s._id} s={s}
-                                                    checked={selectedSuggestionIds.has(s._id)}
-                                                    onCheck={() => toggleSuggestionCheck(s._id)}
-                                                    onApproveSingle={approveSingleSuggestion}
-                                                    onRejectSingle={rejectSingleSuggestion}
-                                                />
-                                            ))}
-                                        </div>
-                                    )}
-                                    {/* Pending claims for this user */}
-                                    {claims.length > 0 && (
-                                        <div className="pl-3 border-l-2 border-info/30 space-y-1.5">
-                                            <p className="text-xs opacity-50 font-semibold uppercase tracking-wide">Claims ({claims.length})</p>
-                                            {claims.map(c =>
-                                                (c.claimType === "service" || Boolean(c.departmentId))
-                                                    ? <ServiceClaimRow key={c._id} claim={c} onView={setClaimPopup} />
-                                                    : <ClaimRow key={c._id} claim={c} onView={setClaimPopup} />
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        );
-                    })}
-                    {/* Standalone renewals and reports (not tied to pending accounts) */}
-                    {pendingRenewals.length > 0 && (
-                        <div>
-                            <p className="text-xs font-semibold opacity-50 uppercase tracking-wide mb-2">Renewals</p>
-                            <div className="space-y-2">
-                                {pendingRenewals.map(r => (
-                                    <RenewalRow key={r._id} r={r} loading={renewalLoading} onApprove={handleApproveRenewal} onReject={handleRejectRenewal} />
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                    {pendingComplaints.length > 0 && (
-                        <div>
-                            <p className="text-xs font-semibold opacity-50 uppercase tracking-wide mb-2">Open Reports</p>
-                            <div className="space-y-2">
-                                {pendingComplaints.map(c => <ComplaintRow key={c._id} c={c} onResolveClick={setResolveTarget} />)}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-
             {/* ── POPUPS ──────────────────────────────────────────────── */}
             {userPopup && (
                 <ViewPendingUserPopup
@@ -1156,3 +1056,4 @@ const HomePageAdmin = () => {
 };
 
 export default HomePageAdmin;
+

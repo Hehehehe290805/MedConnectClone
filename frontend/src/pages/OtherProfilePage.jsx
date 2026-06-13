@@ -287,7 +287,14 @@ const OtherProfilePage = () => {
                             </h2>
                             <div className="flex flex-wrap gap-2">
                                 {doctorSpecialties.map((s) => (
-                                    <span key={s._id} className={`badge badge-lg ${s.type === "subspecialty" ? "badge-secondary" : "badge-primary"}`}>
+                                    <span
+                                        key={s._id}
+                                        className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold shadow-sm ${
+                                            s.type === "subspecialty"
+                                                ? "border-sky-200 bg-sky-50 text-sky-700"
+                                                : "border-blue-200 bg-blue-50 text-blue-700"
+                                        }`}
+                                    >
                                         {s.name}
                                     </span>
                                 ))}
@@ -305,7 +312,12 @@ const OtherProfilePage = () => {
                             </h2>
                             <div className="flex flex-wrap gap-2">
                                 {user.languages.map((lang, i) => (
-                                    <div key={i} className="badge badge-lg badge-outline">{lang}</div>
+                                    <div
+                                        key={i}
+                                        className="inline-flex items-center rounded-full border border-slate-300 bg-white px-3 py-1 text-sm font-medium text-slate-700 shadow-sm"
+                                    >
+                                        {lang}
+                                    </div>
                                 ))}
                             </div>
                         </div>

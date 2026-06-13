@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Appointment from "../models/Appointment.js";
+import PharmacyOrder from "../models/PharmacyOrder.js";
 import Transaction from "../models/Transaction.js";
 import User from "../models/User.js";
 import asyncHandler from "../utils/asyncHandler.js";
@@ -11,6 +12,19 @@ import timezone from "dayjs/plugin/timezone.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
+
+const roundCurrency = (value) => Math.round((value || 0) * 100) / 100;
+
+const resolveUserName = (user) => {
+    if (!user) return "Unknown";
+    if (user.firstName || user.lastName) return `${user.firstName || ""} ${user.lastName || ""}`.trim();
+    if (user.pharmacyName) return user.pharmacyName;
+    if (user.instituteName) return user.instituteName;
+    if (user.technologistFirstName || user.technologistLastName) {
+        return `${user.technologistFirstName || ""} ${user.technologistLastName || ""}`.trim();
+    }
+    return user.email || "Unknown";
+};
 
 export const getAnalytics = asyncHandler(async (req, res) => {
     const { from, to } = req.query;
@@ -25,24 +39,127 @@ export const getAnalytics = asyncHandler(async (req, res) => {
 
     const fromUtc = fromDate.toDate();
     const toUtc = toDate.toDate();
+    const dateRange = { $gte: fromUtc, $lte: toUtc };
+    const transactionDateFilter = { createdAt: dateRange };
+    const paidPharmacyOrderDateFilter = {
+        paymentStatus: "paid",
+        $or: [
+            { paidAt: dateRange },
+            { paidAt: { $exists: false }, createdAt: dateRange },
+            { paidAt: null, createdAt: dateRange },
+        ],
+    };
 
     // ── 1. Total revenue across all transactions ───────────────────────────
-    const [revenueTotals] = await Transaction.aggregate([
+    const [appointmentRevenueTotals] = await Transaction.aggregate([
+        { $match: transactionDateFilter },
         {
             $group: {
                 _id: null,
-                totalRevenue: { $sum: "$amount" },
+                appointmentRevenue: { $sum: "$amount" },
                 platformRevenue: { $sum: "$platformFee" },
             },
         },
     ]).exec();
 
-    const totalRevenue = revenueTotals?.totalRevenue ?? 0;
-    const platformRevenue = revenueTotals?.platformRevenue ?? 0;
+    const [pharmacyRevenueTotals] = await PharmacyOrder.aggregate([
+        { $match: paidPharmacyOrderDateFilter },
+        {
+            $group: {
+                _id: null,
+                pharmacyRevenue: { $sum: "$totalAmount" },
+                pharmacyDeliveryFees: { $sum: "$deliveryFee" },
+                pharmacyPlatformFees: { $sum: "$platformFee" },
+                pharmacyOrderCount: { $sum: 1 },
+            },
+        },
+    ]).exec();
+
+    const appointmentRevenue = appointmentRevenueTotals?.appointmentRevenue ?? 0;
+    const appointmentPlatformFees = appointmentRevenueTotals?.platformRevenue ?? 0;
+    const pharmacyRevenue = pharmacyRevenueTotals?.pharmacyRevenue ?? 0;
+    const pharmacyDeliveryFees = pharmacyRevenueTotals?.pharmacyDeliveryFees ?? 0;
+    const pharmacyPlatformFees = pharmacyRevenueTotals?.pharmacyPlatformFees ?? 0;
+    const pharmacyOrderCount = pharmacyRevenueTotals?.pharmacyOrderCount ?? 0;
+    const additionalFees = 0;
+    const totalRevenue = appointmentRevenue + pharmacyRevenue;
+    const platformRevenue = appointmentPlatformFees + pharmacyDeliveryFees + pharmacyPlatformFees + additionalFees;
+
+    const [appointmentPlatformTransactions, pharmacyPlatformTransactions] = await Promise.all([
+        Transaction.find({ ...transactionDateFilter, platformFee: { $gt: 0 } })
+            .populate({
+                path: "appointmentId",
+                select: "amount start doctorId instituteId serviceId",
+                populate: [
+                    { path: "doctorId", select: "firstName lastName email role" },
+                    { path: "instituteId", select: "instituteName technologistFirstName technologistLastName email role" },
+                    { path: "serviceId", select: "name" },
+                ],
+            })
+            .populate("payerId", "firstName lastName email role")
+            .populate("payeeId", "firstName lastName instituteName technologistFirstName technologistLastName email role")
+            .sort({ createdAt: -1 })
+            .limit(100)
+            .lean(),
+        PharmacyOrder.find(paidPharmacyOrderDateFilter)
+            .populate("patientId", "firstName lastName email role")
+            .populate("pharmacyId", "pharmacyName email role")
+            .sort({ paidAt: -1, createdAt: -1 })
+            .limit(100)
+            .lean(),
+    ]);
+
+    const platformFeeTransactions = [
+        ...appointmentPlatformTransactions.map((transaction) => {
+            const appointment = transaction.appointmentId;
+            const provider = appointment?.doctorId || appointment?.instituteId || transaction.payeeId;
+            const serviceName = appointment?.serviceId?.name;
+            const summary = serviceName
+                ? `${serviceName} appointment`
+                : `${resolveUserName(provider)} appointment`;
+
+            return {
+                id: transaction._id,
+                source: "appointment",
+                referenceNumber: transaction.referenceNumber,
+                orderId: appointment?._id || transaction.appointmentId,
+                customerName: resolveUserName(transaction.payerId),
+                providerName: resolveUserName(provider),
+                summary,
+                paidAt: transaction.createdAt,
+                totalAmount: appointment?.amount ?? transaction.amount,
+                amountPaid: transaction.amount,
+                platformFee: transaction.platformFee || 0,
+                deliveryFee: 0,
+                adminCut: transaction.platformFee || 0,
+            };
+        }),
+        ...pharmacyPlatformTransactions.map((order) => {
+            const fallbackPlatformFee = order.platformFee || roundCurrency((order.subtotal || 0) * 0.1);
+            const deliveryFee = order.deliveryFee || 0;
+            const itemSummary = (order.items || []).map((item) => item.name).filter(Boolean).slice(0, 3).join(", ");
+
+            return {
+                id: order._id,
+                source: "pharmacy",
+                referenceNumber: order.referenceNumber,
+                orderId: order._id,
+                customerName: resolveUserName(order.patientId),
+                providerName: resolveUserName(order.pharmacyId),
+                summary: itemSummary || "Pharmacy order",
+                paidAt: order.paidAt || order.createdAt,
+                totalAmount: order.totalAmount || 0,
+                amountPaid: order.totalAmount || 0,
+                platformFee: fallbackPlatformFee,
+                deliveryFee,
+                adminCut: roundCurrency(fallbackPlatformFee + deliveryFee),
+            };
+        }),
+    ].sort((a, b) => new Date(b.paidAt) - new Date(a.paidAt)).slice(0, 150);
 
     // ── 2. Revenue by day (within date range) ─────────────────────────────
     const revenueByDayRaw = await Transaction.aggregate([
-        { $match: { createdAt: { $gte: fromUtc, $lte: toUtc } } },
+        { $match: transactionDateFilter },
         {
             $group: {
                 _id: {
@@ -67,6 +184,36 @@ export const getAnalytics = asyncHandler(async (req, res) => {
         platformRevenue: r.platformRevenue,
     }));
 
+    const pharmacyRevenueByDayRaw = await PharmacyOrder.aggregate([
+        { $match: paidPharmacyOrderDateFilter },
+        {
+            $group: {
+                _id: {
+                    day: {
+                        $dateToString: {
+                            format: "%Y-%m-%d",
+                            date: { $ifNull: ["$paidAt", "$createdAt"] },
+                            timezone: "Asia/Manila",
+                        },
+                    },
+                },
+                revenue: { $sum: "$totalAmount" },
+                platformRevenue: { $sum: { $add: ["$deliveryFee", { $ifNull: ["$platformFee", 0] }] } },
+            },
+        },
+        { $sort: { "_id.day": 1 } },
+    ]).exec();
+
+    const revenueByDayMap = new Map(revenueByDay.map((row) => [row.date, { ...row }]));
+    for (const row of pharmacyRevenueByDayRaw) {
+        const date = dayjs.utc(row._id.day).tz("Asia/Manila").format("YYYY-MM-DD");
+        const current = revenueByDayMap.get(date) || { date, revenue: 0, platformRevenue: 0 };
+        current.revenue += row.revenue;
+        current.platformRevenue += row.platformRevenue;
+        revenueByDayMap.set(date, current);
+    }
+    const combinedRevenueByDay = [...revenueByDayMap.values()].sort((a, b) => a.date.localeCompare(b.date));
+
     // ── 3. Revenue by doctor (top 20) ─────────────────────────────────────
     // Transactions go to the payeeId (the provider). We only want doctor payees.
     const revenueByDoctorRaw = await Transaction.aggregate([
@@ -87,7 +234,7 @@ export const getAnalytics = asyncHandler(async (req, res) => {
                 as: "provider",
             },
         },
-        { $unwind: { path: "$provider", preserveNullAndEmpty: false } },
+        { $unwind: { path: "$provider", preserveNullAndEmptyArrays: false } },
         { $match: { "provider.role": "doctor" } },
     ]).exec();
 
@@ -197,7 +344,17 @@ export const getAnalytics = asyncHandler(async (req, res) => {
     return sendSuccess(res, 200, "Analytics fetched successfully.", {
         totalRevenue,
         platformRevenue,
-        revenueByDay,
+        salesBreakdown: {
+            appointmentRevenue,
+            appointmentPlatformFees,
+            pharmacyRevenue,
+            pharmacyDeliveryFees,
+            pharmacyPlatformFees,
+            pharmacyOrderCount,
+            additionalFees,
+        },
+        revenueByDay: combinedRevenueByDay,
+        platformFeeTransactions,
         revenueByDoctor,
         appointmentVolume,
         topProviders,

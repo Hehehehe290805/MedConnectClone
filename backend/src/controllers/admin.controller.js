@@ -773,10 +773,10 @@ export const rejectRenewal = asyncHandler(async (req, res) => {
 export const getAllUsers = asyncHandler(async (req, res) => {
   const [users, admins] = await Promise.all([
     User.find({}).select(
-      "_id email role status createdAt pendingDeletion deletionRequestedAt firstName lastName instituteName pharmacyName facilityName technologistFirstName technologistLastName"
+      "_id email role status createdAt lastSeen pendingDeletion deletionRequestedAt firstName lastName instituteName pharmacyName facilityName technologistFirstName technologistLastName"
     ).lean(),
     Admin.find({}).select(
-      "_id email status createdAt pendingDeletion deletionRequestedAt firstName lastName"
+      "_id email status createdAt lastSeen pendingDeletion deletionRequestedAt firstName lastName"
     ).lean(),
   ]);
 
@@ -796,6 +796,8 @@ export const getAllUsers = asyncHandler(async (req, res) => {
       role,
       status: u.status,
       createdAt: u.createdAt,
+      lastSeen: u.lastSeen ?? null,
+      isOnline: Boolean(u.lastSeen && Date.now() - new Date(u.lastSeen).getTime() < 2 * 60 * 1000),
       pendingDeletion: u.pendingDeletion || false,
       deletionRequestedAt: u.deletionRequestedAt || null,
       displayName,

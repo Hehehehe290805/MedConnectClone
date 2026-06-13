@@ -19,10 +19,32 @@ const STATUS_LABEL = {
 };
 
 const STATUS_BADGE = {
-    notOnBoarded: "badge-ghost", pending: "badge-warning", onBoarded: "badge-success",
-    needsRenewal: "badge-warning", pendingRenewal: "badge-info",
-    pendingRenewalExpired: "badge-error", suspended: "badge-error", rejected: "badge-error",
+    notOnBoarded: "bg-slate-100 text-slate-700 border-slate-200",
+    pending: "bg-amber-100 text-amber-800 border-amber-200",
+    onBoarded: "bg-emerald-100 text-emerald-800 border-emerald-200",
+    needsRenewal: "bg-amber-100 text-amber-800 border-amber-200",
+    pendingRenewal: "bg-primary/10 text-primary border-primary/20",
+    pendingRenewalExpired: "bg-rose-100 text-rose-800 border-rose-200",
+    suspended: "bg-rose-100 text-rose-800 border-rose-200",
+    rejected: "bg-rose-100 text-rose-800 border-rose-200",
 };
+
+const StatusPill = ({ status }) => (
+    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${STATUS_BADGE[status] || "bg-slate-100 text-slate-700 border-slate-200"}`}>
+        {STATUS_LABEL[status] || status}
+    </span>
+);
+
+const ActivityPill = ({ isOnline }) => (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold ${
+        isOnline
+            ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+            : "bg-slate-100 text-slate-700 border-slate-200"
+    }`}>
+        <span className={`size-2 rounded-full ${isOnline ? "bg-emerald-500" : "bg-slate-400"}`} />
+        {isOnline ? "Online" : "Offline"}
+    </span>
+);
 
 // View + delete popup for a single account
 const AccountDetailsPopup = ({ user, onClose, onDeleted, isSelf }) => {
@@ -62,9 +84,7 @@ const AccountDetailsPopup = ({ user, onClose, onDeleted, isSelf }) => {
                     <p><span className="opacity-50">Role:</span> <span className="capitalize">{user.role}</span></p>
                     <p>
                         <span className="opacity-50">Status:</span>{" "}
-                        <span className={`badge badge-xs ${STATUS_BADGE[user.status] || "badge-ghost"}`}>
-                            {STATUS_LABEL[user.status] || user.status}
-                        </span>
+                        <StatusPill status={user.status} />
                     </p>
                     <p><span className="opacity-50">Joined:</span> {fmtDate(user.createdAt)}</p>
                     {user.pendingDeletion && (
@@ -138,9 +158,14 @@ const UserManagementPage = () => {
         });
 
     // Pending-deletion accounts always pinned to top with red text
+    const sortByPresence = (items) => [...items].sort((a, b) => {
+        if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1;
+        return (a.displayName || "").localeCompare(b.displayName || "");
+    });
+
     const filtered = [
-        ...baseFiltered.filter(u => u.pendingDeletion),
-        ...baseFiltered.filter(u => !u.pendingDeletion),
+        ...sortByPresence(baseFiltered.filter(u => u.pendingDeletion)),
+        ...sortByPresence(baseFiltered.filter(u => !u.pendingDeletion)),
     ];
 
     const roleFiltered = users.filter(u => activeRole === "all" || u.role === activeRole);
@@ -154,7 +179,7 @@ const UserManagementPage = () => {
     return (
         <div className="p-4 sm:p-8 max-w-6xl mx-auto space-y-6">
             <div>
-                <h1 className="text-2xl font-bold">User Management</h1>
+                <h1 className="text-3xl font-bold">User Management</h1>
                 <p className="text-sm opacity-50">{users.length} total accounts</p>
             </div>
 
@@ -229,9 +254,7 @@ const UserManagementPage = () => {
                                         <span className="px-2 py-0.5 text-xs font-semibold rounded bg-primary/10 text-primary capitalize">{u.role}</span>
                                     </td>
                                     <td>
-                                        <span className={`badge badge-xs ${STATUS_BADGE[u.status] || "badge-ghost"}`}>
-                                            {STATUS_LABEL[u.status] || u.status}
-                                        </span>
+                                        <ActivityPill isOnline={u.isOnline} />
                                     </td>
                                     <td className="text-xs whitespace-nowrap">{fmtDate(u.createdAt)}</td>
                                     <td>

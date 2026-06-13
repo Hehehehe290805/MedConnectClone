@@ -21,8 +21,15 @@ const ProfilePage = () => {
   const navigate = useNavigate();
   const [doctorSpecialties, setDoctorSpecialties] = useState([]);
   const [showReviewsModal, setShowReviewsModal] = useState(false);
+  const [profileImageFailed, setProfileImageFailed] = useState(false);
 
   const isReviewable = ["doctor", "institute"].includes(authUser?.role);
+  const profilePicUrl = authUser?.profilePic?.url;
+
+  useEffect(() => {
+    setProfileImageFailed(false);
+  }, [profilePicUrl]);
+
   const { data: reviewSummary } = useQuery({
     queryKey: ["providerReviews", authUser?._id],
     queryFn: () => axiosInstance.get(`/booking/reviews/${authUser._id}`).then(r => r.data?.data),
@@ -72,10 +79,11 @@ const ProfilePage = () => {
           <div className="card-body items-center text-center p-8">
             <div className="avatar">
               <div className="w-32 rounded-full ring ring-primary ring-offset-base-100 ring-offset-2">
-                {authUser?.profilePic ? (
+                {profilePicUrl && !profileImageFailed ? (
                   <img
-                    src={authUser.profilePic.url} 
+                    src={profilePicUrl}
                     alt={`${authUser.firstName} ${authUser.lastName}`}
+                    onError={() => setProfileImageFailed(true)}
                   />
                 ) : (
                   <div className="bg-base-300 flex items-center justify-center">

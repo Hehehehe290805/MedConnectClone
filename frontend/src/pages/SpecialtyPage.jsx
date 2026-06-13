@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 import { XIcon, PlusIcon, LightbulbIcon, Trash2Icon } from "lucide-react";
 
 const Column = ({ title, items, emptyText, loading, showEdit, deleting, onDelete }) => (
-    <div className="flex-1 min-w-0 bg-base-200 rounded-xl p-4 space-y-2">
+    <div className="flex-1 min-w-0 bg-base-200 border-2 border-base-300 rounded-xl p-4 space-y-2 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_26px_rgba(15,23,42,0.22)]">
         <p className="text-xs font-semibold uppercase tracking-wide opacity-50 mb-3">{title}</p>
         {loading ? (
             <div className="flex justify-center py-4">
@@ -16,7 +16,7 @@ const Column = ({ title, items, emptyText, loading, showEdit, deleting, onDelete
             <p className="text-sm opacity-40 text-center py-4">{emptyText}</p>
         ) : (
             items.map(item => (
-                <div key={item._id} className="flex items-center justify-between bg-base-100 rounded-lg px-3 py-2 gap-2">
+                <div key={item._id} className="flex items-center justify-between bg-base-100 border border-base-300 rounded-lg px-3 py-2 gap-2 shadow-[0_0_0_1px_rgba(15,23,42,0.06),0_4px_12px_rgba(15,23,42,0.16)]">
                     <span className="text-sm font-medium truncate">{item.name}</span>
                     {showEdit && (
                         <button
@@ -81,7 +81,7 @@ const SpecialtyPage = () => {
 
     return (
         <div className="p-6 max-w-5xl mx-auto space-y-6">
-            <h1 className="text-2xl font-bold">My Specialties</h1>
+            <h1 className="text-3xl font-bold">My Specialties</h1>
 
             {/* Three columns */}
             <div className="flex gap-4 items-start">
@@ -121,7 +121,7 @@ const SpecialtyPage = () => {
                         Edit Specialties
                     </button>
                 ) : (
-                    <div className="w-full bg-base-200 rounded-xl p-5 space-y-4">
+                    <div className="w-full bg-base-200 border-2 border-base-300 rounded-xl p-5 space-y-4 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_26px_rgba(15,23,42,0.22)]">
                         <div className="flex items-center justify-between">
                             <p className="font-semibold">Edit Specialties</p>
                             <button className="btn btn-ghost btn-sm btn-circle" onClick={() => setShowEdit(false)}>

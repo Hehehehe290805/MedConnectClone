@@ -15,6 +15,7 @@ const FAQ_ITEMS = [
   { q: "How do I book an appointment?", a: "Go to the Search page, find a doctor or institute, and click 'Book Appointment'. You'll need to pay a 50% deposit to confirm." },
   { q: "Can I cancel a booking?", a: "Yes. You can cancel before the appointment is accepted. Once accepted, cancellations are subject to the provider's policy and the deposit is non-refundable." },
   { q: "How does the payment work?", a: "Virtual consultations require a 50% deposit upfront, with the remaining balance due after the session. In-person visits are covered by the deposit alone." },
+  { q: "What happens if someone misses a virtual appointment?", a: "The system checks who joined the video call. If the patient misses it, they can rebook the same appointment once within 3 days by paying a 10% rebooking fee. If the provider misses it, the patient receives 10% mock cashback and can rebook once for free within 3 days. If both miss it, the patient can rebook once for free within 3 days with no payment exchange. Provider-liable cashback or refunds are shouldered by the provider and do not reverse MedConnect's platform fee." },
   { q: "How do I update my license or permits?", a: "Go to Settings → Licenses & Permits, then click 'Renew' next to the document you want to update. Submit the new image and expiry date for admin review." },
   { q: "What happens if my license expires?", a: "Your account will be placed in 'Needs Renewal' status 60 days before expiry. If it expires without renewal, your account is suspended until the renewal is approved." },
   { q: "How do I dispute an appointment?", a: "While the appointment is ongoing or within 8 hours of completion, you can file a dispute from the appointment details page. An admin will review and resolve it." },
@@ -249,14 +250,33 @@ const SettingsPage = () => {
       }
       if (picData?.key) payload.profilePic = picData;
 
-      return axiosInstance.patch("/auth/update-profile", payload);
+      const response = await axiosInstance.patch("/auth/update-profile", payload);
+      return response.data;
     },
-    onSuccess: () => {
+    onSuccess: async (data) => {
+      const updatedUser = data?.data?.user;
+      if (updatedUser) {
+        queryClient.setQueryData(["authUser"], (current) => ({
+          ...(current || {}),
+          data: {
+            ...(current?.data || {}),
+            ...updatedUser,
+          },
+        }));
+        setEditBio(updatedUser.bio || "");
+        setEditLanguages(updatedUser.languages || []);
+        setEditProfilePic(updatedUser.profilePic || {});
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ["authUser"] });
+      await queryClient.refetchQueries({ queryKey: ["authUser"], type: "active" });
       toast.success("Profile updated.");
-      queryClient.invalidateQueries({ queryKey: ["authUser"] });
       setShowEditProfile(false);
     },
-    onError: (err) => toast.error(err?.response?.data?.message || "Failed to update profile."),
+    onError: (err) => {
+      const validationMessage = err?.response?.data?.errors?.[0]?.message;
+      toast.error(validationMessage || err?.response?.data?.message || err.message || "Failed to update profile.");
+    },
   });
 
   const openEditProfile = () => {
@@ -502,7 +522,7 @@ const SettingsPage = () => {
         </div>
 
         {/* Account Information */}
-        <div className="card bg-base-200 shadow-xl">
+        <div className="card bg-base-100 border-2 border-base-300 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_26px_rgba(15,23,42,0.20)]">
           <div className="card-body">
             <h2 className="card-title text-2xl mb-4">Account Information</h2>
             <div className="space-y-3">
@@ -528,7 +548,7 @@ const SettingsPage = () => {
 
         {/* Edit Profile */}
         {canEditBio && (
-          <div className="card bg-base-200 shadow-xl">
+          <div className="card bg-base-100 border-2 border-base-300 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_26px_rgba(15,23,42,0.20)]">
             <div className="card-body">
               <h2 className="card-title text-xl"><PencilIcon className="w-5 h-5" />Edit Profile</h2>
               <p className="text-sm opacity-70 mt-1">
@@ -545,7 +565,7 @@ const SettingsPage = () => {
         )}
 
         {/* Session */}
-        <div className="card bg-base-200 shadow-xl">
+        <div className="card bg-base-100 border-2 border-base-300 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_26px_rgba(15,23,42,0.20)]">
           <div className="card-body">
             <h2 className="card-title text-xl mb-2">Session</h2>
             <p className="text-sm opacity-70 mb-4">Sign out of your account on this device.</p>
@@ -557,7 +577,7 @@ const SettingsPage = () => {
 
         {/* Update Credentials + Licenses/Permits — buttons that open modals */}
         <div className={showPermits ? "grid grid-cols-1 lg:grid-cols-2 gap-6" : ""}>
-          <div className="card bg-base-200 shadow-xl">
+          <div className="card bg-base-100 border-2 border-base-300 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_26px_rgba(15,23,42,0.20)]">
             <div className="card-body">
               <h2 className="card-title text-xl"><KeyRoundIcon className="w-5 h-5" />Update Account Credentials</h2>
               <p className="text-sm opacity-70 mt-1">Change your email address, phone number, or password. Limited to once per month.</p>
@@ -575,7 +595,7 @@ const SettingsPage = () => {
           </div>
 
           {showPermits && (
-            <div className="card bg-base-200 shadow-xl">
+            <div className="card bg-base-100 border-2 border-base-300 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_26px_rgba(15,23,42,0.20)]">
               <div className="card-body">
                 <h2 className="card-title text-xl"><ShieldCheckIcon className="w-5 h-5" />Licenses & Permits</h2>
                 <p className="text-sm opacity-70 mt-1">
@@ -593,7 +613,7 @@ const SettingsPage = () => {
         </div>
 
         {/* 2FA Toggle */}
-        <div className="card bg-base-200 shadow-xl">
+        <div className="card bg-base-100 border-2 border-base-300 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_26px_rgba(15,23,42,0.20)]">
           <div className="card-body">
             <h2 className="card-title text-xl"><KeyRoundIcon className="w-5 h-5" />Two-Factor Authentication</h2>
             <p className="text-sm opacity-70 mt-1">
@@ -616,7 +636,7 @@ const SettingsPage = () => {
         </div>
 
         {/* Email Notifications */}
-        <div className="card bg-base-200 shadow-xl">
+        <div className="card bg-base-100 border-2 border-base-300 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_26px_rgba(15,23,42,0.20)]">
           <div className="card-body">
             <h2 className="card-title text-xl"><MailIcon className="w-5 h-5" />Email Notifications</h2>
             <p className="text-sm opacity-70 mt-1">
@@ -639,7 +659,7 @@ const SettingsPage = () => {
         </div>
 
         {/* Help & Support */}
-        <div className="card bg-base-200 shadow-xl">
+        <div className="card bg-base-100 border-2 border-base-300 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_26px_rgba(15,23,42,0.20)]">
           <div className="card-body">
             <h2 className="card-title text-2xl mb-1">Help & Support</h2>
             <p className="text-sm opacity-60 mb-4">Find answers or let us know about an issue.</p>
@@ -663,7 +683,7 @@ const SettingsPage = () => {
         </div>
 
         {/* Danger Zone */}
-        <div className="card bg-base-200 shadow-xl border-2 border-error">
+        <div className="card bg-base-100 shadow-[0_0_0_1px_rgba(239,68,68,0.20),0_8px_26px_rgba(15,23,42,0.20)] border-2 border-error">
           <div className="card-body">
             <h2 className="card-title text-2xl mb-2 text-error"><AlertTriangleIcon className="w-6 h-6" />Danger Zone</h2>
             <p className="text-sm opacity-70 mb-4">

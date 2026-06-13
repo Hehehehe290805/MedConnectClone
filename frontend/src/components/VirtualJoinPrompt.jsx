@@ -1,20 +1,16 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { VideoIcon, ClockIcon } from "lucide-react";
 import { axiosInstance } from "../lib/axios";
 import useAuthUser from "../hooks/useAuthUser";
-import toast from "react-hot-toast";
 
 const JOIN_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 
 const VirtualJoinPrompt = () => {
     const { authUser } = useAuthUser();
     const navigate = useNavigate();
-    const queryClient = useQueryClient();
     const [secondsLeft, setSecondsLeft] = useState(null);
-    const [dismissed, setDismissed] = useState(null); // appointmentId string when dismissed
-
     const canHaveVirtual = ["patient", "doctor", "department"].includes(authUser?.role);
 
     const { data } = useQuery({
@@ -28,8 +24,6 @@ const VirtualJoinPrompt = () => {
     // Find an ongoing virtual appointment that the current user hasn't joined yet
     const appt = data?.find(a => {
         if (a.status !== "ongoing" || !a.virtual) return false;
-        if (a._id === dismissed) return false;
-        const role = authUser?.role;
         const isPatient  = a.patientId?._id === authUser?._id || a.patientId === authUser?._id;
         const isProvider = a.doctorId?._id === authUser?._id   || a.doctorId === authUser?._id  ||
                            a.instituteId?._id === authUser?._id || a.instituteId === authUser?._id;
@@ -49,15 +43,6 @@ const VirtualJoinPrompt = () => {
         const interval = setInterval(() => setSecondsLeft(calcRemaining()), 1000);
         return () => clearInterval(interval);
     }, [appt?._id, appt?.start]);
-
-    const { mutate: joinCall, isPending } = useMutation({
-        mutationFn: (appointmentId) => axiosInstance.post("/booking/join-call", { appointmentId }),
-        onSuccess: (_, appointmentId) => {
-            queryClient.invalidateQueries({ queryKey: ["myAppointments"] });
-            navigate(`/call/${appointmentId}`);
-        },
-        onError: (err) => toast.error(err?.response?.data?.message || "Failed to join call."),
-    });
 
     if (!appt || secondsLeft === null) return null;
 
@@ -82,18 +67,15 @@ const VirtualJoinPrompt = () => {
                     </div>
                     <p className="text-sm text-center opacity-60">
                         {secondsLeft > 0
-                            ? "Join before the timer runs out or the appointment will be automatically cancelled."
-                            : "Time is up. The appointment may be cancelled shortly."}
+                            ? "Join before the timer runs out or the missed-appointment rebook rules will apply."
+                            : "Time is up. The appointment may move to the rebook window shortly."}
                     </p>
 
                     <button
                         className="btn btn-primary w-full gap-2 text-base"
-                        disabled={isPending}
-                        onClick={() => joinCall(appt._id)}
+                        onClick={() => navigate(`/call/${appt._id}`)}
                     >
-                        {isPending
-                            ? <span className="loading loading-spinner loading-sm" />
-                            : <VideoIcon className="size-5" />}
+                        <VideoIcon className="size-5" />
                         Join Video Call
                     </button>
 
