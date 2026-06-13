@@ -8,34 +8,124 @@ import { useSignUpStore } from "../store/useSignUpStore";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
-const TERMS_TEXT = `Terms of Service
+const TERMS_TEXT = `MEDCONNECT TERMS AND CONDITIONS
 
-Last updated: 2024
+Last Updated: June 2026
 
-1. Acceptance of Terms
-By accessing and using MedConnect, you accept and agree to be bound by these Terms of Service.
+1. Sign Up and Login
 
-2. Use of Service
-MedConnect provides a platform to connect patients with licensed medical professionals. You agree to use the service only for lawful purposes.
+1.1 Users must provide accurate, complete, and up-to-date information when creating an account on MedConnect.
 
-3. Medical Disclaimer
-MedConnect is not a substitute for professional medical advice, diagnosis, or treatment. Always seek the advice of your physician or other qualified health provider.
+1.2 Patients, doctors, pharmacists, and administrators are responsible for maintaining the confidentiality of their login credentials.
 
-4. Account Responsibility
-You are responsible for maintaining the confidentiality of your account credentials and for all activities under your account.
+1.3 Users must not share their accounts with others or allow unauthorized access to their accounts.
 
-5. Privacy
-Your use of MedConnect is also governed by our Privacy Policy below.
+1.4 MedConnect reserves the right to suspend or terminate accounts found to contain false information, fraudulent credentials, or violations of these Terms and Conditions.
 
-6. Termination
-We reserve the right to terminate accounts that violate these terms.
+1.5 Licensed healthcare professionals must provide valid credentials for verification before gaining access to professional services on the platform.
 
-7. Changes to Terms
-We may modify these terms at any time. Continued use of the service constitutes acceptance of the modified terms.`;
+---
+
+2. Privacy Act and Data Protection
+
+2.1 MedConnect is committed to protecting user privacy and handling personal information in accordance with applicable data protection laws, including the Philippine Data Privacy Act of 2012 (Republic Act No. 10173).
+
+2.2 We collect information such as names, email addresses, contact information, dates of birth, healthcare credentials, and other data necessary to provide our services.
+
+2.3 User information is collected, stored, and processed solely for legitimate healthcare, communication, verification, and platform management purposes.
+
+2.4 MedConnect implements industry-standard security measures to safeguard personal and medical information from unauthorized access, disclosure, or misuse.
+
+2.5 Users have the right to access, update, or request the deletion of their personal information, subject to legal and regulatory requirements.
+
+---
+
+3. All Interactions Between Users and Doctors
+
+3.1 MedConnect serves as a platform that facilitates communication between patients and licensed healthcare professionals.
+
+3.2 All consultations, advice, recommendations, and medical opinions provided through the platform remain the responsibility of the healthcare professional.
+
+3.3 Patients must provide accurate health information to ensure appropriate medical guidance and services.
+
+3.4 MedConnect does not replace emergency medical services and should not be used during life-threatening medical emergencies.
+
+3.5 Users are expected to maintain respectful and professional conduct during all interactions on the platform.
+
+3.6 Any abuse, harassment, discrimination, or inappropriate behavior may result in account suspension or termination.
+
+---
+
+4. Patients, Institutes, and Services
+
+4.1 Patients may access healthcare services offered by accredited medical professionals, clinics, hospitals, and healthcare institutions registered on MedConnect.
+
+4.2 Healthcare institutions are responsible for ensuring the accuracy of information regarding their facilities, schedules, and services.
+
+4.3 MedConnect does not guarantee the availability, outcome, or quality of services provided by third-party healthcare institutions.
+
+4.4 Appointment scheduling, service requests, and healthcare transactions are subject to the policies and availability of the participating institution.
+
+4.5 Patients are responsible for reviewing and understanding any requirements, fees, or policies associated with healthcare services before proceeding.
+
+---
+
+5. Patients and Pharmacy Services
+
+5.1 MedConnect may facilitate communication and transactions between patients and partner pharmacies.
+
+5.2 Prescription medications may only be dispensed upon presentation and verification of a valid prescription issued by a licensed healthcare professional.
+
+5.3 Patients are responsible for ensuring that prescription information submitted through the platform is accurate and valid.
+
+5.4 Pharmacies are responsible for the quality, availability, dispensing, and delivery of medications offered through their services.
+
+5.5 MedConnect is not liable for delays, stock shortages, pricing discrepancies, or issues arising from third-party pharmacy operations.
+
+---
+
+6. Admin Discretion
+
+6.1 MedConnect administrators reserve the right to monitor platform activities to maintain security, compliance, and service quality.
+
+6.2 Administrators may review reports, complaints, or suspected violations of platform policies.
+
+6.3 MedConnect reserves the right to suspend, restrict, or terminate user accounts that violate these Terms and Conditions or engage in activities that compromise platform integrity.
+
+6.4 Administrators may remove content, restrict access, or take appropriate actions when necessary to protect users, healthcare professionals, and the platform.
+
+6.5 Decisions made by platform administrators regarding policy enforcement shall be considered final, subject to applicable laws and regulations.
+
+---
+
+7. Medical Disclaimer
+
+7.1 MedConnect is not a substitute for professional medical advice, diagnosis, treatment, or emergency medical care.
+
+7.2 Users should always consult qualified healthcare professionals regarding medical concerns.
+
+7.3 Reliance on information obtained through the platform is at the user's own discretion and responsibility.
+
+---
+
+8. Changes to Terms
+
+8.1 MedConnect reserves the right to modify these Terms and Conditions at any time.
+
+8.2 Updated terms will be posted within the platform, and continued use of MedConnect constitutes acceptance of any revisions.
+
+---
+
+9. Contact Information
+
+For questions, concerns, or privacy-related requests, users may contact:
+Email: privacy@medconnect-112605.me
+
+By creating an account and using MedConnect, you acknowledge that you have read, understood, and agreed to these Terms and Conditions.`;
 
 const PRIVACY_TEXT = `Privacy Policy
 
-Last updated: 2024
+Last updated: June 2026
 
 1. Information We Collect
 We collect information you provide directly, including name, email, date of birth, and medical professional credentials.
