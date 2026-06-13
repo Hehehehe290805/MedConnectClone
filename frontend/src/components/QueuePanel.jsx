@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { axiosInstance } from "../lib/axios";
 import toast from "react-hot-toast";
-import { ArrowRightCircleIcon, UserXIcon, ZapIcon, RefreshCwIcon } from "lucide-react";
+import { ArrowRightCircleIcon, UserXIcon, ZapIcon, RefreshCwIcon, BanknoteIcon, CheckCircle2Icon } from "lucide-react";
+import useAuthUser from "../hooks/useAuthUser";
 
 const TYPE_BADGE = { booked: "badge-ghost", walkin: "badge-primary", emergency: "badge-error" };
 const TYPE_LABEL = { booked: "Appointment", walkin: "Walk-in", emergency: "Emergency" };
@@ -14,10 +15,20 @@ const typePillClass = (type) => {
 
 const QueuePanel = ({ showWalkinForm, setShowWalkinForm }) => {
     const queryClient = useQueryClient();
+    const { authUser } = useAuthUser();
+    const isDepartment = authUser?.role === "department";
+
     const [walkinFirst, setWalkinFirst] = useState("");
     const [walkinLast, setWalkinLast] = useState("");
+    const [walkinAge, setWalkinAge] = useState("");
+    const [walkinGender, setWalkinGender] = useState("male");
+    const [walkinAddress, setWalkinAddress] = useState("");
+    const [walkinContact, setWalkinContact] = useState("");
+    const [walkinServiceId, setWalkinServiceId] = useState("");
     const [walkinType, setWalkinType] = useState("walkin");
     const [showNoShowConfirm, setShowNoShowConfirm] = useState(false);
+    const [showPaymentPanel, setShowPaymentPanel] = useState(false);
+    const [paymentMethod, setPaymentMethod] = useState("cash");
 
     const { data, isLoading, isError, error, refetch } = useQuery({
         queryKey: ["queue-today"],
@@ -32,10 +43,21 @@ const QueuePanel = ({ showWalkinForm, setShowWalkinForm }) => {
     const waitingSlots = slots.filter(s => s.status === "waiting");
     const doneSlots = slots.filter(s => ["done", "cancelled", "skipped"].includes(s.status));
 
+    const { data: servicesData } = useQuery({
+        queryKey: ["queue-services-status"],
+        queryFn: () => axiosInstance.get("/queue/services-status").then(r => r.data.data),
+        enabled: isDepartment,
+    });
+    const services = servicesData?.services || [];
+
     const slotAppointment = (slot) => slot?.appointmentId && typeof slot.appointmentId === "object" ? slot.appointmentId : null;
     const slotPatient = (slot) => slotAppointment(slot)?.patientId;
     const slotPatientName = (slot) => {
-        if (slot.type === "walkin" || slot.type === "emergency") return "Walk-in Patient";
+        const appt = slotAppointment(slot);
+        if (slot.type === "walkin" || slot.type === "emergency") {
+            if (appt?.walkInDetails?.firstName) return `${appt.walkInDetails.firstName} ${appt.walkInDetails.lastName || ""}`.trim();
+            return "Walk-in Patient";
+        }
         const patient = slotPatient(slot);
         if (patient?.firstName) return `${patient.firstName} ${patient.lastName || ""}`.trim();
         return "Patient";
@@ -43,11 +65,11 @@ const QueuePanel = ({ showWalkinForm, setShowWalkinForm }) => {
     const slotMeta = (slot) => {
         const appt = slotAppointment(slot);
         if (!appt) return null;
-        const parts = [
-            appt.virtual ? "Virtual appointment" : "In-person appointment",
-            appt.start ? new Date(appt.start).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" }) : null,
-            appt.amount ? `PHP ${appt.amount.toLocaleString("en-PH")}` : null,
-        ].filter(Boolean);
+        const parts = [];
+        if (appt.serviceId?.name) parts.push(appt.serviceId.name);
+        parts.push(appt.virtual ? "Virtual appointment" : "In-person appointment");
+        if (appt.start) parts.push(new Date(appt.start).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" }));
+        if (appt.amount) parts.push(`PHP ${appt.amount.toLocaleString("en-PH")}`);
         return parts.join(" • ");
     };
 
@@ -84,16 +106,33 @@ const QueuePanel = ({ showWalkinForm, setShowWalkinForm }) => {
         onError: (e) => toast.error(e?.response?.data?.message || "Failed."),
     });
 
+    const { mutate: payAndComplete, isPending: isPayingComplete } = useMutation({
+        mutationFn: () => axiosInstance.post("/queue/pay-complete-active", { paymentMethod }),
+        onSuccess: () => {
+            toast.success("Payment recorded. Appointment completed!");
+            setShowPaymentPanel(false);
+            setPaymentMethod("cash");
+            inval();
+            queryClient.invalidateQueries({ queryKey: ["queue-services-status"] });
+        },
+        onError: (e) => toast.error(e?.response?.data?.message || "Payment failed."),
+    });
+
     const { mutate: addWalkin, isPending: isAddingWalkin } = useMutation({
         mutationFn: () => axiosInstance.post("/queue/walkin", {
-            patientFirstName: walkinFirst.trim(),
-            patientLastName: walkinLast.trim(),
+            firstName: walkinFirst.trim(),
+            lastName: walkinLast.trim(),
+            age: walkinAge,
+            gender: walkinGender,
+            address: walkinAddress,
+            contactDetails: walkinContact,
+            serviceId: walkinServiceId,
             type: walkinType,
         }),
         onSuccess: () => {
             toast.success(`${walkinType === "emergency" ? "Emergency" : "Walk-in"} added to queue.`);
             setShowWalkinForm(false);
-            setWalkinFirst(""); setWalkinLast(""); setWalkinType("walkin");
+            setWalkinFirst(""); setWalkinLast(""); setWalkinAge(""); setWalkinGender("male"); setWalkinAddress(""); setWalkinContact(""); setWalkinServiceId(""); setWalkinType("walkin");
             inval();
         },
         onError: (e) => toast.error(e?.response?.data?.message || "Failed to add."),
@@ -123,9 +162,74 @@ const QueuePanel = ({ showWalkinForm, setShowWalkinForm }) => {
             </div>
         );
     }
+    const walkinFormContent = showWalkinForm ? (
+        <div className="bg-base-100 rounded-xl p-4 space-y-4 border border-base-300 mt-4 mb-4">
+            <p className="text-sm font-semibold">Add Patient</p>
+            <div className="grid grid-cols-2 gap-3">
+                <input className="input input-sm input-bordered" placeholder="First name" value={walkinFirst} onChange={e => setWalkinFirst(e.target.value)} />
+                <input className="input input-sm input-bordered" placeholder="Last name" value={walkinLast} onChange={e => setWalkinLast(e.target.value)} />
+                <input type="number" className="input input-sm input-bordered" placeholder="Age" value={walkinAge} onChange={e => setWalkinAge(e.target.value)} />
+                <select className="select select-sm select-bordered" value={walkinGender} onChange={e => setWalkinGender(e.target.value)}>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                </select>
+                <input className="input input-sm input-bordered col-span-2" placeholder="Address" value={walkinAddress} onChange={e => setWalkinAddress(e.target.value)} />
+                <input className="input input-sm input-bordered col-span-2" placeholder="Contact details (e.g. Phone/Email)" value={walkinContact} onChange={e => setWalkinContact(e.target.value)} />
+            </div>
+            {isDepartment && services.length > 0 && (
+                <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase opacity-60">Select Service</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {services.map(s => (
+                            <button
+                                key={s._id}
+                                type="button"
+                                disabled={s.isFull}
+                                onClick={() => setWalkinServiceId(s._id)}
+                                className={`text-left p-2 rounded-lg border text-sm transition-all ${
+                                    s.isFull ? "opacity-50 cursor-not-allowed bg-base-200" 
+                                    : walkinServiceId === s._id ? "border-primary bg-primary/10 ring-1 ring-primary" 
+                                    : "hover:border-primary/40 bg-base-100"
+                                }`}
+                            >
+                                <div className="font-semibold">{s.serviceName}</div>
+                                <div className="text-xs flex items-center justify-between mt-1">
+                                    <span className="opacity-70">PHP {s.price.toLocaleString()}</span>
+                                    {s.maxPatientsPerDay ? (
+                                        <span className={`${s.isFull ? "text-error font-bold" : "text-primary"}`}>
+                                            {s.isFull ? "Full" : `${s.currentQueueCount}/${s.maxPatientsPerDay} slots`}
+                                        </span>
+                                    ) : (
+                                        <span className="text-emerald-600">Available</span>
+                                    )}
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+            <div className="join w-full">
+                <button type="button" className={`join-item btn btn-xs flex-1 ${walkinType === "walkin" ? "btn-primary" : "btn-ghost"}`} onClick={() => setWalkinType("walkin")}>
+                    Walk-in (end of queue)
+                </button>
+                <button type="button" className={`join-item btn btn-xs flex-1 gap-1 ${walkinType === "emergency" ? "btn-error" : "btn-ghost"}`} onClick={() => setWalkinType("emergency")}>
+                    <ZapIcon className="size-3" /> Emergency (front)
+                </button>
+            </div>
+            <div className="flex gap-2 justify-end">
+                <button className="btn btn-ghost btn-xs" onClick={() => setShowWalkinForm(false)}>Cancel</button>
+                <button className="btn btn-primary btn-xs" disabled={!walkinFirst.trim() || !walkinLast.trim() || (isDepartment && !walkinServiceId) || isAddingWalkin} onClick={() => addWalkin()}>
+                    {isAddingWalkin ? <span className="loading loading-spinner loading-xs" /> : "Add"}
+                </button>
+            </div>
+        </div>
+    ) : null;
+
     if (!queue || !queue.isActive) {
         return (
             <div className="card bg-base-100 border-2 border-base-300 p-5 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
+                {walkinFormContent}
                 <div className="flex items-center justify-between gap-3">
                     <p className="text-sm font-semibold">No queue for today</p>
                     {isBuilding && <span className="loading loading-spinner loading-xs text-primary" />}
@@ -147,68 +251,105 @@ const QueuePanel = ({ showWalkinForm, setShowWalkinForm }) => {
             </div>
 
             {/* Add walk-in form */}
-            {showWalkinForm && (
-                <div className="bg-base-100 rounded-xl p-3 space-y-3 border border-base-300">
-                    <p className="text-sm font-semibold">Add Patient</p>
-                    <div className="grid grid-cols-2 gap-2">
-                        <input className="input input-sm input-bordered" placeholder="First name" value={walkinFirst} onChange={e => setWalkinFirst(e.target.value)} />
-                        <input className="input input-sm input-bordered" placeholder="Last name" value={walkinLast} onChange={e => setWalkinLast(e.target.value)} />
-                    </div>
-                    <div className="join w-full">
-                        <button type="button" className={`join-item btn btn-xs flex-1 ${walkinType === "walkin" ? "btn-primary" : "btn-ghost"}`} onClick={() => setWalkinType("walkin")}>
-                            Walk-in (end of queue)
-                        </button>
-                        <button type="button" className={`join-item btn btn-xs flex-1 gap-1 ${walkinType === "emergency" ? "btn-error" : "btn-ghost"}`} onClick={() => setWalkinType("emergency")}>
-                            <ZapIcon className="size-3" /> Emergency (front)
-                        </button>
-                    </div>
-                    <div className="flex gap-2 justify-end">
-                        <button className="btn btn-ghost btn-xs" onClick={() => setShowWalkinForm(false)}>Cancel</button>
-                        <button className="btn btn-primary btn-xs" disabled={!walkinFirst.trim() || !walkinLast.trim() || isAddingWalkin} onClick={() => addWalkin()}>
-                            {isAddingWalkin ? <span className="loading loading-spinner loading-xs" /> : "Add"}
-                        </button>
-                    </div>
-                </div>
-            )}
+            {walkinFormContent}
 
             {/* Active slot */}
-            {activeSlot ? (
-                <div className="bg-success/5 border border-success/30 rounded-xl p-4 space-y-3">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div>
-                            <p className="text-xs font-medium text-success uppercase tracking-wide">Now Serving — Slot #{activeSlot.position}</p>
-                            <p className="font-bold text-lg">{slotPatientName(activeSlot)}</p>
-                            {slotMeta(activeSlot) && <p className="text-xs opacity-60 mt-0.5">{slotMeta(activeSlot)}</p>}
-                            <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${typePillClass(activeSlot.type)}`}>{TYPE_LABEL[activeSlot.type]}</span>
+            {activeSlot ? (() => {
+                const activeAppt = slotAppointment(activeSlot);
+                const isWalkin = activeSlot.type === "walkin" || activeSlot.type === "emergency";
+                const isPaid = ["fully_paid", "completed"].includes(activeAppt?.status);
+                const hasAmount = (activeAppt?.amount || 0) > 0;
+
+                return (
+                    <div className="bg-success/5 border border-success/30 rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div>
+                                <p className="text-xs font-medium text-success uppercase tracking-wide">Now Serving — Slot #{activeSlot.position}</p>
+                                <p className="font-bold text-lg">{slotPatientName(activeSlot)}</p>
+                                {slotMeta(activeSlot) && <p className="text-xs opacity-60 mt-0.5">{slotMeta(activeSlot)}</p>}
+                                <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${typePillClass(activeSlot.type)}`}>{TYPE_LABEL[activeSlot.type]}</span>
+                            </div>
+                            <div className="flex gap-2 flex-wrap justify-end">
+                                {!showNoShowConfirm ? (
+                                    <>
+                                        <button className="btn btn-ghost btn-sm gap-1 text-warning" onClick={() => setShowNoShowConfirm(true)}>
+                                            <UserXIcon className="size-4" /> No-show
+                                        </button>
+                                        {/* For walk-in/emergency with a price: require payment first */}
+                                        {isWalkin && hasAmount && !isPaid ? (
+                                            <button className="btn btn-primary btn-sm gap-1" onClick={() => setShowPaymentPanel(v => !v)}>
+                                                <BanknoteIcon className="size-4" /> Pay & Complete
+                                            </button>
+                                        ) : (
+                                            <button className="btn btn-success btn-sm gap-1" disabled={isAdvancing} onClick={() => advance()}>
+                                                {isAdvancing ? <span className="loading loading-spinner loading-xs" /> : <><CheckCircle2Icon className="size-4" /> {isPaid ? "Next Patient" : "Complete & Next"}</>}
+                                            </button>
+                                        )}
+                                    </>
+                                ) : (
+                                    <div className="flex flex-col gap-1.5 items-end">
+                                        <p className="text-xs text-warning">Patient didn't show. What to do?</p>
+                                        <div className="flex gap-2">
+                                            <button className="btn btn-ghost btn-xs" onClick={() => setShowNoShowConfirm(false)}>Cancel</button>
+                                            <button className="btn btn-warning btn-xs" disabled={isNoShowing} onClick={() => handleNoShow("skip")}>
+                                                Skip to End
+                                            </button>
+                                            <button className="btn btn-error btn-xs" disabled={isNoShowing} onClick={() => handleNoShow("cancel")}>
+                                                Cancel (no refund)
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                        <div className="flex gap-2">
-                            {!showNoShowConfirm ? (
-                                <>
-                                    <button className="btn btn-ghost btn-sm gap-1 text-warning" onClick={() => setShowNoShowConfirm(true)}>
-                                        <UserXIcon className="size-4" /> No-show
-                                    </button>
-                                    <button className="btn btn-success btn-sm gap-1" disabled={isAdvancing} onClick={() => advance()}>
-                                        {isAdvancing ? <span className="loading loading-spinner loading-xs" /> : <><ArrowRightCircleIcon className="size-4" /> Next Patient</>}
-                                    </button>
-                                </>
-                            ) : (
-                                <div className="flex flex-col gap-1.5 items-end">
-                                    <p className="text-xs text-warning">Patient didn't show. What to do?</p>
-                                    <div className="flex gap-2">
-                                        <button className="btn btn-ghost btn-xs" onClick={() => setShowNoShowConfirm(false)}>Cancel</button>
-                                        <button className="btn btn-warning btn-xs" disabled={isNoShowing} onClick={() => handleNoShow("skip")}>
-                                            Skip to End
-                                        </button>
-                                        <button className="btn btn-error btn-xs" disabled={isNoShowing} onClick={() => handleNoShow("cancel")}>
-                                            Cancel (no refund)
-                                        </button>
+
+                        {/* Payment Panel — shown when Pay & Complete clicked */}
+                        {showPaymentPanel && isWalkin && hasAmount && !isPaid && (
+                            <div className="mt-2 border-t border-success/20 pt-3 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-sm font-semibold">Record Payment</p>
+                                    <p className="text-lg font-bold text-success">PHP {(activeAppt?.amount || 0).toLocaleString("en-PH")}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-xs font-semibold uppercase opacity-60">Payment Method</p>
+                                    <div className="join w-full">
+                                        {["cash", "gcash", "card", "bank_transfer"].map(m => (
+                                            <button
+                                                key={m}
+                                                type="button"
+                                                className={`join-item btn btn-xs flex-1 capitalize ${paymentMethod === m ? "btn-primary" : "btn-ghost"}`}
+                                                onClick={() => setPaymentMethod(m)}
+                                            >
+                                                {m.replace("_", " ")}
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
-                            )}
-                        </div>
+                                <div className="flex gap-2 justify-end">
+                                    <button className="btn btn-ghost btn-xs" onClick={() => setShowPaymentPanel(false)}>Cancel</button>
+                                    <button className="btn btn-success btn-sm gap-1" disabled={isPayingComplete} onClick={() => payAndComplete()}>
+                                        {isPayingComplete
+                                            ? <span className="loading loading-spinner loading-xs" />
+                                            : <><CheckCircle2Icon className="size-4" /> Confirm Payment</>}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* After payment confirmed — show Next Patient */}
+                        {isPaid && isWalkin && hasAmount && (
+                            <div className="flex items-center justify-between border-t border-success/20 pt-3">
+                                <p className="text-sm text-success font-semibold flex items-center gap-1.5">
+                                    <CheckCircle2Icon className="size-4" /> Payment Confirmed
+                                </p>
+                                <button className="btn btn-success btn-sm gap-1" disabled={isAdvancing} onClick={() => advance()}>
+                                    {isAdvancing ? <span className="loading loading-spinner loading-xs" /> : <><ArrowRightCircleIcon className="size-4" /> Next Patient</>}
+                                </button>
+                            </div>
+                        )}
                     </div>
-                </div>
-            ) : waitingSlots.length > 0 ? (
+                );
+            })() : waitingSlots.length > 0 ? (
                 <div className="flex items-center justify-between bg-base-100 rounded-xl p-4 border border-base-300">
                     <p className="text-sm opacity-60">Queue ready — call the first patient</p>
                     <button className="btn btn-primary btn-sm gap-1" disabled={isAdvancing} onClick={() => advance()}>

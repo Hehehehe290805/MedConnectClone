@@ -810,7 +810,7 @@ export const getTransactionHistory = asyncHandler(async (req, res) => {
     const transactions = await Transaction.find(query)
         .populate({
             path: "appointmentId",
-            select: "start end status virtual amount doctorId patientId missedBy rebooked rebookedAt rebookFeePaid rebookFeeRef cashbackAmount rejectionReason",
+            select: "start end status virtual amount walkInDetails doctorId patientId missedBy rebooked rebookedAt rebookFeePaid rebookFeeRef cashbackAmount rejectionReason",
             populate: [
                 { path: "doctorId", select: "firstName lastName" },
                 { path: "patientId", select: "firstName lastName" },
@@ -935,7 +935,7 @@ export const getInstituteAnalytics = asyncHandler(async (req, res) => {
     const allTransactions = await Transaction.find({ payeeId: { $in: deptIds } })
         .populate({
             path: "appointmentId",
-            select: "start end status virtual amount doctorId patientId missedBy rebooked rebookedAt rebookFeePaid rebookFeeRef cashbackAmount rejectionReason",
+            select: "start end status virtual amount walkInDetails doctorId patientId missedBy rebooked rebookedAt rebookFeePaid rebookFeeRef cashbackAmount rejectionReason",
             populate: [
                 { path: "doctorId", select: "firstName lastName" },
                 { path: "patientId", select: "firstName lastName" },

@@ -7,6 +7,8 @@ import {
     getPatientPosition,
     advanceQueue,
     handleNoShow,
+    getWalkinServicesStatus,
+    payAndCompleteActiveSlot,
 } from "../controllers/queue.controller.js";
 
 const router = express.Router();
@@ -19,5 +21,7 @@ router.get("/today",     getTodayQueue);
 router.get("/position",  getPatientPosition);
 router.post("/advance",  advanceQueue);
 router.post("/no-show",  handleNoShow);
+router.get("/services-status", getWalkinServicesStatus);
+router.post("/pay-complete-active", payAndCompleteActiveSlot);
 
 export default router;
