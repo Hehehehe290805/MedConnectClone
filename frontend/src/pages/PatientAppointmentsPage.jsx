@@ -1,15 +1,46 @@
-import { useState, useEffect } from "react";
+import { Component, lazy, Suspense, useState, useEffect } from "react";
 import { axiosInstance } from "../lib/axios.js";
-import ViewPendingAppointmentPatientPopup from "./ViewPendingAppointmentPatientPopup.jsx";
 import { Link } from "react-router";
 import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
-import { AlertTriangleIcon, CalendarIcon, UserIcon, SearchIcon, HistoryIcon } from "lucide-react";
+import {
+    AlertTriangleIcon, CalendarIcon, UserIcon, SearchIcon, HistoryIcon,
+    ClockIcon, CheckCircleIcon, ArchiveIcon,
+} from "lucide-react";
+
+const ViewPendingAppointmentPatientPopup = lazy(() =>
+    import("./ViewPendingAppointmentPatientPopup.jsx")
+);
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 const PH_TZ = "Asia/Manila";
+
+class AppointmentsErrorBoundary extends Component {
+    constructor(props) {
+        super(props);
+        this.state = { error: null };
+    }
+    static getDerivedStateFromError(error) {
+        return { error };
+    }
+    render() {
+        if (this.state.error) {
+            return (
+                <div className="p-8 max-w-xl mx-auto">
+                    <div className="alert alert-error">
+                        <div>
+                            <p className="font-bold">Page crashed — please report this error:</p>
+                            <p className="text-sm mt-1 font-mono break-all">{String(this.state.error)}</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
 
 const STATUS_LABEL = {
     pending_payment:    "Pending Payment",
@@ -28,6 +59,49 @@ const STATUS_LABEL = {
     missed_by_both:     "Missed - Free Rebook Available",
 };
 
+const STATUS_BADGE = {
+    pending_payment:  "badge-warning",
+    deposit_paid:     "badge-info",
+    accepted:         "badge-success",
+    ongoing:          "badge-primary",
+    awaiting_balance: "badge-warning",
+    disputed:         "badge-error",
+    completed:        "badge-ghost",
+    fully_paid:       "badge-ghost",
+    cancelled:        "badge-ghost",
+    rejected:         "badge-error",
+    resolved:         "badge-ghost",
+    missed_by_patient: "badge-error",
+    missed_by_provider: "badge-error",
+    missed_by_both: "badge-error",
+};
+
+const UPCOMING_STATUSES = ["pending_payment", "deposit_paid", "accepted", "awaiting_balance", "disputed"];
+const CLOSED_STATUSES   = ["completed", "fully_paid", "cancelled", "rejected", "resolved"];
+
+const providerName = (appt) => {
+    const d = appt.doctorId;
+    const i = appt.instituteId;
+    if (d && typeof d === "object") {
+        return d.firstName ? `Dr. ${d.firstName} ${d.lastName}` : "Doctor";
+    }
+    if (i && typeof i === "object") {
+        if (i.instituteName) return i.instituteName;
+        if (i.departmentType?.name) return i.departmentType.name;
+        if (i.technologistFirstName) return `${i.technologistFirstName} ${i.technologistLastName || ""}`.trim();
+    }
+    return "Provider";
+};
+
+const providerSubtitle = (appt) => {
+    const i = appt.instituteId;
+    if (i?.rootInstitute?.instituteName) return i.rootInstitute.instituteName;
+    if (appt.serviceId?.name) return appt.serviceId.name;
+    if (i?.departmentType?.name) return i.departmentType.name;
+    if (appt.doctorId?.email) return appt.doctorId.email;
+    return null;
+};
+
 const providerPic = (appt) =>
     appt.doctorId?.profilePic?.url || appt.instituteId?.profilePic?.url || null;
 
@@ -35,7 +109,7 @@ const ACTIVE_STATUSES = [
     "pending_payment", "deposit_paid", "accepted", "ongoing", "awaiting_balance",
     "disputed", "missed_by_patient", "missed_by_provider", "missed_by_both",
 ];
-const CLOSED_STATUSES    = ["completed", "fully_paid", "cancelled", "rejected", "resolved"];
+
 const CONFIRMED_STATUSES = ["accepted", "ongoing"];
 const MISSED_REBOOK_STATUSES = ["missed_by_patient", "missed_by_provider", "missed_by_both"];
 
@@ -66,7 +140,77 @@ const AppointmentSummaryBar = ({ label, appointment, getName, emptyText }) => (
     </div>
 );
 
-const PatientAppointmentsPage = () => {
+const providerLinkId = (appt) =>
+    appt.doctorId?._id || appt.instituteId?._id || null;
+
+const AppointmentCard = ({ appt, onClick }) => {
+    const name = providerName(appt);
+    const subtitle = providerSubtitle(appt);
+    const pic = providerPic(appt);
+    const pid = providerLinkId(appt);
+    const start = dayjs(appt.start).tz(PH_TZ);
+    const isOngoing = appt.status === "ongoing";
+
+    return (
+        <div
+            className={`card border cursor-pointer hover:border-primary/40 transition-colors ${isOngoing ? "bg-primary/5 border-primary/30" : "bg-base-100 border-base-300"}`}
+            onClick={() => onClick(appt)}
+        >
+            <div className="card-body p-4">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="shrink-0">
+                            {pic ? (
+                                <img src={pic} alt={name} className="w-10 h-10 rounded-full object-cover" />
+                            ) : (
+                                <div className="w-10 h-10 rounded-full bg-base-300 flex items-center justify-center">
+                                    <UserIcon className="size-4 text-base-content/40" />
+                                </div>
+                            )}
+                        </div>
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-semibold text-sm truncate">{name}</p>
+                                {pid && (
+                                    <Link
+                                        to={`/profile/${pid}`}
+                                        className="text-xs text-primary hover:underline shrink-0"
+                                        onClick={e => e.stopPropagation()}
+                                    >
+                                        View Profile
+                                    </Link>
+                                )}
+                            </div>
+                            {subtitle && <p className="text-xs opacity-60 truncate">{subtitle}</p>}
+                            <p className="text-xs opacity-50 mt-0.5">
+                                {start.format("ddd, MMM D, YYYY")}
+                                {appt.status !== "pending_payment" && ` · ${start.format("h:mm A")}`}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className={`badge badge-sm ${STATUS_BADGE[appt.status] || "badge-ghost"}`}>
+                            {getAppointmentStatusLabel(appt)}
+                        </span>
+                        {appt.amount != null && (
+                            <span className="text-xs opacity-60">PHP {appt.amount.toLocaleString("en-PH")}</span>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const SectionHeader = ({ icon: Icon, label, count }) => (
+    <div className="flex items-center gap-2 mt-2">
+        <Icon className="size-4 opacity-50" />
+        <span className="text-xs font-semibold uppercase tracking-wide opacity-50">{label}</span>
+        {count > 0 && <span className="badge badge-xs badge-ghost">{count}</span>}
+    </div>
+);
+
+const AppointmentsBody = () => {
     const [appointments, setAppointments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selected, setSelected] = useState(null);
@@ -77,11 +221,7 @@ const PatientAppointmentsPage = () => {
             setLoading(true);
             const res = await axiosInstance.get("/booking/my-appointments");
             const appts = res.data.data?.appointments;
-            if (res.data.success && Array.isArray(appts)) {
-                setAppointments(appts);
-            } else {
-                setAppointments([]);
-            }
+            setAppointments(Array.isArray(appts) ? appts : []);
         } catch {
             setAppointments([]);
         } finally {
@@ -94,9 +234,11 @@ const PatientAppointmentsPage = () => {
     const active = appointments
         .filter(a => ACTIVE_STATUSES.includes(a.status))
         .sort((a, b) => new Date(a.start) - new Date(b.start));
+    
     const past = appointments
         .filter(a => CLOSED_STATUSES.includes(a.status))
         .sort((a, b) => new Date(b.start) - new Date(a.start));
+
     const shown = tab === "active" ? active : past;
 
     const futureAppointments = appointments
@@ -105,19 +247,6 @@ const PatientAppointmentsPage = () => {
     const confirmedAppointment    = futureAppointments.find(a => CONFIRMED_STATUSES.includes(a.status));
     const upcomingAppointment     = futureAppointments[0];
     const missedRebookAppointment = active.find(isRebookActionAvailable);
-
-    const doctorName = (appt) => {
-        const d = appt.doctorId;
-        if (!d) return appt.instituteId?.instituteName || "Provider";
-        if (typeof d === "object" && d.firstName) return `Dr. ${d.firstName} ${d.lastName}`;
-        return "Doctor";
-    };
-
-    const providerId = (appt) => {
-        const d = appt.doctorId;
-        const i = appt.instituteId;
-        return typeof d === "object" ? d._id : (typeof i === "object" ? i._id : null);
-    };
 
     const missedRebookCopy = (appt) => {
         if (!appt) return null;
@@ -164,18 +293,22 @@ const PatientAppointmentsPage = () => {
                         </div>
                     </button>
                 )}
-                <AppointmentSummaryBar
-                    label="Today's Appointment"
-                    appointment={confirmedAppointment}
-                    getName={doctorName}
-                    emptyText="No confirmed appointment yet."
-                />
-                <AppointmentSummaryBar
-                    label="Upcoming Appointment"
-                    appointment={upcomingAppointment}
-                    getName={doctorName}
-                    emptyText="No upcoming appointment scheduled."
-                />
+                {confirmedAppointment && (
+                    <AppointmentSummaryBar
+                        label="Today's Appointment"
+                        appointment={confirmedAppointment}
+                        getName={providerName}
+                        emptyText="No confirmed appointment yet."
+                    />
+                )}
+                {upcomingAppointment && upcomingAppointment !== confirmedAppointment && (
+                    <AppointmentSummaryBar
+                        label="Upcoming Appointment"
+                        appointment={upcomingAppointment}
+                        getName={providerName}
+                        emptyText="No upcoming appointment scheduled."
+                    />
+                )}
             </div>
 
             <div role="tablist" className="tabs tabs-bordered">
@@ -192,7 +325,7 @@ const PatientAppointmentsPage = () => {
                     className={`tab gap-2 ${tab === "past" ? "tab-active" : ""}`}
                     onClick={() => setTab("past")}
                 >
-                    <HistoryIcon className="size-4" /> History
+                    <ArchiveIcon className="size-4" /> History
                     {past.length > 0 && <span className="badge badge-ghost badge-xs">{past.length}</span>}
                 </button>
             </div>
@@ -219,71 +352,30 @@ const PatientAppointmentsPage = () => {
                     )}
                 </div>
             ) : (
-                <div className="space-y-2">
-                    {shown.map(appt => {
-                        const name = doctorName(appt);
-                        const pid  = providerId(appt);
-                        const pic  = providerPic(appt);
-                        const start = dayjs(appt.start).tz(PH_TZ);
-                        return (
-                            <div
-                                key={appt._id}
-                                className="card bg-base-100 border-2 border-base-300 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)] cursor-pointer hover:border-primary/40 hover:shadow-[0_0_0_2px_rgba(47,112,186,0.18),0_12px_30px_rgba(15,23,42,0.24)] transition-all"
-                                onClick={() => setSelected(appt)}
-                            >
-                                <div className="card-body p-4">
-                                    <div className="flex items-center justify-between gap-3 flex-wrap">
-                                        <div className="flex items-center gap-3 min-w-0">
-                                            <div className="avatar placeholder shrink-0">
-                                                <div className="bg-base-300 rounded-full w-9">
-                                                    {pic ? (
-                                                        <img src={pic} alt={name} className="rounded-full" />
-                                                    ) : (
-                                                        <UserIcon className="size-4 text-base-content/40 mx-auto mt-2.5" />
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <div className="min-w-0">
-                                                <div className="flex items-center gap-2">
-                                                    <p className="font-semibold text-sm truncate">{name}</p>
-                                                    {pid && (
-                                                        <Link
-                                                            to={`/profile/${pid}`}
-                                                            className="text-xs text-primary hover:underline shrink-0"
-                                                            onClick={e => e.stopPropagation()}
-                                                        >
-                                                            View Profile
-                                                        </Link>
-                                                    )}
-                                                </div>
-                                                <p className="text-xs opacity-60">{start.format("ddd, MMM D, YYYY · h:mm A")}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-3 shrink-0">
-                                            {appt.amount != null && (
-                                                <span className="text-sm opacity-70">₱{appt.amount.toLocaleString("en-PH")}</span>
-                                            )}
-                                            <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                                                {getAppointmentStatusLabel(appt)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
+                <div className="space-y-3">
+                    {shown.map(appt => (
+                        <AppointmentCard key={appt._id} appt={appt} onClick={setSelected} />
+                    ))}
                 </div>
             )}
 
             {selected && (
-                <ViewPendingAppointmentPatientPopup
-                    appointment={selected}
-                    onClose={() => setSelected(null)}
-                    onUpdated={fetchAppointments}
-                />
+                <Suspense fallback={null}>
+                    <ViewPendingAppointmentPatientPopup
+                        appointment={selected}
+                        onClose={() => setSelected(null)}
+                        onUpdated={fetchAppointments}
+                    />
+                </Suspense>
             )}
         </div>
     );
 };
+
+const PatientAppointmentsPage = () => (
+    <AppointmentsErrorBoundary>
+        <AppointmentsBody />
+    </AppointmentsErrorBoundary>
+);
 
 export default PatientAppointmentsPage;

@@ -60,3 +60,12 @@ export const deleteReviewValidator = [
 export const joinCallValidator = [
     body("appointmentId").notEmpty().isMongoId().withMessage("Invalid appointment ID"),
 ];
+
+export const createDepartmentManualTransactionValidator = [
+    body('transactionDate').isISO8601().withMessage('Valid transaction date is required'),
+    body('customerName').optional().trim().notEmpty(),
+    body('itemSummary').trim().notEmpty().withMessage('Item summary is required').isLength({ max: 500 }),
+    body('amount').isFloat({ min: 0 }).withMessage('Amount must be a positive number'),
+    body('paymentMethod').optional().isIn(['cash', 'gcash', 'card', 'bank_transfer', 'other']),
+    body('note').optional().trim().isLength({ max: 500 }),
+];

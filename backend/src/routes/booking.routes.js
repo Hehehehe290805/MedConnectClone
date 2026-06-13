@@ -3,7 +3,7 @@ import {
     bookAppointment, payDeposit, acceptAppointment, rejectAppointment,
     cancelAppointment, completeAppointment, payBalance,
     rebookAppointment, fileDispute, submitReview, joinCall, getMyAppointments, getTransactionHistory,
-    getProviderReviews, deleteReview,
+    getProviderReviews, deleteReview, getDepartmentIncome, createDepartmentManualTransaction
 } from "../controllers/booking.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
@@ -12,7 +12,7 @@ import {
     acceptAppointmentValidator, rejectAppointmentValidator,
     cancelAppointmentValidator, completeAppointmentValidator,
     payBalanceValidator, rebookAppointmentValidator, fileDisputeValidator, submitReviewValidator,
-    joinCallValidator, deleteReviewValidator,
+    joinCallValidator, deleteReviewValidator, createDepartmentManualTransactionValidator
 } from "../validators/booking.validator.js";
 
 const router = express.Router();
@@ -36,3 +36,6 @@ router.get("/reviews/:providerId",    getProviderReviews);
 router.delete("/review/:appointmentId", deleteReviewValidator, validate, deleteReview);
 
 export default router;
+
+router.get('/department-income', getDepartmentIncome);
+router.post('/department-manual-transaction', createDepartmentManualTransactionValidator, validate, createDepartmentManualTransaction);

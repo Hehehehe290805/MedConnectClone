@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { axiosInstance } from "../lib/axios";
-import { ArrowLeftIcon, PackageIcon, ReceiptIcon, XIcon } from "lucide-react";
+import { ArrowLeftIcon, PackageIcon, ReceiptIcon, XIcon, BarChart3Icon } from "lucide-react";
 import { useNavigate } from "react-router";
 import useAuthUser from "../hooks/useAuthUser";
 import { getMyPharmacyOrders } from "../lib/api";
+import DepartmentIncomeTab from "../components/DepartmentIncomeTab.jsx";
 import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
@@ -299,6 +300,7 @@ const TransactionPage = () => {
         .sort((a, b) => new Date(b.paidAt || b.createdAt) - new Date(a.paidAt || a.createdAt));
     const isDoctor = authUser?.role === "doctor" || authUser?.role === "institute" || authUser?.role === "department";
     const canShowPharmacyTab = authUser?.role === "patient";
+    const canShowDepartmentIncomeTab = authUser?.role === "department";
 
     const totalReceived = transactions.reduce((sum, t) => {
         const payeeId = (t.payeeId?._id ?? t.payeeId)?.toString();
@@ -337,21 +339,31 @@ const TransactionPage = () => {
                     <h1 className="text-3xl font-bold">Transaction History</h1>
                 </div>
 
-                {canShowPharmacyTab && (
+                {(canShowPharmacyTab || canShowDepartmentIncomeTab) && (
                     <div role="tablist" className="tabs tabs-bordered">
                         <button role="tab" className={`tab gap-2 ${tab === "appointments" ? "tab-active" : ""}`} onClick={() => setTab("appointments")}>
                             <ReceiptIcon className="size-4" />
-                            Appointments
+                            {canShowPharmacyTab ? "Appointments" : "Transactions"}
                         </button>
-                        <button role="tab" className={`tab gap-2 ${tab === "pharmacy" ? "tab-active" : ""}`} onClick={() => setTab("pharmacy")}>
-                            <PackageIcon className="size-4" />
-                            Pharmacy Orders
-                        </button>
+                        {canShowPharmacyTab && (
+                            <button role="tab" className={`tab gap-2 ${tab === "pharmacy" ? "tab-active" : ""}`} onClick={() => setTab("pharmacy")}>
+                                <PackageIcon className="size-4" />
+                                Pharmacy Orders
+                            </button>
+                        )}
+                        {canShowDepartmentIncomeTab && (
+                            <button role="tab" className={`tab gap-2 ${tab === "income" ? "tab-active" : ""}`} onClick={() => setTab("income")}>
+                                <BarChart3Icon className="size-4" />
+                                All Income
+                            </button>
+                        )}
                     </div>
                 )}
 
-                {transactionCount > 0 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {tab !== "income" && (
+                    <>
+                        {transactionCount > 0 && (
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         {isDoctor ? (
                             <div className="stat bg-base-100 border-2 border-base-300 rounded-xl shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)]">
                                 <div className="stat-title">Total Received (net)</div>
@@ -491,6 +503,11 @@ const TransactionPage = () => {
                         </table>
                     </div>
                 )}
+                    </>
+                )}
+
+                {tab === "income" && <DepartmentIncomeTab />}
+
                 <AppointmentTransactionModal
                     transaction={selectedAppointmentTransaction}
                     isDoctor={isDoctor}

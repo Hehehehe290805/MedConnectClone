@@ -3,6 +3,7 @@ import Service from "../models/Service.js";
 import InstituteDepartmentService from "../models/InstituteDepartmentService.js";
 import Appointment from "../models/Appointment.js";
 import Transaction from "../models/Transaction.js";
+import DepartmentManualTransaction from "../models/DepartmentManualTransaction.js";
 import Pricing from "../models/Pricing.js";
 import Report from "../models/Report.js";
 import User from "../models/User.js";
@@ -697,8 +698,11 @@ export const getMyAppointments = asyncHandler(async (req, res) => {
         .populate("patientId", "firstName lastName email profilePic")
         .populate({
             path: "instituteId",
-            select: "instituteName technologistFirstName technologistLastName departmentType email profilePic",
-            populate: { path: "departmentType", select: "name" },
+            select: "instituteName technologistFirstName technologistLastName departmentType rootInstitute email profilePic",
+            populate: [
+                { path: "departmentType", select: "name" },
+                { path: "rootInstitute", select: "instituteName" },
+            ],
         })
         .populate("serviceId", "name")
         .sort({ start: 1 });
@@ -816,3 +820,96 @@ export const getTransactionHistory = asyncHandler(async (req, res) => {
 
     return sendSuccess(res, 200, "Transaction history fetched", { transactions });
 });
+
+
+import crypto from 'crypto';
+
+export const createDepartmentManualTransaction = asyncHandler(async (req, res) => {
+    const { transactionDate, customerName, itemSummary, amount, paymentMethod, note } = req.body;
+    if (req.user.role !== 'department') return sendError(res, 403, 'Only departments can record manual transactions');
+
+    const ref = 'MAN-' + crypto.randomUUID().split('-')[0].toUpperCase();
+
+    const t = new DepartmentManualTransaction({
+        departmentId: req.user._id,
+        transactionDate,
+        customerName: customerName || 'Walk-in patient',
+        itemSummary,
+        amount,
+        paymentMethod: paymentMethod || 'cash',
+        note,
+        referenceNumber: ref,
+    });
+    await t.save();
+
+    return sendSuccess(res, 201, 'Manual transaction recorded', { transaction: t });
+});
+
+export const getDepartmentIncome = asyncHandler(async (req, res) => {
+    if (req.user.role !== 'department') return sendError(res, 403, 'Access denied');
+
+    const now = dayjs().tz("Asia/Manila");
+    const year = Number(req.query.year || now.year());
+    const month = Number(req.query.month || now.month() + 1);
+
+    const start = dayjs.tz(`${year}-${String(month).padStart(2, '0')}-01`, "Asia/Manila").startOf('month').toDate();
+    const end = dayjs.tz(`${year}-${String(month).padStart(2, '0')}-01`, "Asia/Manila").add(1, 'month').toDate();
+
+    const [transactions, manualTransactions] = await Promise.all([
+        Transaction.find({
+            payeeId: req.user._id,
+            createdAt: { $gte: start, $lt: end },
+            type: { $in: ['balance', 'deposit'] }
+        }).populate('appointmentId payerId').sort({ createdAt: -1 }),
+        DepartmentManualTransaction.find({
+            departmentId: req.user._id,
+            transactionDate: { $gte: start, $lt: end },
+        }).sort({ transactionDate: -1 }),
+    ]);
+
+    const firstAppt = await Transaction.findOne({ payeeId: req.user._id }).sort({ createdAt: 1 });
+    const firstManual = await DepartmentManualTransaction.findOne({ departmentId: req.user._id }).sort({ transactionDate: 1 });
+
+    let startYear = now.year();
+    if (firstAppt) startYear = Math.min(startYear, dayjs(firstAppt.createdAt).tz("Asia/Manila").year());
+    if (firstManual) startYear = Math.min(startYear, dayjs(firstManual.transactionDate).tz("Asia/Manila").year());
+
+    const years = [];
+    for (let y = startYear; y <= now.year(); y++) {
+        years.push(y);
+    }
+    years.reverse();
+
+    let serviceSales = 0;
+    let platformFees = 0;
+    let manualTotal = 0;
+
+    transactions.forEach(t => {
+        serviceSales += (t.amount || 0);
+        platformFees += (t.platformFee || 0);
+    });
+
+    manualTransactions.forEach(t => {
+        manualTotal += (t.amount || 0);
+    });
+
+    // Collected total is the net received by the department.
+    // In MedConnect, Transaction.amount is what the patient paid.
+    // Transaction.netAmount is what the provider received (amount - platformFee).
+    // So collected = (serviceSales - platformFees) + manualTotal.
+    const collectedTotal = (serviceSales - platformFees) + manualTotal;
+
+    return sendSuccess(res, 200, 'Income fetched', {
+        transactions,
+        manualTransactions,
+        totals: {
+            productSales: serviceSales + manualTotal, // called productSales / serviceSales in UI
+            deliveryFees: 0, // not applicable for departments
+            platformFees,
+            collectedTotal,
+            orderCount: transactions.length,
+        },
+        years,
+    });
+});
+
