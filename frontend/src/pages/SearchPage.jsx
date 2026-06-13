@@ -123,7 +123,7 @@ const SearchPage = () => {
                 <h1 className="text-3xl font-bold">Find a Provider</h1>
 
                 {/* Mode toggle */}
-                <div className="tabs tabs-boxed bg-base-200 w-fit">
+                <div className="tabs tabs-boxed bg-slate-200 shadow-[0_0_0_1px_rgba(15,23,42,0.06),0_4px_14px_rgba(15,23,42,0.14)] w-fit">
                     <button
                         className={`tab gap-2 ${mode === "doctor" ? "tab-active" : ""}`}
                         onClick={() => switchMode("doctor")}
@@ -145,7 +145,7 @@ const SearchPage = () => {
                 </div>
 
                 {/* Search bar + filters */}
-                <div className="flex flex-col md:flex-row gap-3">
+                <div className="flex flex-col md:flex-row gap-3 rounded-xl border-2 border-base-300 bg-base-100 p-3 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_26px_rgba(15,23,42,0.20)]">
                     <div className="relative flex-1">
                         <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 w-5 h-5" />
                         <input

@@ -33,9 +33,11 @@ const ProviderCard = ({ provider }) => {
         return null;
     };
     const directionsUrl = getDirectionsUrl();
+    const primaryPill = "inline-flex items-center rounded-full border border-primary/30 bg-white px-3 py-1 text-xs font-semibold text-primary shadow-[0_0_0_1px_rgba(47,112,186,0.08),0_3px_10px_rgba(47,112,186,0.14)]";
+    const softPill = "inline-flex items-center rounded-full border border-base-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-[0_0_0_1px_rgba(15,23,42,0.06),0_3px_10px_rgba(15,23,42,0.12)]";
 
     return (
-        <div className="card bg-base-200 hover:shadow-md transition-shadow h-full">
+        <div className="card bg-base-100 border-2 border-base-300 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_26px_rgba(15,23,42,0.20)] hover:border-primary/40 hover:shadow-[0_0_0_2px_rgba(47,112,186,0.18),0_12px_34px_rgba(15,23,42,0.26)] transition-all h-full">
             <div className="card-body p-4 flex flex-col">
                 {/* Header */}
                 <div className="flex items-start gap-3 mb-2">
@@ -73,10 +75,10 @@ const ProviderCard = ({ provider }) => {
                         </Link>
 
                         {isDoctor && provider.sex && (
-                            <span className="badge badge-ghost badge-xs capitalize mt-0.5">{provider.sex}</span>
+                            <span className={`${softPill} capitalize mt-1`}>{provider.sex}</span>
                         )}
                         {!isDoctor && provider.instituteType && (
-                            <span className={`badge badge-xs capitalize mt-0.5 ${provider.instituteType === "hospital" ? "badge-warning" : "badge-info"}`}>
+                            <span className={`${primaryPill} capitalize mt-1`}>
                                 {provider.instituteType}
                             </span>
                         )}
@@ -88,7 +90,7 @@ const ProviderCard = ({ provider }) => {
                     <div className="mb-2">
                         <div className="flex flex-wrap gap-1.5">
                             {(showAllSpecialties ? provider.specialties : provider.specialties.slice(0, 3)).map((s) => (
-                                <span key={s} className="badge badge-primary badge-sm font-medium text-xs">{s}</span>
+                                <span key={s} className={primaryPill}>{s}</span>
                             ))}
                         </div>
                         {provider.specialties.length > 3 && (
@@ -108,10 +110,10 @@ const ProviderCard = ({ provider }) => {
                 {!isDoctor && !isDepartment && provider.departmentTypes?.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-2">
                         {provider.departmentTypes.slice(0, 3).map((d) => (
-                            <span key={d} className="badge badge-secondary badge-sm">{d}</span>
+                            <span key={d} className={primaryPill}>{d}</span>
                         ))}
                         {provider.departmentTypes.length > 3 && (
-                            <span className="badge badge-ghost badge-sm">+{provider.departmentTypes.length - 3}</span>
+                            <span className={softPill}>+{provider.departmentTypes.length - 3}</span>
                         )}
                     </div>
                 )}
@@ -119,10 +121,10 @@ const ProviderCard = ({ provider }) => {
                 {isDepartment && provider.services?.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-2">
                         {provider.services.slice(0, 3).map((s) => (
-                            <span key={s} className="badge badge-secondary badge-sm">{s}</span>
+                            <span key={s} className={primaryPill}>{s}</span>
                         ))}
                         {provider.services.length > 3 && (
-                            <span className="badge badge-ghost badge-sm">+{provider.services.length - 3}</span>
+                            <span className={softPill}>+{provider.services.length - 3}</span>
                         )}
                     </div>
                 )}
@@ -131,7 +133,7 @@ const ProviderCard = ({ provider }) => {
                 {isDoctor && provider.languages?.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-2">
                         {provider.languages.slice(0, 3).map((l) => (
-                            <span key={l} className="badge badge-outline badge-sm">{l}</span>
+                            <span key={l} className={softPill}>{l}</span>
                         ))}
                     </div>
                 )}

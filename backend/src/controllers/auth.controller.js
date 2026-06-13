@@ -2,7 +2,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import crypto from "crypto";
-import User from "../models/User.js";
+import User, { Patient, Doctor, Pharmacy, Institute, Department } from "../models/User.js";
 import Appointment from "../models/Appointment.js";
 import Admin from "../models/Admin.js";
 import AccountRegistry from "../models/AccountRegistry.js";
@@ -215,6 +215,7 @@ export const login = asyncHandler(async (req, res) => {
   }
 
   const token = generateToken(user._id);
+  await User.findByIdAndUpdate(user._id, { lastSeen: new Date() });
   res.cookie("jwt", token, cookieOptions);
   return sendSuccess(res, 200, "Login successful", { role: user.role, userId: user._id });
 });
@@ -249,6 +250,7 @@ export const verify2FA = asyncHandler(async (req, res) => {
   }
 
   const token = generateToken(account._id);
+  await (isAdmin ? Admin : User).findByIdAndUpdate(account._id, { lastSeen: new Date() });
   res.cookie("jwt", token, cookieOptions);
   return sendSuccess(res, 200, "Login successful.", {
     role: account.role,
@@ -285,6 +287,18 @@ export const toggleEmailNotifications = asyncHandler(async (req, res) => {
 });
 
 export const logout = asyncHandler(async (req, res) => {
+  const token = req.cookies?.jwt;
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+      await Promise.all([
+        User.findByIdAndUpdate(decoded.userId, { lastSeen: null }),
+        Admin.findByIdAndUpdate(decoded.userId, { lastSeen: null }),
+      ]);
+    } catch {
+      // Logout should still clear the cookie even if the token is expired/invalid.
+    }
+  }
   res.clearCookie("jwt");
   return sendSuccess(res, 200, "Logout successful");
 });
@@ -306,6 +320,8 @@ export const getMe = asyncHandler(async (req, res) => {
     signupMethod: user.signupMethod ?? "email",
     profilePic: user.profilePic ?? null,
     createdAt: user.createdAt,
+    lastSeen: user.lastSeen ?? null,
+    isOnline: Boolean(user.lastSeen && Date.now() - new Date(user.lastSeen).getTime() < 2 * 60 * 1000),
     twoFactorEnabled: user.twoFactorEnabled ?? false,
     emailNotificationsEnabled: user.emailNotificationsEnabled ?? true,
   };
@@ -425,6 +441,7 @@ export const adminLogin = asyncHandler(async (req, res) => {
   }
 
   const token = generateToken(admin._id);
+  await Admin.findByIdAndUpdate(admin._id, { lastSeen: new Date() });
   res.cookie("jwt", token, cookieOptions);
 
   return sendSuccess(res, 200, "Admin login successful", {
@@ -756,6 +773,15 @@ const profileFieldsByRole = {
   user: [],
 };
 
+const profileModelByRole = {
+  patient: Patient,
+  doctor: Doctor,
+  pharmacy: Pharmacy,
+  institute: Institute,
+  department: Department,
+  admin: Admin,
+};
+
 export const updateMeProfile = asyncHandler(async (req, res) => {
   const user = req.user;
   const role = user.role;
@@ -782,7 +808,9 @@ export const updateMeProfile = asyncHandler(async (req, res) => {
     try { await deleteFromS3(user.profilePic.key); } catch { /* non-fatal */ }
   }
 
-  const Model = user.role === "admin" ? Admin : User;
+  const Model = profileModelByRole[role];
+  if (!Model) return sendError(res, 400, "Unsupported profile role.");
+
   const updated = await Model.findByIdAndUpdate(
     user._id,
     updates,

@@ -32,8 +32,6 @@ const LANG_OPTIONS = [
   { code: "en",  label: "English" },
 ];
 
-const STREAM_API_KEY = import.meta.env.VITE_STREAM_API_KEY;
-
 function getDisplayName(user) {
     if (!user) return "User";
     if (user.role === "institute")  return user.instituteName || "Institute";
@@ -92,12 +90,13 @@ const ChatPage = () => {
 
         const initChat = async () => {
             const token = tokenData?.data?.token;
-            if (!token || !authUser) return;
+            const apiKey = tokenData?.data?.apiKey;
+            if (!token || !apiKey || !authUser) return;
 
             setChatError(null);
 
             try {
-                const client = StreamChat.getInstance(STREAM_API_KEY);
+                const client = StreamChat.getInstance(apiKey);
 
                 // Always attempt connectUser. In React Strict Mode the effect fires twice
                 // before the first connectUser resolves, so Stream throws "connectUser was
@@ -163,8 +162,9 @@ const ChatPage = () => {
                 <button
                     className="btn btn-primary btn-sm"
                     onClick={() => {
-                        const client = StreamChat.getInstance(STREAM_API_KEY);
-                        if (client.userID) client.disconnectUser().catch(() => {});
+                        const apiKey = tokenData?.data?.apiKey;
+                        const client = apiKey ? StreamChat.getInstance(apiKey) : null;
+                        if (client?.userID) client.disconnectUser().catch(() => {});
                         window.location.reload();
                     }}
                 >

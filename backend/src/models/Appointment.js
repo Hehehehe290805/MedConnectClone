@@ -22,6 +22,9 @@ const AppointmentSchema = new mongoose.Schema({
       "completed",         // end time passed OR both clicked complete
       "awaiting_balance",  // virtual only — waiting for remaining 50%
       "fully_paid",        // remaining balance paid (or in-person complete)
+      "missed_by_patient", // virtual only — patient missed, eligible for one paid rebook
+      "missed_by_provider",// virtual only — provider missed, eligible for one free rebook + cashback
+      "missed_by_both",    // virtual only — both missed, eligible for one free rebook
       "disputed",          // report filed within 8hrs of start
       "resolved",          // admin resolved dispute
     ],
@@ -51,6 +54,21 @@ const AppointmentSchema = new mongoose.Schema({
   // Virtual call join tracking — populated when each party clicks "Join Call"
   patientJoined:  { type: Boolean, default: false },
   providerJoined: { type: Boolean, default: false },
+
+  // Virtual missed appointment rebooking
+  missedBy: {
+    type: String,
+    enum: ["patient", "provider", "both", null],
+    default: null,
+  },
+  missedAt: { type: Date },
+  rebookDeadline: { type: Date },
+  rebookUsed: { type: Boolean, default: false },
+  rebooked: { type: Boolean, default: false },
+  rebookedAt: { type: Date },
+  rebookFeePaid: { type: Boolean, default: false },
+  rebookFeeRef: { type: String },
+  cashbackAmount: { type: Number, default: 0 },
 
 }, { timestamps: true });
 

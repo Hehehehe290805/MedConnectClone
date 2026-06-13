@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import useAuthUser from "../hooks/useAuthUser";
@@ -8,12 +8,18 @@ import useLogout from "../hooks/useLogout";
 import { getUnreadNotificationCount } from "../lib/api";
 import SuggestServicePopup from "./SuggestServicePopup";
 
-const Navbar = () => {
+const Navbar = ({ offsetSidebar = false }) => {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showAddService, setShowAddService] = useState(false);
+  const [profileImageFailed, setProfileImageFailed] = useState(false);
   const { authUser } = useAuthUser();
   const location = useLocation();
   const isChatPage = location.pathname?.startsWith("/chat");
+  const profilePicUrl = authUser?.profilePic?.url;
+
+  useEffect(() => {
+    setProfileImageFailed(false);
+  }, [profilePicUrl]);
 
   // const queryClient = useQueryClient();
   // const { mutate: logoutMutation } = useMutation({
@@ -32,15 +38,15 @@ const Navbar = () => {
   const unreadCount = unreadData?.data?.count ?? 0;
 
   return (
-    <nav className="bg-base-200 border-b border-base-300 sticky top-0 z-30 h-16 flex items-center">
+    <nav className={`fixed top-0 right-0 ${offsetSidebar ? "left-0 lg:left-64" : "left-0"} bg-primary text-primary-content border-b-2 border-primary/30 shadow-[0_3px_14px_rgba(47,112,186,0.28)] z-40 h-20 flex items-center`}>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-end w-full">
           {/* LOGO - ONLY IN THE CHAT PAGE */}
           {isChatPage && (
             <div className="pl-5">
               <Link to="/" className="flex items-center gap-2.5">
-                <BriefcaseMedicalIcon className="size-9 text-primary" />
-                <span className="text-primary text-3xl font-bold font-mono tracking-wider">
+                <BriefcaseMedicalIcon className="size-9 text-primary-content" />
+                <span className="text-primary-content text-3xl font-bold font-mono tracking-wider">
                   MedConnect
                 </span>
               </Link>
@@ -58,9 +64,9 @@ const Navbar = () => {
             )}
             <Link to={"/notifications"}>
               <button className="btn btn-ghost btn-circle relative">
-                <BellIcon className="h-6 w-6 text-base-content opacity-70" />
+                <BellIcon className="h-6 w-6 text-primary-content opacity-90" />
                 {unreadCount > 0 && (
-                  <span className="badge badge-info badge-xs absolute top-1 right-1 pointer-events-none">
+                  <span className="badge bg-red-500 text-white border-red-500 badge-xs absolute top-1 right-1 pointer-events-none">
                     {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
                 )}
@@ -73,9 +79,9 @@ const Navbar = () => {
           <Link to={"/profile"}>
             <button className="btn btn-ghost btn-circle">
                 <div className="avatar">
-                    <div className="w-9 rounded-full bg-base-300 flex items-center justify-center">
-                        {authUser?.profilePic?.url ? (
-                            <img src={authUser.profilePic.url} alt="User Avatar" />
+                    <div className="w-9 rounded-full bg-base-300 border-2 border-primary-content/70 shadow-sm flex items-center justify-center">
+                        {profilePicUrl && !profileImageFailed ? (
+                            <img src={profilePicUrl} alt="User Avatar" onError={() => setProfileImageFailed(true)} />
                           ) : (
                             <UserIcon className="size-5 text-base-content opacity-50" />
                           )}
@@ -86,7 +92,7 @@ const Navbar = () => {
           
           {/* Logout button */}
           <button className="btn btn-ghost btn-circle" onClick={() => setShowLogoutModal(true)}>
-            <LogOutIcon className="h-6 w-6 text-base-content opacity-70" />
+            <LogOutIcon className="h-6 w-6 text-primary-content opacity-90" />
           </button>
         </div>
       </div>

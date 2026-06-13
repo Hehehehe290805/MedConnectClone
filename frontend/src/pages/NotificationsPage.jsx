@@ -161,8 +161,8 @@ const NotificationsPage = () => {
                             {notifications.map((n) => (
                                 <div
                                     key={n._id}
-                                    className={`card shadow-sm cursor-pointer transition-shadow hover:shadow-md ${
-                                        n.isRead ? "bg-base-200" : "bg-base-100 border border-primary/20"
+                                    className={`card cursor-pointer border-2 transition-all shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_26px_rgba(15,23,42,0.20)] hover:shadow-[0_0_0_2px_rgba(47,112,186,0.18),0_12px_32px_rgba(15,23,42,0.28)] ${
+                                        n.isRead ? "bg-base-200 border-base-300" : "bg-base-100 border-primary/25"
                                     }`}
                                     onClick={() => handleNotificationClick(n)}
                                 >

@@ -151,9 +151,79 @@ const ProductModal = ({ initialProduct, onClose }) => {
     );
 };
 
+const ProductDetailModal = ({ product, onClose, onEdit, onDelete, isDeleting }) => {
+    if (!product) return null;
+
+    return (
+        <div className="modal modal-open">
+            <div className="modal-box max-w-2xl">
+                <div className="flex items-start justify-between gap-3 mb-4">
+                    <div>
+                        <h2 className="font-bold text-lg">{product.name}</h2>
+                    </div>
+                    <button className="btn btn-ghost btn-sm btn-circle" onClick={onClose}>
+                        <XIcon className="size-4" />
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-4">
+                    {product.image?.url ? (
+                        <img src={product.image.url} alt={product.name} className="w-full aspect-square rounded-lg object-cover bg-base-300" />
+                    ) : (
+                        <div className="w-full aspect-square rounded-lg bg-base-300 flex items-center justify-center">
+                            <PackageIcon className="size-14 opacity-50" />
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                        <div className="bg-base-200 rounded-lg p-3">
+                            <p className="opacity-60">Medicine name</p>
+                            <p className="font-semibold">{product.name}</p>
+                        </div>
+                        <div className="bg-base-200 rounded-lg p-3">
+                            <p className="opacity-60">Price</p>
+                            <p className="font-semibold">{currency(product.price)}</p>
+                        </div>
+                        <div className="bg-base-200 rounded-lg p-3">
+                            <p className="opacity-60">Amount</p>
+                            <p className="font-semibold">{product.quantityValue} {product.quantityUnit}</p>
+                        </div>
+                        <div className="bg-base-200 rounded-lg p-3">
+                            <p className="opacity-60">Stock</p>
+                            <p className="font-semibold">{product.stock}</p>
+                        </div>
+                        <div className="bg-base-200 rounded-lg p-3">
+                            <p className="opacity-60">Checkout requirement</p>
+                            <p className="font-semibold">{product.overTheCounter ? "No prescription required" : "Prescription required"}</p>
+                        </div>
+                        <div className="bg-base-200 rounded-lg p-3">
+                            <p className="opacity-60">Catalogue status</p>
+                            <p className="font-semibold">{product.isActive ? "Active" : "Inactive"}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="modal-action">
+                    <button className="btn btn-ghost" onClick={onClose}>Close</button>
+                    <button className="btn btn-error gap-2" onClick={() => onDelete(product)} disabled={isDeleting}>
+                        {isDeleting ? <span className="loading loading-spinner loading-sm" /> : <Trash2Icon className="size-4" />}
+                        Delete
+                    </button>
+                    <button className="btn btn-primary gap-2" onClick={() => onEdit(product)}>
+                        <EditIcon className="size-4" />
+                        Edit Product
+                    </button>
+                </div>
+            </div>
+            <div className="modal-backdrop" onClick={onClose} />
+        </div>
+    );
+};
+
 const PharmacyCataloguePage = () => {
     const [modalProduct, setModalProduct] = useState(null);
     const [isAdding, setIsAdding] = useState(false);
+    const [detailProduct, setDetailProduct] = useState(null);
     const queryClient = useQueryClient();
 
     const { data, isLoading } = useQuery({
@@ -175,7 +245,7 @@ const PharmacyCataloguePage = () => {
     return (
         <div className="p-8 space-y-6">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                <h1 className="text-2xl font-bold">Manage Catalogue</h1>
+                <h1 className="text-3xl font-bold">Manage Catalogue</h1>
                 <button className="btn btn-primary gap-2" onClick={() => setIsAdding(true)}>
                     <PlusIcon className="size-4" />
                     Add Product
@@ -195,7 +265,11 @@ const PharmacyCataloguePage = () => {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     {products.map((product) => (
-                        <div key={product._id} className="card bg-base-200 shadow-sm">
+                        <div
+                            key={product._id}
+                            className="card bg-base-100 border-2 border-base-300 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.18)] cursor-pointer transition-shadow hover:shadow-[0_0_0_1px_rgba(15,23,42,0.14),0_10px_28px_rgba(15,23,42,0.22)]"
+                            onClick={() => setDetailProduct(product)}
+                        >
                             <div className="card-body">
                                 <div className="flex gap-3">
                                     {product.image?.url ? (
@@ -211,18 +285,34 @@ const PharmacyCataloguePage = () => {
                                         <p className="font-bold">{currency(product.price)}</p>
                                     </div>
                                 </div>
-                                <div className="flex flex-wrap gap-2">
-                                    <span className="badge badge-info">Stock {product.stock}</span>
-                                    <span className={`badge ${product.overTheCounter ? "badge-success" : "badge-warning"}`}>
-                                        {product.overTheCounter ? "OTC" : "Prescription"}
-                                    </span>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="rounded-lg bg-base-200 px-3 py-2">
+                                        <p className="text-xs opacity-50">Stock</p>
+                                        <p className="text-lg font-bold text-primary">{product.stock}</p>
+                                    </div>
+                                    <div className="rounded-lg bg-base-200 px-3 py-2">
+                                        <p className="text-xs opacity-50">Type</p>
+                                        <span className={`mt-1 inline-flex rounded-full border px-3 py-1 text-sm font-semibold ${
+                                            product.overTheCounter
+                                                ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                                                : "bg-amber-100 text-amber-800 border-amber-200"
+                                        }`}>
+                                            {product.overTheCounter ? "OTC" : "Prescription"}
+                                        </span>
+                                    </div>
                                 </div>
                                 <div className="card-actions justify-end">
-                                    <button className="btn btn-ghost btn-sm gap-2" onClick={() => setModalProduct(product)}>
+                                    <button className="btn btn-ghost btn-sm gap-2" onClick={(e) => {
+                                        e.stopPropagation();
+                                        setModalProduct(product);
+                                    }}>
                                         <EditIcon className="size-4" />
                                         Edit
                                     </button>
-                                    <button className="btn btn-error btn-sm gap-2" onClick={() => deleteMutation.mutate(product._id)} disabled={deleteMutation.isPending}>
+                                    <button className="btn btn-error btn-sm gap-2" onClick={(e) => {
+                                        e.stopPropagation();
+                                        deleteMutation.mutate(product._id);
+                                    }} disabled={deleteMutation.isPending}>
                                         <Trash2Icon className="size-4" />
                                         Delete
                                     </button>
@@ -235,6 +325,19 @@ const PharmacyCataloguePage = () => {
 
             {isAdding && <ProductModal onClose={() => setIsAdding(false)} />}
             {modalProduct && <ProductModal initialProduct={modalProduct} onClose={() => setModalProduct(null)} />}
+            <ProductDetailModal
+                product={detailProduct}
+                onClose={() => setDetailProduct(null)}
+                onEdit={(product) => {
+                    setDetailProduct(null);
+                    setModalProduct(product);
+                }}
+                onDelete={(product) => {
+                    setDetailProduct(null);
+                    deleteMutation.mutate(product._id);
+                }}
+                isDeleting={deleteMutation.isPending}
+            />
         </div>
     );
 };

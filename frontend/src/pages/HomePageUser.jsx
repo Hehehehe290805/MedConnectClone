@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { axiosInstance } from "../lib/axios.js";
 import { useQuery } from "@tanstack/react-query";
@@ -12,6 +12,14 @@ import timezone from "dayjs/plugin/timezone";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 const PH_TZ = "Asia/Manila";
+const MISSED_REBOOK_STATUSES = ["missed_by_patient", "missed_by_provider", "missed_by_both"];
+
+const isRebookActionAvailable = (appt) => {
+  if (!MISSED_REBOOK_STATUSES.includes(appt?.status)) return false;
+  if (appt.rebookUsed || appt.rebooked) return false;
+  if (!appt.rebookDeadline) return true;
+  return dayjs().tz(PH_TZ).isBefore(dayjs(appt.rebookDeadline));
+};
 
 const HomePageUser = () => {
   const navigate = useNavigate();
@@ -22,10 +30,11 @@ const HomePageUser = () => {
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const appointmentsLoadedRef = useRef(false);
 
   const fetchAppointments = async () => {
     try {
-      setLoading(true);
+      if (!appointmentsLoadedRef.current) setLoading(true);
       setError(null);
       const res = await axiosInstance.get("/booking/my-appointments");
       const appts = res.data.data?.appointments;
@@ -38,6 +47,7 @@ const HomePageUser = () => {
       setError("Failed to load appointments.");
       setAppointments([]);
     } finally {
+      appointmentsLoadedRef.current = true;
       setLoading(false);
     }
   };
@@ -58,9 +68,6 @@ const HomePageUser = () => {
     return false;
   });
 
-  const callPartnerId = joinCallAppt
-    ? (joinCallAppt.doctorId?._id || joinCallAppt.doctorId)
-    : null;
 
   // Queue position — poll for the earliest accepted/ongoing appointment today
   const todayAppt = appointments.find(a =>
@@ -92,6 +99,9 @@ const HomePageUser = () => {
 
     const awaitingBalance = find(a => a.status === "awaiting_balance");
     if (awaitingBalance) return { appt: awaitingBalance, type: "awaiting_balance" };
+
+    const missedRebook = find(isRebookActionAvailable);
+    if (missedRebook) return { appt: missedRebook, type: "missed_rebook" };
 
     const pendingPayment = find(a => a.status === "pending_payment");
     if (pendingPayment) return { appt: pendingPayment, type: "pending_payment" };
@@ -172,6 +182,19 @@ const HomePageUser = () => {
           </>
         ),
       },
+      missed_rebook: {
+        bg: "bg-primary/5 border-primary/20",
+        icon: <CalendarCheckIcon className="size-5 text-primary shrink-0 mt-0.5" />,
+        title: "Rebook Available",
+        subtitle: appt.status === "missed_by_patient"
+          ? `You missed your virtual appointment. Rebook once within 3 days with a 10% rebooking fee.`
+          : appt.status === "missed_by_provider"
+            ? `The provider missed your virtual appointment. You can rebook once within 3 days for free.`
+            : `Both parties missed this virtual appointment. You can rebook once within 3 days for free.`,
+        actions: (
+          <button className="btn btn-sm btn-primary" onClick={() => setSelectedAppointment(appt)}>View Rebook Options</button>
+        ),
+      },
       ongoing: {
         bg: "bg-info/5 border-info/30",
         icon: <CheckCircleIcon className="size-5 text-info shrink-0 mt-0.5" />,
@@ -245,7 +268,7 @@ const HomePageUser = () => {
 
   return (
     <div className="p-8 space-y-8">
-      {joinCallAppt && callPartnerId && (
+      {joinCallAppt && (
         <div className="alert bg-success/10 border border-success/30 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <VideoIcon className="size-5 text-success shrink-0" />
@@ -260,7 +283,7 @@ const HomePageUser = () => {
               </p>
             </div>
           </div>
-          <Link to={`/call/${callPartnerId}`} className="btn btn-success btn-sm gap-2 shrink-0">
+          <Link to={`/call/${joinCallAppt._id}`} className="btn btn-success btn-sm gap-2 shrink-0">
             <VideoIcon className="size-4" /> Join Call
           </Link>
         </div>
