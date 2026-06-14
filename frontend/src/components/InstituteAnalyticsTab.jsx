@@ -32,7 +32,6 @@ const STATUS_STYLES = {
 const TYPE_LABEL = {
     deposit:    "Deposit",
     balance:    "Balance",
-    rebook_fee: "Rebook Fee",
     cashback:   "Cashback",
     refund:     "Refund",
 };

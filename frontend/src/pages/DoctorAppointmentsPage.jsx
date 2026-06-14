@@ -23,22 +23,14 @@ const STATUS_LABEL = {
     rejected:         "Rejected",
     disputed:         "Disputed",
     resolved:         "Resolved",
-    missed_by_patient: "Patient Missed - Rebook Pending",
-    missed_by_provider: "Provider Missed - Rebook Pending",
-    missed_by_both: "Both Missed - Free Rebook Pending",
 };
 
 const APPROVAL_STATUSES = ["deposit_paid"];
-const ACTIVE_STATUSES = ["pending_payment", "deposit_paid", "accepted", "ongoing", "awaiting_balance", "disputed", "missed_by_patient", "missed_by_provider", "missed_by_both"];
+const ACTIVE_STATUSES = ["pending_payment", "deposit_paid", "accepted", "ongoing", "awaiting_balance", "disputed"];
 const CONFIRMED_STATUSES = ["accepted", "ongoing"];
 const CLOSED_STATUSES = ["completed", "fully_paid", "cancelled", "rejected", "resolved"];
-const REBOOKABLE_STATUSES = ["missed_by_patient", "missed_by_provider", "missed_by_both"];
-const isApprovalRequest = (appt) =>
-    APPROVAL_STATUSES.includes(appt?.status) || Boolean(appt?.rebooked && REBOOKABLE_STATUSES.includes(appt.status));
-const getAppointmentStatusLabel = (appt) => {
-    if (appt?.rebooked && REBOOKABLE_STATUSES.includes(appt.status)) return "Rebooked";
-    return STATUS_LABEL[appt?.status] || appt?.status;
-};
+const isApprovalRequest = (appt) => APPROVAL_STATUSES.includes(appt?.status);
+const getAppointmentStatusLabel = (appt) => STATUS_LABEL[appt?.status] || appt?.status;
 const CountPill = ({ children, active = false }) => (
     <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${
         active

@@ -29,35 +29,9 @@ const STATUS_LABEL = {
     rejected:         "Rejected",
     disputed:         "Disputed",
     resolved:         "Resolved",
-    missed_by_patient: "Patient Missed - Rebook Pending",
-    missed_by_provider: "You Missed - Rebook Pending",
-    missed_by_both: "Both Missed - Free Rebook Pending",
 };
 
 const CHAT_STATUSES = ["accepted", "ongoing", "awaiting_balance", "completed", "fully_paid", "disputed"];
-const REBOOKABLE_STATUSES = ["missed_by_patient", "missed_by_provider", "missed_by_both"];
-const isRebookApprovalRequest = (appt) =>
-    Boolean(appt?.rebooked && REBOOKABLE_STATUSES.includes(appt.status));
-const rebookConditionLabel = (missedBy) => {
-    if (missedBy === "patient") return "Patient missed the original virtual appointment.";
-    if (missedBy === "provider") return "Provider missed the original virtual appointment; mock cashback applies.";
-    if (missedBy === "both") return "Both parties missed the original virtual appointment; free rebook applies.";
-    return "Virtual missed appointment rebook policy applied.";
-};
-const rebookOutcomeLabel = (appt) => {
-    if (!appt?.rebooked && appt?.missedBy) return "Rebooking available";
-    if (appt?.status === "cancelled") {
-        const reason = (appt.rejectionReason || "").toLowerCase();
-        if (reason.includes("missed")) return "Missed and cancelled";
-        if (reason.includes("rejected")) return "Rejected and cancelled";
-        if (reason.includes("passed")) return "Expired and cancelled";
-        return "Cancelled";
-    }
-    if (appt?.status === "deposit_paid") return "Rebooked - pending provider approval";
-    if (["accepted", "ongoing", "awaiting_balance", "completed", "fully_paid"].includes(appt?.status)) return "Rebooked successfully";
-    return "Rebooked";
-};
-
 const ViewPendingAppointmentDoctorPopup = ({ appointment: appt, onClose, onUpdated }) => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
@@ -80,7 +54,7 @@ const ViewPendingAppointmentDoctorPopup = ({ appointment: appt, onClose, onUpdat
     const { mutate: reject, isPending: isRejecting } = useMutation({
         mutationFn: () => axiosInstance.post("/booking/reject", { appointmentId: appt._id, reason: rejectReason }),
         onSuccess: () => {
-            toast.success(isRebookApprovalRequest(appt) ? "Rebook request rejected and cancelled." : "Appointment rejected.");
+            toast.success("Appointment rejected.");
             invalidate();
             onClose();
         },
@@ -113,8 +87,7 @@ const ViewPendingAppointmentDoctorPopup = ({ appointment: appt, onClose, onUpdat
     const canDispute = ["ongoing", "completed", "awaiting_balance", "fully_paid"].includes(appt.status);
     const patientId = appt.patientId?._id || appt.patientId;
     const canChat = CHAT_STATUSES.includes(appt.status) && patientId;
-    const isRebookStatus = REBOOKABLE_STATUSES.includes(appt.status);
-    const statusText = appt.rebooked && isRebookStatus ? "Rebooked" : (STATUS_LABEL[appt.status] || appt.status);
+    const statusText = STATUS_LABEL[appt.status] || appt.status;
 
     const approvalActions = (message) => (
         <div className="space-y-2">
@@ -149,10 +122,6 @@ const ViewPendingAppointmentDoctorPopup = ({ appointment: appt, onClose, onUpdat
     );
 
     const renderActions = () => {
-        if (isRebookApprovalRequest(appt)) {
-            return approvalActions("Rebook request received. Accept or reject this appointment.");
-        }
-
         switch (appt.status) {
             case "pending_payment":
                 return <p className="text-sm opacity-60">Waiting for patient to pay the deposit.</p>;
@@ -238,39 +207,6 @@ const ViewPendingAppointmentDoctorPopup = ({ appointment: appt, onClose, onUpdat
                 );
             case "cancelled":
                 return <p className="text-sm opacity-60">{appt.rejectionReason || "This appointment was cancelled."}</p>;
-            case "missed_by_patient":
-                return (
-                    <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm">
-                        <p className="font-semibold">Patient missed the virtual appointment.</p>
-                        <p className="mt-1 opacity-70">
-                            They may rebook this same appointment once until{" "}
-                            {appt.rebookDeadline ? dayjs(appt.rebookDeadline).tz(PH_TZ).format("MMM D, YYYY [at] h:mm A") : "the 3-day deadline"}.
-                        </p>
-                    </div>
-                );
-            case "missed_by_provider":
-                return (
-                    <div className="rounded-xl border border-primary/30 bg-primary/10 p-4 text-sm">
-                        <p className="font-semibold">You missed the virtual appointment.</p>
-                        <p className="mt-1 opacity-70">
-                            The patient received{" "}
-                            <span className="font-semibold">₱{((appt.cashbackAmount || 0)).toLocaleString("en-PH", { minimumFractionDigits: 2 })}</span>{" "}
-                            mock cashback and may rebook once until{" "}
-                            {appt.rebookDeadline ? dayjs(appt.rebookDeadline).tz(PH_TZ).format("MMM D, YYYY [at] h:mm A") : "the 3-day deadline"}.
-                        </p>
-                    </div>
-                );
-            case "missed_by_both":
-                return (
-                    <div className="rounded-xl border border-primary/30 bg-primary/10 p-4 text-sm">
-                        <p className="font-semibold">Both parties missed the virtual appointment.</p>
-                        <p className="mt-1 opacity-70">
-                            The patient may rebook this same appointment once for free until{" "}
-                            {appt.rebookDeadline ? dayjs(appt.rebookDeadline).tz(PH_TZ).format("MMM D, YYYY [at] h:mm A") : "the 3-day deadline"}.
-                            No payment exchange is recorded for this missed session.
-                        </p>
-                    </div>
-                );
             case "rejected":
                 return <p className="text-sm opacity-60">You rejected this appointment. The patient's deposit was refunded.</p>;
             case "disputed":
@@ -318,7 +254,6 @@ const ViewPendingAppointmentDoctorPopup = ({ appointment: appt, onClose, onUpdat
                         <span className="text-sm opacity-60">Status</span>
                         <span className="text-sm font-semibold">
                             {statusText}
-                            {appt.rebooked && !isRebookStatus ? <span className="ml-2 text-primary">(Rebooked)</span> : ""}
                         </span>
                     </div>
 
@@ -366,77 +301,7 @@ const ViewPendingAppointmentDoctorPopup = ({ appointment: appt, onClose, onUpdat
                         {appt.balanceRef && (
                             <p className="text-xs opacity-50">Balance ref: <span className="font-mono">{appt.balanceRef}</span></p>
                         )}
-                        {(appt.rebooked || appt.missedBy) && (
-                            <div className="mt-3 border-t border-base-300 pt-3 space-y-2">
-                                <div className="flex justify-between gap-3">
-                                    <span className="font-semibold text-primary">Rebook Details</span>
-                                    <span className="font-semibold text-right">{rebookOutcomeLabel(appt)}</span>
-                                </div>
-                                <p className="opacity-70">{rebookConditionLabel(appt.missedBy)}</p>
-                                {appt.rebooked ? (
-                                    <>
-                                        <div className="flex justify-between gap-3">
-                                            <span className="opacity-60">Rebooked schedule</span>
-                                            <span className="font-semibold text-right">{fmt(appt.start)} at {fmtTime(appt.start)}</span>
-                                        </div>
-                                        {appt.rebookedAt && (
-                                            <div className="flex justify-between gap-3 text-xs">
-                                                <span className="opacity-60">Requested</span>
-                                                <span className="text-right">{dayjs(appt.rebookedAt).tz(PH_TZ).format("MMM D, YYYY [at] h:mm A")}</span>
-                                            </div>
-                                        )}
-                                    </>
-                                ) : (
-                                    <div className="flex justify-between gap-3">
-                                        <span className="opacity-60">Rebook deadline</span>
-                                        <span className="font-semibold text-right">
-                                            {appt.rebookDeadline ? dayjs(appt.rebookDeadline).tz(PH_TZ).format("MMM D, YYYY [at] h:mm A") : "Within 3 days"}
-                                        </span>
-                                    </div>
-                                )}
-                                {appt.rebookFeePaid && appt.rebookFeeRef && (
-                                    <p className="text-xs opacity-60">Rebooking fee ref: <span className="font-mono">{appt.rebookFeeRef}</span></p>
-                                )}
-                                {appt.cashbackAmount > 0 && (
-                                    <p className="text-xs opacity-60">Mock cashback: ₱{appt.cashbackAmount.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</p>
-                                )}
-                            </div>
-                        )}
                     </div>
-
-                    {false && (appt.rebooked || appt.missedBy) && (
-                        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm space-y-2">
-                            <p className="font-semibold text-primary">Rebook Details</p>
-                            <p className="opacity-70">{rebookConditionLabel(appt.missedBy)}</p>
-                            {appt.rebooked ? (
-                                <>
-                                    <div className="flex justify-between gap-3">
-                                        <span className="opacity-60">Rebooked schedule</span>
-                                        <span className="font-semibold text-right">{fmt(appt.start)} at {fmtTime(appt.start)}</span>
-                                    </div>
-                                    {appt.rebookedAt && (
-                                        <div className="flex justify-between gap-3 text-xs">
-                                            <span className="opacity-60">Requested</span>
-                                            <span className="text-right">{dayjs(appt.rebookedAt).tz(PH_TZ).format("MMM D, YYYY [at] h:mm A")}</span>
-                                        </div>
-                                    )}
-                                </>
-                            ) : (
-                                <div className="flex justify-between gap-3">
-                                    <span className="opacity-60">Rebook deadline</span>
-                                    <span className="font-semibold text-right">
-                                        {appt.rebookDeadline ? dayjs(appt.rebookDeadline).tz(PH_TZ).format("MMM D, YYYY [at] h:mm A") : "Within 3 days"}
-                                    </span>
-                                </div>
-                            )}
-                            {appt.rebookFeePaid && appt.rebookFeeRef && (
-                                <p className="text-xs opacity-60">Rebooking fee ref: <span className="font-mono">{appt.rebookFeeRef}</span></p>
-                            )}
-                            {appt.cashbackAmount > 0 && (
-                                <p className="text-xs opacity-60">Mock cashback: ₱{appt.cashbackAmount.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</p>
-                            )}
-                        </div>
-                    )}
 
                     {/* Main actions */}
                     {renderActions()}
@@ -523,3 +388,6 @@ const ViewPendingAppointmentDoctorPopup = ({ appointment: appt, onClose, onUpdat
 };
 
 export default ViewPendingAppointmentDoctorPopup;
+
+
+

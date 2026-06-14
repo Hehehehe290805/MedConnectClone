@@ -28,9 +28,6 @@ const STATUS_STYLES = {
     rejected: "bg-rose-100 text-rose-800 border-rose-200",
     disputed: "bg-amber-100 text-amber-800 border-amber-200",
     resolved: "bg-slate-200 text-slate-700 border-slate-300",
-    missed_by_patient: "bg-amber-100 text-amber-800 border-amber-200",
-    missed_by_provider: "bg-primary/10 text-primary border-primary/20",
-    missed_by_both: "bg-primary/10 text-primary border-primary/20",
     paid: "bg-primary/10 text-primary border-primary/20",
     ready_for_shipping: "bg-primary/10 text-primary border-primary/20",
     ready_for_pickup: "bg-primary/10 text-primary border-primary/20",
@@ -45,52 +42,16 @@ const currency = (value) =>
 const TYPE_LABEL = {
     deposit: "Deposit",
     balance: "Balance",
-    rebook_fee: "Rebook Fee",
     cashback: "Cashback",
     refund: "Refund",
 };
-const REBOOKABLE_STATUSES = ["missed_by_patient", "missed_by_provider", "missed_by_both"];
-const rebookOutcomeLabel = (appt) => {
-    if (!appt?.rebooked && appt?.missedBy) return "Rebooking available";
-    if (appt?.status === "cancelled") {
-        const reason = (appt.rejectionReason || "").toLowerCase();
-        if (reason.includes("missed")) return "Missed and cancelled";
-        if (reason.includes("rejected")) return "Rejected and cancelled";
-        if (reason.includes("passed")) return "Expired and cancelled";
-        return "Cancelled";
-    }
-    if (appt?.status === "deposit_paid") return "Rebooked - pending provider approval";
-    if (["accepted", "ongoing", "awaiting_balance", "completed", "fully_paid"].includes(appt?.status)) return "Rebooked successfully";
-    if (appt?.rebooked && REBOOKABLE_STATUSES.includes(appt.status)) return "Rebooked";
-    return null;
-};
+
 const adjustmentReason = (transaction, appt, isCashOut) => {
     if (!["cashback", "refund"].includes(transaction.type)) return null;
-    const ref = transaction.referenceNumber || "";
     if (transaction.type === "refund") {
         return isCashOut
             ? "You refunded the patient's deposit because you rejected this paid booking request. MedConnect's platform fee stays with the platform."
             : "You received your deposit back because the provider rejected this paid booking request.";
-    }
-    if (ref.startsWith("RB-BOTH-REJ")) {
-        return isCashOut
-            ? "You paid a 10% refund because you rejected a free rebook after both parties missed the original virtual appointment. MedConnect's platform fee stays with the platform."
-            : "You received a 10% refund because the provider rejected the free rebook after both parties missed the original virtual appointment. MedConnect's platform fee was not reversed.";
-    }
-    if (ref.startsWith("RB-PROV-REJ")) {
-        return isCashOut
-            ? "You paid the deposit refund because you rejected the rebook after missing the original virtual appointment. MedConnect's platform fee stays with the platform."
-            : "You received a provider-shouldered deposit refund because the provider rejected the rebook after missing the original virtual appointment. MedConnect's platform fee was not reversed.";
-    }
-    if (ref.startsWith("RB-PAT-REJ")) {
-        return isCashOut
-            ? "You returned the paid rebooking fee because you rejected the patient's rebook request."
-            : "You received your rebooking fee back because the provider rejected your paid rebook request.";
-    }
-    if (ref.startsWith("CB-") || appt?.missedBy === "provider") {
-        return isCashOut
-            ? "You paid mock cashback because you were not able to complete the virtual appointment. MedConnect's platform fee stays with the platform."
-            : "You received provider-shouldered mock cashback because the provider was not able to complete the virtual appointment. MedConnect's platform fee was not reversed.";
     }
     return isCashOut
         ? "Cashback was paid for this appointment adjustment."
@@ -253,23 +214,6 @@ const AppointmentTransactionModal = ({ transaction, isDoctor, currentUserId, onC
                                     <p className="mt-2 text-xs leading-relaxed text-emerald-900">{reason}</p>
                                 </div>
                             </>
-                        )}
-                        {(appt?.rebooked || appt?.missedBy) && (
-                            <div className="mt-2 border-t border-base-300 pt-2 text-sm space-y-1">
-                                <div className="flex justify-between gap-3">
-                                    <span className="font-semibold text-primary">Rebook Details</span>
-                                    <span className="font-semibold text-right">{rebookOutcomeLabel(appt)}</span>
-                                </div>
-                                {appt.rebookedAt && (
-                                    <div className="flex justify-between gap-3 text-xs opacity-70">
-                                        <span>Requested</span>
-                                        <span className="text-right">{dayjs(appt.rebookedAt).tz(PH_TZ).format("MMM D, YYYY [at] h:mm A")}</span>
-                                    </div>
-                                )}
-                                {appt.rebookFeeRef && (
-                                    <p className="text-xs opacity-60">Rebooking fee ref: <span className="font-mono">{appt.rebookFeeRef}</span></p>
-                                )}
-                            </div>
                         )}
                     </div>
                 </div>

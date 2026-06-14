@@ -9,7 +9,7 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 const PH_TZ = "Asia/Manila";
 
-const TYPE_LABEL = { deposit: "Deposit", balance: "Balance", rebook_fee: "Rebook Fee", cashback: "Cashback", refund: "Refund" };
+const TYPE_LABEL = { deposit: "Deposit", balance: "Balance", cashback: "Cashback", refund: "Refund" };
 
 const STATUS_STYLES = {
     pending_payment: "border-amber-200 bg-white text-amber-700",
@@ -23,9 +23,6 @@ const STATUS_STYLES = {
     rejected: "border-rose-200 bg-white text-rose-700",
     disputed: "border-amber-200 bg-white text-amber-700",
     resolved: "border-base-300 bg-white text-slate-700",
-    missed_by_patient: "border-amber-200 bg-white text-amber-700",
-    missed_by_provider: "border-primary/30 bg-white text-primary",
-    missed_by_both: "border-primary/30 bg-white text-primary",
     refunded: "border-emerald-200 bg-white text-emerald-700",
 };
 

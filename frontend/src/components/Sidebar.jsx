@@ -39,9 +39,8 @@ const Sidebar = () => {
         retry: false,
     });
 
-    const rebookableStatuses = ["missed_by_patient", "missed_by_provider", "missed_by_both"];
     const approvalRequestCount = (doctorAppointmentsData || []).filter((appt) =>
-        appt.status === "deposit_paid" || Boolean(appt.rebooked && rebookableStatuses.includes(appt.status))
+        appt.status === "deposit_paid"
     ).length;
 
     const navItem = (to, icon, label, disabled = false, countOrExtraActivePaths = 0, extraActivePaths = []) => {

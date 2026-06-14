@@ -15,7 +15,7 @@ const PH_TZ = "Asia/Manila";
 // Completed, fully_paid, cancelled, rejected, and resolved are hidden.
 const ACTIVE_DOT_STATUSES = new Set([
     "pending_payment", "deposit_paid", "accepted", "ongoing",
-    "awaiting_balance", "disputed", "missed_by_patient", "missed_by_provider", "missed_by_both",
+    "awaiting_balance", "disputed",
 ]);
 
 const STATUS_DOT = {
@@ -27,9 +27,6 @@ const STATUS_DOT = {
     awaiting_balance: "bg-warning",
     fully_paid:       "bg-success",
     disputed:         "bg-warning",
-    missed_by_patient: "bg-warning",
-    missed_by_provider: "bg-info",
-    missed_by_both: "bg-info",
 };
 
 const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -66,15 +63,8 @@ const STATUS_LABEL = {
     rejected:         "Rejected",
     disputed:         "Disputed",
     resolved:         "Resolved",
-    missed_by_patient: "Missed - Rebook Available",
-    missed_by_provider: "Provider Missed - Rebook Available",
-    missed_by_both: "Missed - Free Rebook Available",
 };
-const MISSED_REBOOK_STATUSES = ["missed_by_patient", "missed_by_provider", "missed_by_both"];
-const getStatusLabel = (appt) => {
-    if (appt?.rebooked && MISSED_REBOOK_STATUSES.includes(appt.status)) return "Rebooked";
-    return STATUS_LABEL[appt?.status] || appt?.status;
-};
+const getStatusLabel = (appt) => STATUS_LABEL[appt?.status] || appt?.status;
 
 const ListRow = ({ appt, userRole, onViewDetails, onChat, onToggleFiles, filesExpanded }) => {
     const start = dayjs(appt.start).tz(PH_TZ);
