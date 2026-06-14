@@ -5,7 +5,7 @@ import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
 import {
-    AlertTriangleIcon, CalendarIcon, UserIcon, SearchIcon, HistoryIcon,
+    CalendarIcon, UserIcon, SearchIcon, HistoryIcon,
     ClockIcon, CheckCircleIcon, ArchiveIcon,
 } from "lucide-react";
 
@@ -54,9 +54,6 @@ const STATUS_LABEL = {
     rejected:           "Rejected",
     disputed:           "Disputed",
     resolved:           "Resolved",
-    missed_by_patient:  "Missed - Rebook Available",
-    missed_by_provider: "Provider Missed - Rebook Available",
-    missed_by_both:     "Missed - Free Rebook Available",
 };
 
 const STATUS_BADGE = {
@@ -71,9 +68,6 @@ const STATUS_BADGE = {
     cancelled:        "badge-ghost",
     rejected:         "badge-error",
     resolved:         "badge-ghost",
-    missed_by_patient: "badge-error",
-    missed_by_provider: "badge-error",
-    missed_by_both: "badge-error",
 };
 
 const UPCOMING_STATUSES = ["pending_payment", "deposit_paid", "accepted", "awaiting_balance", "disputed"];
@@ -107,24 +101,11 @@ const providerPic = (appt) =>
 
 const ACTIVE_STATUSES = [
     "pending_payment", "deposit_paid", "accepted", "ongoing", "awaiting_balance",
-    "disputed", "missed_by_patient", "missed_by_provider", "missed_by_both",
+    "disputed",
 ];
 
 const CONFIRMED_STATUSES = ["accepted", "ongoing"];
-const MISSED_REBOOK_STATUSES = ["missed_by_patient", "missed_by_provider", "missed_by_both"];
-
-const isRebookActionAvailable = (appt) => {
-    if (!MISSED_REBOOK_STATUSES.includes(appt?.status)) return false;
-    if (appt.rebookUsed || appt.rebooked) return false;
-    if (!appt.rebookDeadline) return true;
-    return dayjs().tz(PH_TZ).isBefore(dayjs(appt.rebookDeadline));
-};
-
-const getAppointmentStatusLabel = (appt) => {
-    if (appt?.rebooked && MISSED_REBOOK_STATUSES.includes(appt.status)) return "Rebooked";
-    if (MISSED_REBOOK_STATUSES.includes(appt?.status) && !isRebookActionAvailable(appt)) return "Missed - Rebook Closed";
-    return STATUS_LABEL[appt?.status] || appt?.status;
-};
+const getAppointmentStatusLabel = (appt) => STATUS_LABEL[appt?.status] || appt?.status;
 
 const AppointmentSummaryBar = ({ label, appointment, getName, emptyText }) => (
     <div className="rounded-xl border-2 border-base-300 bg-base-100 px-4 py-3 shadow-[0_0_0_1px_rgba(15,23,42,0.10),0_6px_18px_rgba(15,23,42,0.16)]">
@@ -246,23 +227,6 @@ const AppointmentsBody = () => {
         .sort((a, b) => new Date(a.start) - new Date(b.start));
     const confirmedAppointment    = futureAppointments.find(a => CONFIRMED_STATUSES.includes(a.status));
     const upcomingAppointment     = futureAppointments[0];
-    const missedRebookAppointment = active.find(isRebookActionAvailable);
-
-    const missedRebookCopy = (appt) => {
-        if (!appt) return null;
-        const deadline = appt.rebookDeadline
-            ? dayjs(appt.rebookDeadline).tz(PH_TZ).format("MMM D, YYYY [at] h:mm A")
-            : "within 3 days";
-        if (appt.status === "missed_by_patient") {
-            const fee = Math.round((appt.amount || 0) * 0.1 * 100) / 100;
-            return `Pay a rebooking fee of ₱${fee.toLocaleString("en-PH", { minimumFractionDigits: 2 })} and rebook once by ${deadline}.`;
-        }
-        if (appt.status === "missed_by_provider") {
-            const cashback = appt.cashbackAmount ?? Math.round((appt.amount || 0) * 0.1 * 100) / 100;
-            return `You have ₱${cashback.toLocaleString("en-PH", { minimumFractionDigits: 2 })} mock cashback and can rebook once for free by ${deadline}.`;
-        }
-        return `Both parties missed this appointment. Rebook once for free by ${deadline}.`;
-    };
 
     return (
         <div className="p-4 sm:p-8 max-w-3xl mx-auto space-y-6">
@@ -277,22 +241,6 @@ const AppointmentsBody = () => {
             </div>
 
             <div className="space-y-3">
-                {missedRebookAppointment && (
-                    <button
-                        type="button"
-                        onClick={() => setSelected(missedRebookAppointment)}
-                        className="w-full rounded-xl border-2 border-error/40 bg-error/10 px-4 py-3 text-left shadow-[0_0_0_1px_rgba(239,68,68,0.14),0_8px_22px_rgba(127,29,29,0.20)] hover:bg-error/15 hover:border-error/60 transition-all"
-                    >
-                        <div className="flex items-start gap-3">
-                            <AlertTriangleIcon className="size-5 text-error shrink-0 mt-0.5" />
-                            <div className="min-w-0">
-                                <p className="font-bold text-error">Rebook missed appointment?</p>
-                                <p className="text-sm opacity-80 mt-0.5">{missedRebookCopy(missedRebookAppointment)}</p>
-                                <p className="text-xs font-semibold text-error mt-2">Click to review details and choose a new schedule.</p>
-                            </div>
-                        </div>
-                    </button>
-                )}
                 {confirmedAppointment && (
                     <AppointmentSummaryBar
                         label="Today's Appointment"
@@ -379,3 +327,4 @@ const PatientAppointmentsPage = () => (
 );
 
 export default PatientAppointmentsPage;
+

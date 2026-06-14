@@ -2,7 +2,7 @@ import express from "express";
 import {
     bookAppointment, payDeposit, acceptAppointment, rejectAppointment,
     cancelAppointment, completeAppointment, payBalance,
-    rebookAppointment, fileDispute, submitReview, joinCall, getMyAppointments, getTransactionHistory,
+    fileDispute, submitReview, joinCall, getMyAppointments, getTransactionHistory,
     getProviderReviews, deleteReview, getDepartmentIncome, createDepartmentManualTransaction,
     getInstituteAnalytics
 } from "../controllers/booking.controller.js";
@@ -12,7 +12,7 @@ import {
     bookAppointmentValidator, payDepositValidator,
     acceptAppointmentValidator, rejectAppointmentValidator,
     cancelAppointmentValidator, completeAppointmentValidator,
-    payBalanceValidator, rebookAppointmentValidator, fileDisputeValidator, submitReviewValidator,
+    payBalanceValidator, fileDisputeValidator, submitReviewValidator,
     joinCallValidator, deleteReviewValidator, createDepartmentManualTransactionValidator
 } from "../validators/booking.validator.js";
 
@@ -27,7 +27,6 @@ router.post("/reject",   rejectAppointmentValidator,  validate, rejectAppointmen
 router.post("/cancel",   cancelAppointmentValidator,  validate, cancelAppointment);
 router.post("/complete", completeAppointmentValidator, validate, completeAppointment);
 router.post("/pay-balance", payBalanceValidator,      validate, payBalance);
-router.post("/rebook", rebookAppointmentValidator, validate, rebookAppointment);
 router.post("/dispute",  fileDisputeValidator,        validate, fileDispute);
 router.post("/review",   submitReviewValidator,       validate, submitReview);
 router.post("/join-call", joinCallValidator, validate, joinCall);

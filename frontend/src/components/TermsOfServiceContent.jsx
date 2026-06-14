@@ -48,6 +48,8 @@ const TermsOfServiceContent = () => (
             <Item n="4.3">MedConnect does not guarantee the availability, outcome, or quality of services provided by third-party healthcare institutions.</Item>
             <Item n="4.4">Appointment scheduling, service requests, and healthcare transactions are subject to the policies and availability of the participating institution.</Item>
             <Item n="4.5">Patients are responsible for reviewing and understanding any requirements, fees, or policies associated with healthcare services before proceeding.</Item>
+            <Item n="4.6">For virtual appointments, patients must join within the allowed appointment window. If the patient misses the virtual appointment, paid deposits are non-refundable.</Item>
+            <Item n="4.7">If a healthcare provider misses a virtual appointment, the patient may file a report or dispute for admin review. Any refund decision is subject to administrator assessment.</Item>
         </Section>
 
         <div className="divider my-1" />

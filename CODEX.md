@@ -40,7 +40,7 @@ The pharmacy branch became broader than pharmacy only. It now includes:
 - Admin analytics and platform-fee reporting.
 - UI consistency work across admin, user, doctor, and pharmacy.
 - Profile update fixes, notification styling, online/offline status presentation.
-- Appointment rebooking/no-show logic and transaction history updates.
+- Appointment no-show logic and transaction history updates.
 - Stream video call initialization hardening.
 
 Future Codex sessions must assume these areas are connected and inspect affected files before changing any one of them.
@@ -251,7 +251,7 @@ Known fixed backend bug:
 - Notification count badges should be red for all roles.
 - History tab count badges should not show after viewed/read.
 
-## Appointment And Rebooking Features
+## Appointment And No-Show Features
 
 ### Appointment Dashboard/Page Changes
 
@@ -266,11 +266,11 @@ Known fixed backend bug:
 - Doctor appointment active badge should use the same refined badge style as other updated badges.
 - Before a booked appointment appears on the doctor schedule/calendar, it should be confirmed on the appointment page.
 - Patients with a pending virtual appointment balance must pay that balance before booking another appointment.
-- Appointment/rebook lists should be sorted:
+- Appointment lists should be sorted:
   - active/upcoming: earliest first
   - history/transactions: newest/latest first
 
-### Virtual Missed Appointment/Rebooking Logic
+### Virtual Missed Appointment Logic
 
 Virtual appointments use join tracking:
 
@@ -280,65 +280,39 @@ Virtual appointments use join tracking:
 If a virtual appointment is missed:
 
 - patient missed:
-  - patient can rebook once within 3 days
-  - patient pays a 10% rebooking fee
+  - appointment is cancelled
+  - deposit is non-refundable
 - provider missed:
-  - patient receives 10% mock cashback
-  - patient can rebook once within 3 days for free
+  - appointment is cancelled
+  - patient may file a report/dispute for admin review
+  - admin decides whether a refund is appropriate through the existing report/dispute process
 - both missed:
-  - patient can rebook once within 3 days for free
-  - no payment exchange for the missed session
+  - appointment is cancelled
+  - no automatic refund or rebooking flow is created
 
-Rebooking constraints:
+No-show constraints:
 
-- only virtual appointments use automatic missed/rebook logic
+- only virtual appointments use automatic join/no-show detection
 - in-person appointments are out of scope for automatic no-show detection
-- rebooking is only once
-- rebooking must be within 3 days
-- user chooses only the date; system assigns time/queue slot
-- rebook request must return to doctor approval requests, not automatically enter the schedule
+- custom one-time missed-appointment rebooking has been removed
+- do not restore `/api/booking/rebook` or missed appointment statuses unless explicitly requested
+- queue `skip` / put-at-end behavior is separate and should remain available for same-day queues
 - past times cannot be booked or received by the doctor as requests
-- if rebooked appointment is missed again, it becomes cancelled and there is no second rebook window
-- if a rebook request expires before provider approval, it is cancelled
 
-Rebook labels:
-
-- Before successful rebook: `Missed - [Free/Paid/Cashback] Rebook Available`
-- After rebook request is sent/successful: `Rebooked`
-- Cancelled rebook should include rebook detail outcome such as rejected and cancelled, missed and cancelled, or expired and cancelled
-
-### Rebook Refund/Cashback Rules
+### Refund Rules
 
 MedConnect platform fee rule:
 
 - Patient pays the appointment amount/deposit and the platform fee is recorded for MedConnect.
 - Platform fee belongs to MedConnect and must remain untouched.
-- Cashback/refunds due to rebooking are doctor/provider responsibility.
-- Cashback transactions must keep `platformFee: 0`.
-- Do not deduct or reverse platform fees for rebook cashback/refunds.
-
-Specific rejection rules:
-
-- Doctor rejects both-missed free rebook:
-  - doctor pays 10% refund/cashback
-  - appointment becomes cancelled
-- Doctor rejects provider-missed rebook:
-  - doctor refunds the deposit/payment amount owed to patient
-  - appointment becomes cancelled
-  - MedConnect platform fee remains with MedConnect
-- Doctor rejects patient-missed paid rebook:
-  - doctor returns rebooking fee
-  - appointment becomes cancelled
+- Refunds created by provider rejection must keep `platformFee: 0`.
+- Do not deduct or reverse platform fees for refunds.
 
 Transaction/receipt behavior:
 
-- Rebook details are added to the original appointment receipt/details.
-- Cashback has its own separate receipt because it adds money to the user and subtracts from doctor.
 - Rejected paid booking requests create a separate `refund` transaction so both patient and provider can see the financial movement.
 - Rejected-booking refunds should display as `Refunded` in transaction history, not only as `Rejected`.
-- Cashback receipt states reason and whether it is money received/sent.
-- Doctor transaction side must show cashback/refund as a negative amount from doctor earnings.
-- User and doctor receive notifications when appointment history is updated by rebook outcome.
+- Doctor transaction side must show refunds as a negative amount from doctor earnings.
 
 Files involved in this area:
 
@@ -387,8 +361,6 @@ Files involved in this area:
   - amount
   - platform fee where relevant
   - net received for providers
-  - rebook details if applicable
-  - cashback receipt if applicable
   - refund receipt if a paid booking request was rejected
 - Pharmacy order transaction modal should show:
   - reference
@@ -431,19 +403,15 @@ Specific UI fixes already requested:
 Terms and FAQ were updated for:
 
 - pharmacy prescription/order payment behavior
-- virtual missed appointment rebooking
-- one-time rebook within three days
 - patient missed/provider missed/both missed rules
-- rebook rejection/cancellation outcomes
-- provider-liable cashback/refunds
 - MedConnect platform fee remaining untouched
 - queue disclosures
 
-If any payment, refund, rebook, prescription, pharmacy, or queue behavior changes, update:
+If any payment, refund, prescription, pharmacy, appointment no-show, or queue behavior changes, update:
 
 - `frontend/src/components/TermsOfServiceContent.jsx`
 - `frontend/src/pages/SettingsPage.jsx` FAQ
-- payment/rebook receipt wording where users see the financial consequence
+- payment/refund receipt wording where users see the financial consequence
 
 ## Fixed Bugs And Stabilized Fixes From This Work
 
@@ -460,8 +428,7 @@ If any payment, refund, rebook, prescription, pharmacy, or queue behavior change
 - User/admin/doctor/pharmacy notification badges moved toward red notification convention.
 - Doctor transaction modal bug fixed so details popup appears.
 - Doctor schedule/appointment request handling was audited after appointment changes.
-- Appointment rebooking could appear as already rebooked without doctor seeing request; backend/frontend approval handling was corrected.
-- Rebooked missed appointment could incorrectly create another rebook liability; corrected to cancel after one used rebook.
+- Custom missed-appointment rebooking was removed; virtual no-shows now cancel, patient no-show is non-refundable, and provider no-show goes through admin report review.
 - Call page could spin forever on `Preparing your call`; hardened with timeout, retries, and error state.
 - Call page no longer marks a participant as joined before the Stream React call state reaches `JOINED`.
 - New appointment booking is blocked while the patient has an unpaid virtual appointment balance.

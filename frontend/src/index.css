@@ -32,3 +32,29 @@
 .str-chat__message-input {
   border-top: 1px solid #ddd;
 }
+
+.medconnect-call-content {
+  height: calc(100vh - 65px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 18px 20px;
+}
+
+.medconnect-call-stage {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.medconnect-call-stage .str-video__speaker-layout,
+.medconnect-call-stage .str-video__speaker-layout__wrapper,
+.medconnect-call-stage .str-video__participant-view {
+  height: 100%;
+}
+
+.medconnect-call-controls {
+  position: static !important;
+  justify-content: center;
+  padding-bottom: 0;
+}

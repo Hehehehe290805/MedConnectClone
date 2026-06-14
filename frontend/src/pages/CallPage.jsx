@@ -235,14 +235,18 @@ const CallContent = ({ appointmentId }) => {
 
   return (
     <StreamTheme>
-      <SpeakerLayout />
+      <div className="medconnect-call-content">
+        <div className="medconnect-call-stage">
+          <SpeakerLayout />
+        </div>
       {/* Custom controls — recording excluded intentionally */}
-      <div className="str-video__call-controls">
+      <div className="str-video__call-controls medconnect-call-controls">
         <ReactionsButton />
         <ScreenShareButton />
         <ToggleAudioPublishingButton />
         <ToggleVideoPublishingButton />
         <CancelCallButton />
+      </div>
       </div>
     </StreamTheme>
   );

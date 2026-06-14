@@ -142,7 +142,7 @@ export const getWalkinServicesStatus = asyncHandler(async (req, res) => {
         const count = await Appointment.countDocuments({
             serviceId: srv._id,
             start: { $gte: todayStart, $lt: tomorrowStart },
-            status: { $nin: ["rejected", "cancelled", "missed_by_patient", "missed_by_provider", "missed_by_both"] }
+            status: { $nin: ["rejected", "cancelled"] }
         });
 
         return {
@@ -190,7 +190,7 @@ export const addWalkin = asyncHandler(async (req, res) => {
             const count = await Appointment.countDocuments({
                 serviceId: srv._id,
                 start: { $gte: todayDate, $lt: tomorrowDate },
-                status: { $nin: ["rejected", "cancelled", "missed_by_patient", "missed_by_provider", "missed_by_both"] }
+                status: { $nin: ["rejected", "cancelled"] }
             });
             if (count >= srv.maxPatientsPerDay) {
                 return sendError(res, 400, "Service is fully booked for today");

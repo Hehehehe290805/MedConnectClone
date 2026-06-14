@@ -15,9 +15,6 @@ import timezone from "dayjs/plugin/timezone";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 const PH_TZ = "Asia/Manila";
-const REBOOKABLE_STATUSES = ["missed_by_patient", "missed_by_provider", "missed_by_both"];
-const isRebookApprovalRequest = (appt) =>
-    Boolean(appt?.rebooked && REBOOKABLE_STATUSES.includes(appt.status));
 const profileReadyStorageKey = (doctorId) => `medconnect:doctor-profile-ready-confirmed:${doctorId || "unknown"}`;
 
 const HomePageDoctor = () => {
@@ -158,7 +155,7 @@ const HomePageDoctor = () => {
 
     const profileReady = currentPrice !== null && workTime !== null;
     const calendarAppointments = appointments.filter((appt) =>
-        !["pending_payment", "deposit_paid"].includes(appt.status) && !isRebookApprovalRequest(appt)
+        !["pending_payment", "deposit_paid"].includes(appt.status)
     );
 
     const confirmProfileReady = () => {

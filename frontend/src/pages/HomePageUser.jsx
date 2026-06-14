@@ -12,14 +12,6 @@ import timezone from "dayjs/plugin/timezone";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 const PH_TZ = "Asia/Manila";
-const MISSED_REBOOK_STATUSES = ["missed_by_patient", "missed_by_provider", "missed_by_both"];
-
-const isRebookActionAvailable = (appt) => {
-  if (!MISSED_REBOOK_STATUSES.includes(appt?.status)) return false;
-  if (appt.rebookUsed || appt.rebooked) return false;
-  if (!appt.rebookDeadline) return true;
-  return dayjs().tz(PH_TZ).isBefore(dayjs(appt.rebookDeadline));
-};
 
 const HomePageUser = () => {
   const navigate = useNavigate();
@@ -100,9 +92,6 @@ const HomePageUser = () => {
     const awaitingBalance = find(a => a.status === "awaiting_balance");
     if (awaitingBalance) return { appt: awaitingBalance, type: "awaiting_balance" };
 
-    const missedRebook = find(isRebookActionAvailable);
-    if (missedRebook) return { appt: missedRebook, type: "missed_rebook" };
-
     const pendingPayment = find(a => a.status === "pending_payment");
     if (pendingPayment) return { appt: pendingPayment, type: "pending_payment" };
 
@@ -180,19 +169,6 @@ const HomePageUser = () => {
               Pay ₱{appt.depositAmount?.toLocaleString("en-PH")}
             </button>
           </>
-        ),
-      },
-      missed_rebook: {
-        bg: "bg-primary/5 border-primary/20",
-        icon: <CalendarCheckIcon className="size-5 text-primary shrink-0 mt-0.5" />,
-        title: "Rebook Available",
-        subtitle: appt.status === "missed_by_patient"
-          ? `You missed your virtual appointment. Rebook once within 3 days with a 10% rebooking fee.`
-          : appt.status === "missed_by_provider"
-            ? `The provider missed your virtual appointment. You can rebook once within 3 days for free.`
-            : `Both parties missed this virtual appointment. You can rebook once within 3 days for free.`,
-        actions: (
-          <button className="btn btn-sm btn-primary" onClick={() => setSelectedAppointment(appt)}>View Rebook Options</button>
         ),
       },
       ongoing: {

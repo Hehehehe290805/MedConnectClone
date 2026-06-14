@@ -67,8 +67,8 @@ const VirtualJoinPrompt = () => {
                     </div>
                     <p className="text-sm text-center opacity-60">
                         {secondsLeft > 0
-                            ? "Join before the timer runs out or the missed-appointment rebook rules will apply."
-                            : "Time is up. The appointment may move to the rebook window shortly."}
+                            ? "Join before the timer runs out or the missed-appointment rules will apply."
+                            : "Time is up. The appointment may be cancelled shortly."}
                     </p>
 
                     <button

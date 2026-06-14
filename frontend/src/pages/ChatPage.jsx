@@ -69,9 +69,10 @@ const ChatPage = () => {
     });
 
     // Enable the call button when the appointment is ongoing OR accepted and starting within 30 min.
-    const hasOngoingCall = useMemo(() => {
-        if (!appointments || !targetUserId) return false;
-        return appointments.some(a => {
+    // Calls must open by appointment id so /booking/join-call can mark attendance.
+    const activeCallAppointment = useMemo(() => {
+        if (!appointments || !targetUserId) return null;
+        return appointments.find(a => {
             if (!a.virtual) return false;
             const doctorId  = a.doctorId?._id  || a.doctorId;
             const patientId = a.patientId?._id || a.patientId;
@@ -82,8 +83,9 @@ const ChatPage = () => {
                 return minsUntil <= 30 && minsUntil >= -5;
             }
             return false;
-        });
+        }) || null;
     }, [appointments, targetUserId]);
+    const hasOngoingCall = Boolean(activeCallAppointment);
 
     useEffect(() => {
         let cancelled = false;
@@ -149,8 +151,8 @@ const ChatPage = () => {
     }, [tokenData, authUser, targetUserId]);
 
     const handleVideoCall = () => {
-        if (channel) {
-            window.open(`/call/${channel.id}`, "_blank", "noopener,noreferrer");
+        if (activeCallAppointment?._id) {
+            window.open(`/call/${activeCallAppointment._id}`, "_blank", "noopener,noreferrer");
         }
     };
 

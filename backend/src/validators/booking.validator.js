@@ -36,12 +36,6 @@ export const payBalanceValidator = [
     body("referenceNumber").notEmpty().withMessage("Reference number is required"),
 ];
 
-export const rebookAppointmentValidator = [
-    body("appointmentId").notEmpty().isMongoId().withMessage("Invalid appointment ID"),
-    body("start").notEmpty().isISO8601().withMessage("Start time must be a valid ISO8601 date"),
-    body("referenceNumber").optional().isString(),
-];
-
 export const fileDisputeValidator = [
     body("appointmentId").notEmpty().isMongoId().withMessage("Invalid appointment ID"),
     body("complaint").notEmpty().withMessage("Complaint message is required"),
