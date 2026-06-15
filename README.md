@@ -342,6 +342,49 @@ MongoDB Atlas. All timestamps are stored in UTC; the application layer converts 
 
 ---
 
+## AI Chatbot
+
+MedConnect includes a floating in-app assistant available to all authenticated users on every page.
+
+**Scope**
+
+The chatbot is strictly limited to MedConnect platform help. Its system prompt explicitly instructs the model to:
+- Answer only questions about how MedConnect works — booking, payments, appointments, pharmacy orders, queue behaviour, settings, and account management.
+- Refuse to provide medical diagnoses, treatment recommendations, or specific medical advice.
+- Redirect symptom questions to the Expert System (`/consultation`) and doctor search questions to `/search`.
+- Refuse off-topic questions entirely.
+
+This scope is enforced through the system prompt sent on every request — the model itself (Llama 3.1 8B via Groq) has no awareness of any MedConnect-specific context beyond what the prompt provides.
+
+**Rate limiting**
+
+Limited to 20 messages per user per hour, enforced server-side using an in-memory Map (`rateLimiter.js`). The limit resets on a rolling window. When reached, the API returns HTTP 429 and the UI shows a modal explaining the cooldown. This prevents abuse of the free Groq tier.
+
+**Model parameters**
+
+| Parameter | Value |
+|---|---|
+| Model | `llama-3.1-8b-instant` (Groq) |
+| Max tokens | 300 |
+| Temperature | 0.4 |
+| Request timeout | 12 seconds |
+| Message history sent | Last 8 exchanges |
+
+Keeping temperature low (0.4) reduces hallucination and keeps responses factual. The 300-token cap keeps answers concise and prevents the model from generating lengthy unverified content.
+
+**Role-aware quick prompts**
+
+On opening the chatbot panel, users see 6 quick-prompt chips tailored to their role (patient, doctor, pharmacy, institute, department, or admin). After the assistant replies, the chips reappear so users can easily continue with a follow-up question without typing.
+
+**What it does not do**
+
+- Does not access the database or any user data.
+- Does not take any actions (cannot book appointments, send messages, or change settings).
+- Does not answer questions about specific diagnoses, medications, or treatment plans.
+- Does not use any persistent memory between sessions.
+
+---
+
 ## Key Notes
 
 **Expert system data files** — `frontend/src/data/diseaseSymptoms.json` and `frontend/src/data/termAliases.json` are not tracked in git. Both files must exist before running `npm run build` or the expert system crashes at build time. The pre-consultation system is built on two types of data sourced from Kaggle: disease-symptom mappings (71 diseases across 13 body systems) and patient-doctor dialogue patterns used to derive term aliases and symptom language.
