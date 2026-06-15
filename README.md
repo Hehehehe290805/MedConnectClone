@@ -387,8 +387,6 @@ On opening the chatbot panel, users see 6 quick-prompt chips tailored to their r
 
 ## Key Notes
 
-**Expert system data files** — `frontend/src/data/diseaseSymptoms.json` and `frontend/src/data/termAliases.json` are not tracked in git. Both files must exist before running `npm run build` or the expert system crashes at build time. The pre-consultation system is built on two types of data sourced from Kaggle: disease-symptom mappings (71 diseases across 13 body systems) and patient-doctor dialogue patterns used to derive term aliases and symptom language.
-
 **Stream API key** — The frontend must use the `apiKey` returned by `GET /api/chat/token` when initialising Stream clients. Hard-coding the key causes JWT signature errors.
 
 **Private files** — License images, permits, prescription uploads, and appointment files are stored in the private S3 path and served via 15-minute signed URLs. Never expose these keys directly.
