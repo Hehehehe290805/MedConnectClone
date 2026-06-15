@@ -520,6 +520,12 @@ ADMIN_CODE
 
 ## Recent Changes & Important Notes
 
+### Session - Walk-in Feature Extension for Doctors
+- **Backend:** Updated `queue.controller.js` to fully support walk-in functionality and payment completion for doctors.
+  - `addWalkin`: Now properly fetches the doctor's base pricing when a doctor adds a walk-in.
+  - `payAndCompleteActiveSlot`: Expanded role check to allow `doctor` role and ensures `DepartmentManualTransaction.create` is only called for departments.
+- **Frontend:** Doctors now leverage `QueuePanel.jsx` in their `HomePageDoctor.jsx` just like departments, completing the loop.
+
 ### Expert System Data (must commit to git)
 - `diseaseSymptoms.json` expanded to **71 diseases** (was 61); added: Leptospirosis, Schistosomiasis, Rheumatic Fever, Pancreatitis, Acute Cholecystitis, Chronic Kidney Disease, Nephrotic Syndrome, Uterine Fibroids, Preeclampsia, Schizophrenia
 - **DEPLOYMENT BLOCKER**: `frontend/src/data/diseaseSymptoms.json` and `frontend/src/data/termAliases.json` are untracked in git. Run `git add` on both before deploying. The app imports these at build time — missing files = expert system crash.

@@ -8,6 +8,7 @@ import User from "../models/User.js";
 import InstituteDepartmentService from "../models/InstituteDepartmentService.js";
 import DepartmentManualTransaction from "../models/DepartmentManualTransaction.js";
 import Transaction from "../models/Transaction.js";
+import Pricing from "../models/Pricing.js";
 import crypto from "crypto";
 import asyncHandler from "../utils/asyncHandler.js";
 import { sendSuccess, sendError } from "../utils/response.js";
@@ -198,6 +199,9 @@ export const addWalkin = asyncHandler(async (req, res) => {
         }
         finalServiceId = srv._id;
         priceAmount = srv.price || 0;
+    } else if (req.user.role === "doctor") {
+        const pricing = await Pricing.findOne({ providerId, serviceId: null });
+        priceAmount = pricing ? pricing.price : 0;
     }
 
     // Build a minimal Appointment record for the walk-in
@@ -296,8 +300,8 @@ export const addWalkin = asyncHandler(async (req, res) => {
 export const payAndCompleteActiveSlot = asyncHandler(async (req, res) => {
     const providerId = req.user._id;
 
-    if (req.user.role !== "department") {
-        return sendError(res, 403, "Only departments can pay and complete active slot");
+    if (!["department", "doctor"].includes(req.user.role)) {
+        return sendError(res, 403, "Only departments and doctors can pay and complete active slot");
     }
 
     const todayDate = toQueueDate(new Date());
@@ -332,13 +336,13 @@ export const payAndCompleteActiveSlot = asyncHandler(async (req, res) => {
     const serviceName = currentAppt.serviceId?.name || "Walk-in Service";
 
     if (amount > 0) {
-        // 1. Create a proper Transaction record (visible in institute + department analytics)
-        //    payerId = providerId (walk-in patient has no account; department acts as payer proxy)
-        //    payeeId = providerId (the department receives the payment)
+        // 1. Create a proper Transaction record (visible in analytics)
+        //    payerId = providerId (walk-in patient has no account; provider acts as payer proxy)
+        //    payeeId = providerId (the provider receives the payment)
         await Transaction.create({
             appointmentId: currentAppt._id,
             payerId: providerId,   // walk-in proxy — no patient account
-            payeeId: providerId,   // department is the payee
+            payeeId: providerId,   // provider is the payee
             amount,
             platformFee,
             netAmount,
@@ -346,17 +350,19 @@ export const payAndCompleteActiveSlot = asyncHandler(async (req, res) => {
             referenceNumber: ref,
         });
 
-        // 2. Also store a DepartmentManualTransaction for the department income view
-        await DepartmentManualTransaction.create({
-            departmentId: providerId,
-            transactionDate: new Date(),
-            customerName,
-            itemSummary: `${serviceName} — Walk-in (${paymentMethod})`,
-            amount,
-            paymentMethod,
-            note: `Platform fee: PHP ${platformFee.toLocaleString("en-PH")} | Net to dept: PHP ${netAmount.toLocaleString("en-PH")} | Ref: ${ref}`,
-            referenceNumber: ref + "-MAN",
-        });
+        if (req.user.role === "department") {
+            // 2. Also store a DepartmentManualTransaction for the department income view
+            await DepartmentManualTransaction.create({
+                departmentId: providerId,
+                transactionDate: new Date(),
+                customerName,
+                itemSummary: `${serviceName} — Walk-in (${paymentMethod})`,
+                amount,
+                paymentMethod,
+                note: `Platform fee: PHP ${platformFee.toLocaleString("en-PH")} | Net to dept: PHP ${netAmount.toLocaleString("en-PH")} | Ref: ${ref}`,
+                referenceNumber: ref + "-MAN",
+            });
+        }
 
         // 3. Update appointment's stored fee fields to match actual deduction
         currentAppt.platformFee = platformFee;
@@ -466,9 +472,24 @@ export const advanceQueue = asyncHandler(async (req, res) => {
 
     // Verify the current appointment is in a terminal-enough state to advance
     const currentAppt = await Appointment.findById(activeSlot.appointmentId);
-    const advanceable = ["completed", "awaiting_balance", "fully_paid", "cancelled", "rejected"];
-    if (currentAppt && !advanceable.includes(currentAppt.status)) {
-        return sendError(res, 400, "Current appointment must be completed, awaiting balance, or fully paid before advancing");
+    if (currentAppt) {
+        const advanceable = ["completed", "awaiting_balance", "fully_paid", "cancelled", "rejected"];
+        if (!advanceable.includes(currentAppt.status)) {
+            // Auto-complete in-person appointments when "Complete & Next" is clicked
+            if (!currentAppt.virtual && ["accepted", "ongoing"].includes(currentAppt.status)) {
+                // In-person appointments use fully_paid (as deposit covers it or it's a free walk-in)
+                currentAppt.status = "fully_paid";
+                await currentAppt.save();
+                
+                // Notify patient (if they have an account)
+                if (currentAppt.patientId) {
+                    const { notify } = await import("../services/notification.service.js");
+                    notify(currentAppt.patientId, "appointment_completed", "Appointment Completed", "Your appointment is complete. Thank you!");
+                }
+            } else {
+                return sendError(res, 400, "Current appointment must be completed, awaiting balance, or fully paid before advancing");
+            }
+        }
     }
 
     // Mark active slot as done
