@@ -16,6 +16,7 @@ The following flows have been deliberately built, tested, and fixed. They must *
 | Phone & email verification | `auth.controller.js` (requestPhoneVerify, confirmPhoneVerify, requestPhoneChange, requestOnboardingEmailVerify, confirmOnboardingEmailVerify), `OnboardingShared.jsx` (PhoneField, EmailVerificationField) | Admin + user phone verify working; onboarding email verify sends real Brevo OTP |
 | Settings credentials | `SettingsPage.jsx` credentials modal + phone modal | Email / phone / password change; verify phone button visible for all roles |
 | Auth middleware & JWT | `auth.middleware.js`, cookie setup | Do not touch without explicit instruction |
+| Pharmacy order flow | `HomePagePharmacy.jsx`, `CustomerPharmacyPage.jsx`, `PharmacyCataloguePage.jsx`, `pharmacyOrder.controller.js`, `pharmacyProduct.controller.js` | Full order lifecycle built and merged (PR #43 2026-06-15); do not overwrite |
 
 **Rule:** If a bug report or feature request touches any file in the table above, **stop and confirm the exact change with the programmer before writing any code.** State what you plan to modify and why.
 
@@ -93,7 +94,7 @@ Student project — actively in development.
 ---
 
 ### Pharmacy
-**Purpose:** Licensed pharmacy that will offer medicine ordering services (partially implemented).  
+**Purpose:** Licensed pharmacy offering medicine ordering services (fully implemented, merged PR #43 2026-06-15).  
 **Onboarding:** Submits FDA license and pharmacist PRC license → status `pending` → admin approves → `onBoarded`.
 
 **Current Features:**
@@ -110,6 +111,9 @@ Student project — actively in development.
 - Pharmacy order flow is implemented and functional. Do not overwrite teammate-built order management logic.
 - Prescription items (OTC=false) must go through `prescriptionReviews` queue before customer can pay.
 - Mock fulfillment (auto-complete after 10 min) is intentional for demo purposes.
+- Pharmacy delivery fee is 15% of product subtotal. Platform fee is on top; pharmacy receives product revenue minus platform cut.
+- Product images are public (`{ url, key }`). Prescription images are private (key only, signed URL).
+- Duplicate order submission is guarded on the frontend — misclicks do not create multiple orders.
 
 ---
 
@@ -164,7 +168,8 @@ Student project — actively in development.
 - **Dispute Resolution** (`/admin/reports`): View dispute details, set outcome (`provider_right` / `patient_right` / `split`), add admin note. When outcome is `patient_right`, optional "Issue full refund" checkbox notifies patient of refund amount.
 - **User Management** (`/admin/users`): Search/filter all users by role. View account details. Force-delete cleans S3 files and `emailregistry`.
 - **App Reports**: View user-submitted bug/UX/feature reports. Advance status (`pending → viewed → resolved`).
-- **Analytics** (`/admin/analytics`): Date-range filtered dashboard — totalRevenue, platformRevenue, revenueByDay, revenueByDoctor (top 20), appointmentVolume breakdown, topProviders (top 10), cancellationRate, disputeRate. CSV + Excel export.
+- **Analytics** (`/admin/analytics`): `AdminAnalyticsPage.jsx` — 4 tabs: **Overview** (Total MedConnect Sales card, stat summary) | **Platform Fee Transactions** (date-filtered, clickable receipt modal with blue header) | **Revenue** (date-filtered charts) | **User Analytics** (appointment breakdown, top providers). Includes pharmacy platform fees + delivery fees. CSV + Excel export. Analytics aggregation Mongo bug (invalid `$unwind` option) was fixed.
+- **Service Claims** (`/admin/services`): `AdminServiceClaimsPage.jsx` — approve/reject department service claims (sidebar above Analytics).
 - **Notifications**: Receives `notifyAllAdmins` broadcasts for new pending accounts, permit renewals, and disputes.
 
 **Standards:**
@@ -315,6 +320,10 @@ Also: `rejected`
 | `schedules` | Provider availability: `doctorId` or `instituteId`, `daysOfWeek[]`, `startHour`, `endHour` |
 | `pricing` | `providerId`, `serviceId`, `price` |
 | `appointmentqueues` | Queue per provider per day; unique `{providerId, date}`; `slots[]` array with position/type/status per appointment |
+| `pharmacyproducts` | Pharmacy catalogue items: `name`, `price`, `stock`, `unit`, `isOTC`, `image {url,key}`, `pharmacyId` |
+| `pharmacyorders` | Patient pharmacy orders: `pharmacyId`, `patientId`, `items[]`, `deliveryMethod`, `status`, `totalAmount`, `deliveryFee`, `platformFee`, `prescription {key}`, `prescriptionStatus` |
+| `pharmacymanualtransactions` | Pharmacy walk-in/manual transaction records |
+| `departmentmanualtransactions` | Department walk-in/manual transaction records |
 
 ---
 
@@ -370,7 +379,7 @@ All set status to `pending` (except department which is set `onBoarded` by insti
 Pending review, bulk ops, suggestion/claim management, specialty/service direct CRUD (13 endpoints), permit renewals, complaints, user management, force-delete.
 
 ### `/api/booking`
-`POST /book` (accepts `preConsultationMarkdown`), `POST /pay-deposit`, `POST /accept`, `POST /reject`, `POST /cancel`, `POST /complete`, `POST /pay-balance`, `POST /dispute`, `POST /review`, `GET /my-appointments`, `GET /transaction-history` (institute: queries all dept sub-accounts; accepts `?departmentId=`), `GET /reviews/:providerId`
+`POST /book` (accepts `preConsultationMarkdown`), `POST /pay-deposit`, `POST /accept`, `POST /reject`, `POST /cancel`, `POST /complete`, `POST /pay-balance`, `POST /join-call` (marks virtual attendance — called from `CallContent` after `CallingState.JOINED` only), `POST /dispute`, `POST /review`, `GET /my-appointments`, `GET /transaction-history` (institute: queries all dept sub-accounts; accepts `?departmentId=`), `GET /reviews/:providerId`
 
 ### `/api/chat`
 `GET /token` (Stream Chat token), `POST /translate` (MyMemory proxy), `GET /appointment-attachments` (fetch appointment files for chat context)
@@ -457,6 +466,12 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 | `/admin/specialties` | `AdminSpecialtiesPage` | Admin |
 | `/admin/reports` | `AdminReportsPage` | Admin |
 | `/admin/analytics` | `AdminAnalyticsPage` | Admin |
+| `/admin/services` | `AdminServiceClaimsPage` | Admin |
+| `/appointments` | `PatientAppointmentsPage` | Patient |
+| `/pharmacy` | `CustomerPharmacyPage` | Patient |
+| `/mock-payment` | `MockGCashPage` | Patient (payment flow) |
+| `/queue` | `QueueManagementPage` | Doctor, Department |
+| `/manage-departments` | `ManageDepartments` | Institute |
 | `/terms-of-service` | `TermsOfServicePage` | Public |
 | `/privacy-policy` | `PrivacyPolicyPage` | Public |
 | `/login` | `LoginPage` | Public |
@@ -495,6 +510,19 @@ Pending review, bulk ops, suggestion/claim management, specialty/service direct 
 | `DepartmentTypeField.jsx` | Department type search/add; clinic limited to 1 |
 | `ReviewsSection.jsx` | Star rating distribution + review list for provider profiles |
 | `MedicalChatMessage.jsx` | Stream Chat renderer: medical term tooltips (70+ terms), per-message translation (Tagalog/Cebuano/English), translation cache |
+| `SimulatedPaymentCard.jsx` | Shared demo payment UI; used by pharmacy checkout and Demo Payment screen |
+| `ChatAttachmentsSection.jsx` | Appointment file attachments section rendered in chat context |
+| `QueuePanel.jsx` | Live today's queue for doctor/department; auto-builds on mount; walk-in/advance/no-show controls |
+| `VirtualJoinPrompt.jsx` | Virtual appointment join prompt modal (navigates to `/call/:id` only, does NOT mark attendance) |
+| `ChatbotWidget.jsx` | Floating AI chatbot (bottom-right, z-50); role-aware quick prompts; rate-limit modal; added to `Layout.jsx` |
+| `FilterSearch.jsx` | Multi-filter chip selector for search pages (specialty, language, department type) |
+| `ProviderCard.jsx` | Search result card supporting doctor, institute, and department provider types |
+| `ClaimServicesPopup.jsx` | Department service claim popup |
+| `DoctorAnalyticsTab.jsx` | Doctor-specific analytics tab component |
+| `InstituteAnalyticsTab.jsx` | Institute analytics tab component |
+| `DepartmentIncomeTab.jsx` | Department income/transaction tab component |
+| `FileDownloadModal.jsx` | File download confirmation/progress modal |
+| `ImagePreviewModal.jsx` | Image preview lightbox modal |
 
 ### Popups / Modals
 | Component | Purpose |
@@ -554,7 +582,14 @@ Four steps via component state:
 - Pre-consultation markdown auto-generated and attached as `AppointmentFile` on booking
 
 ### SearchPage Bipartite Ranker
-Reads `specialtyConfidence` from sessionStorage; scores doctors as `specialtyScore×0.5 + ratingScore×0.3 + proximityScore×0.2` (proximity: `1/(1 + distanceKm×0.05)`); top 3 shown in "Recommended for Your Symptoms" section with % badge.
+Reads `specialtyConfidence` from sessionStorage; scores doctors as `specialtyScore×0.5 + ratingScore×0.3 + proximityScore×0.2` (proximity: `1/(1 + distanceKm×0.05)`); top 3 shown in "Recommended for Your Symptoms" section with % badge. Rating uses Bayesian smoothing: `(C×m + avgRating×reviewCount)/(C+reviewCount)` where `C=5`, `m` = platform mean from current result set.
+
+### AI Chatbot
+- `chatbot.controller.js` calls Groq API directly via `fetch` (`llama-3.1-8b-instant`, 12s timeout, max 300 tokens, temp 0.4).
+- Rate-limited 20 msg/hr per user via server-side in-memory Map (`rateLimiter.js`). Returns 429 on limit.
+- System prompt constrains to MedConnect feature help only — refuses off-topic questions, medical diagnoses. Redirects symptom questions to `/consultation`, doctor search to `/search`.
+- Keep system prompt updated when major platform behavior changes (pharmacy, queue, no-show, refund rules, settings).
+- `ChatbotWidget.jsx`: floating bottom-right button, message history (last 8 sent to API), role-aware quick-prompt chips, `/path` links as `<Link>`, focus returns to input after reply. Added to `Layout.jsx` for all authenticated roles.
 
 ### Chat (Stream)
 - `ChatPage.jsx` uses Stream Chat SDK
@@ -567,6 +602,9 @@ Reads `specialtyConfidence` from sessionStorage; scores doctors as `specialtySco
 - `CallPage.jsx` — auth check: compound call IDs (`userId1-userId2`) verify `authUser._id` is one of the two parts; shows "Access Denied" if not. Single-ID calls from Join Call banners skip this check.
 - `useCallStore.js` — Zustand store: `activeCallId`, `setActiveCallId`, `clearActiveCallId`. Set on join, cleared on `CallingState.LEFT`.
 - `PiPOverlay` in `Layout.jsx` — draggable floating badge ("Call in progress / Click to return") when `activeCallId` is set and user is not on `/call/*`. Drag to reposition; click to return; ✕ to dismiss.
+- **Attendance hardening**: `POST /api/booking/join-call` is called from inside `CallContent` only after Stream state reaches `CallingState.JOINED` — never from setup or `VirtualJoinPrompt`. Marking attendance before confirmed join is a bug.
+- `VirtualJoinPrompt` navigates to `/call/:appointmentId` only; it does NOT call `/booking/join-call`.
+- Stream API key: `/api/chat/token` returns both `token` and `apiKey`. Frontend Stream clients must use the returned `apiKey` — never hard-code the key. A mismatch causes `AuthErrorTokenSignatureInvalid`; fix is to restart backend (stale build) or correct the environment key pair.
 
 ---
 
@@ -590,6 +628,45 @@ MOCK_GCASH_NAME     ← optional; defaults to "MedConnect Platform" if unset
 ---
 
 ## Recent Changes & Important Notes
+
+### PR #43 — Pharmacy Branch Merged (2026-06-15)
+
+**Pharmacy backend (new files):**
+- `PharmacyProduct.js`, `PharmacyOrder.js`, `PharmacyManualTransaction.js` models
+- `DepartmentManualTransaction.js` model for department walk-in transactions
+- `pharmacyProduct.controller.js` + `pharmacyOrder.controller.js` + `pharmacyOrder.route.js`
+
+**Pharmacy frontend:**
+- `HomePagePharmacy.jsx`: tabbed — **Orders** (paid list, shipping/pickup queue, completed, order history, prescription review modals, rejected prescriptions viewer) | **Manage Catalogue** | **Transactions**
+- `PharmacyCataloguePage.jsx`: pharmacist CRUD — name, price, stock, unit, OTC flag, image
+- `CustomerPharmacyPage.jsx`: patient pharmacy — browse, cart, checkout (delivery/pickup), prescription upload, payment
+- `PharmacyIncomePage.jsx`: income dashboard with daily graph and manual transaction support
+- `SimulatedPaymentCard.jsx` (NEW shared component): reusable demo payment UI
+
+**Queue walk-in for doctors:**
+- `queue.controller.js` `addWalkin` now fetches doctor base pricing when a doctor adds a walk-in
+- `payAndCompleteActiveSlot` expanded to allow `doctor` role; `DepartmentManualTransaction.create` only called for departments
+- `HomePageDoctor.jsx`: `QueuePanel` now embedded (same as department home)
+
+**Admin analytics overhaul:**
+- `AdminAnalyticsPage.jsx` reorganized into 4 tabs: Overview | Platform Fee Transactions | Revenue | User Analytics
+- Analytics now includes pharmacy platform fees and delivery fees
+- Mongo aggregation `$unwind` bug fixed (was crashing the analytics route)
+- Admin sidebar: Service Claims above Analytics; separate icons
+
+**Stream Video call hardening:**
+- `CallPage.jsx` uses `axiosInstance` for `/booking/join-call`; uses Stream API key from `/chat/token` response; connects Stream video user with server token; prepares room with `getOrCreate()`; joins with retries; marks attendance only after `CallingState.JOINED`; shows retryable error instead of infinite loading spinner
+- `VirtualJoinPrompt` navigates to `/call/:appointmentId` only — does NOT call `/booking/join-call`
+
+**Other fixes from pharmacy branch:**
+- Rejected paid booking creates a `refund` transaction (shows as "Refunded" in history)
+- New booking blocked while patient has unpaid virtual balance (`awaiting_balance`)
+- Custom missed-appointment rebooking removed; virtual no-shows cancel (patient miss = no refund; provider miss = dispute route)
+- Terms + FAQ updated for pharmacy behavior, no-show rules, platform fee preservation
+- Admin user management: online users float to top; notification badges red
+- Doctor home header: "Hello, [name]"
+
+---
 
 ### Session 2026-06-09 Part 2 — UI Polish, Booking Overhaul, Report Account, Call PiP, Queue Auto-build, Real-time Polling
 
@@ -915,6 +992,31 @@ The queue system (#71/#72/#87) is a new collection and the most complex feature.
 
 ---
 
+## Virtual Appointment Missed Logic
+
+Virtual appointments track join status (patient joined / provider joined) separately. Outcomes when a virtual appointment ends without both parties:
+
+- **Patient missed**: appointment → `cancelled`; deposit non-refundable.
+- **Provider missed**: appointment → `cancelled`; patient may file a dispute/report; admin decides on refund through existing dispute process.
+- **Both missed**: appointment → `cancelled`; no automatic refund or rebooking.
+
+Do not restore `/api/booking/rebook` or add missed-appointment statuses. Custom one-time rebooking was removed intentionally. In-person appointments are out of scope for automatic no-show detection.
+
+## Refund Rules
+
+- Platform fee belongs to MedConnect and is never reversed. Refund transactions created by provider rejection use `platformFee: 0`.
+- When a paid booking is rejected, a separate `refund` transaction record is created so both parties see the financial movement. Transaction history shows the entry as `Refunded`, not only `Rejected`.
+- Doctor transaction side shows refunds as a negative amount from earnings.
+- New appointment booking is blocked while the patient has an unpaid virtual appointment balance (`awaiting_balance` status on any of their appointments).
+
+## Transaction History Sort Order
+
+- Active/upcoming lists: sort **earliest first** (chronological).
+- History/completed/transaction logs: sort **newest/latest first** (reverse chronological).
+- This applies to: `DoctorAppointmentsPage` history tab, `TransactionList`, `PharmacyIncomePage`, `TransactionPage`, and any modal showing completed records.
+
+---
+
 ## Open Flags
 
 ### Features — High Priority (Open)
@@ -930,6 +1032,11 @@ The queue system (#71/#72/#87) is a new collection and the most complex feature.
 ### Completed Flags (reference)
 | # | Feature | When Done |
 |---|---|---|
+| PR #43 | Full pharmacy order flow (products, orders, prescription review, delivery/pickup, payment) | 2026-06-15 (pharmacy branch) |
+| PR #43 | Queue walk-in support for doctor role + `DepartmentManualTransaction` model | 2026-06-15 (pharmacy branch) |
+| PR #43 | Admin analytics 4-tab overhaul + pharmacy fees in analytics | 2026-06-15 (pharmacy branch) |
+| PR #43 | Stream Video call hardening (retries, join-call after JOINED, retryable error UI) | 2026-06-15 (pharmacy branch) |
+| PR #43 | Refund transaction on rejected paid booking; new booking blocked on unpaid balance | 2026-06-15 (pharmacy branch) |
 | Hannah | Department search (`GET /api/search/departments`) + `ServicesPage` + `SuggestServicePopup` | 2026-06-07 (Hannah) |
 | Hannah | Admin `getPendingClaims` departmentId fix + `rejectRole` cleanup fix | 2026-06-07 (Hannah) |
 | Hannah | `InstituteDepartmentService` — added `"rejected"` status enum | 2026-06-07 (Hannah) |
@@ -970,7 +1077,7 @@ The queue system (#71/#72/#87) is a new collection and the most complex feature.
 | 18 | Package version sync | After development — audit `package.json` |
 | 22 | Dual permit renewal endpoints | Old role-specific endpoints in `permits.controller.js` still write directly to User; remove once new `PermitRenewal` flow confirmed |
 | 84 | Data privacy compliance | **Partially done.** T&C + Privacy Policy pages updated. Still missing: consent banner on signup, formal data retention policy, DPA officer contact. Do not attempt full compliance pass without explicit instruction. |
-| — | Drop legacy registry collections | Once all teammates have merged the AccountRegistry refactor, drop `emailregistries` and `phoneregistries` from MongoDB Atlas. Migration script: `backend/src/scripts/migrate-registries.js` (already run). |
+| — | Drop legacy registry collections | Once all branches are merged, confirm `emailregistry` and `phoneregistry` are the canonical collections (not legacy `emailregistries`/`phoneregistries`). Migration script was already run. |
 
 ### Remaining Flags — Cross-Login & Dual 2FA
 | # | Feature | Notes |
