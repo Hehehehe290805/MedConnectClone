@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { axiosInstance } from "../lib/axios";
-import { BotIcon, XIcon, SendIcon, RefreshCwIcon } from "lucide-react";
+import { BotIcon, XIcon, SendIcon, RefreshCwIcon, EyeIcon, EyeOffIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import { Link } from "react-router";
 import useAuthUser from "../hooks/useAuthUser";
@@ -47,11 +47,86 @@ const QUICK_PROMPTS_BY_ROLE = {
     ],
 };
 
+const FOLLOW_UPS_BY_TOPIC = [
+    {
+        keywords: ["pharmacy", "medicine", "cart", "prescription", "catalogue", "delivery", "pickup", "order"],
+        prompts: [
+            "How does prescription review work?",
+            "How do I track a pharmacy order?",
+            "What fees are added to pharmacy checkout?",
+            "How do I edit my cart before checkout?",
+        ],
+    },
+    {
+        keywords: ["appointment", "book", "booking", "doctor", "schedule", "deposit", "balance", "cancel", "missed"],
+        prompts: [
+            "How do I book an appointment?",
+            "What happens if I miss a virtual appointment?",
+            "How do appointment payments work?",
+            "Where can I see my appointment history?",
+        ],
+    },
+    {
+        keywords: ["payment", "fee", "refund", "transaction", "receipt", "sales", "revenue", "analytics"],
+        prompts: [
+            "Where can I view my transactions?",
+            "How are platform fees handled?",
+            "When can a refund happen?",
+            "How does admin analytics work?",
+        ],
+    },
+    {
+        keywords: ["report", "dispute", "complaint", "admin", "resolve"],
+        prompts: [
+            "How do I file a report?",
+            "Who reviews appointment disputes?",
+            "What happens after admin resolves a report?",
+            "Where can admins view reports?",
+        ],
+    },
+    {
+        keywords: ["license", "permit", "renew", "renewal", "fda", "prc", "claim", "specialty", "service"],
+        prompts: [
+            "How do I renew a license or permit?",
+            "How does admin approve claims?",
+            "How do doctors claim specialties?",
+            "How do departments claim services?",
+        ],
+    },
+    {
+        keywords: ["chat", "video", "call", "stream", "message"],
+        prompts: [
+            "When can I join a video call?",
+            "Where do I open appointment chat?",
+            "What should I do if video call fails?",
+            "Who can use chat and video?",
+        ],
+    },
+    {
+        keywords: ["settings", "profile", "bio", "photo", "password", "email", "2fa", "account"],
+        prompts: [
+            "How do I update my profile?",
+            "How do I change my password?",
+            "How do I enable two-factor authentication?",
+            "How do I delete my account?",
+        ],
+    },
+];
+
+const buildFollowUpPrompts = (latestUserMessage, fallbackPrompts) => {
+    const normalized = latestUserMessage.toLowerCase();
+    const matched = FOLLOW_UPS_BY_TOPIC.find(topic =>
+        topic.keywords.some(keyword => normalized.includes(keyword))
+    );
+
+    return [...new Set(matched?.prompts ?? fallbackPrompts)].slice(0, 4);
+};
+
 const linkify = (text) => {
     // Convert /path references to clickable links
-    const parts = text.split(/(\/[a-z\-]+(?:\/[a-z\-]+)*)/g);
+    const parts = text.split(/(\/[a-z-]+(?:\/[a-z-]+)*)/g);
     return parts.map((part, i) => {
-        if (/^\/[a-z\-]/.test(part)) {
+        if (/^\/[a-z-]/.test(part)) {
             return <Link key={i} to={part} className="link link-primary font-medium">{part}</Link>;
         }
         return part;
@@ -63,6 +138,7 @@ const ChatbotWidget = () => {
     const quickPrompts = QUICK_PROMPTS_BY_ROLE[authUser?.role] ?? QUICK_PROMPTS_BY_ROLE.patient;
     const [open, setOpen] = useState(false);
     const [input, setInput] = useState("");
+    const [promptsHidden, setPromptsHidden] = useState(false);
     const [messages, setMessages] = useState([
         { role: "assistant", content: WELCOME },
     ]);
@@ -74,6 +150,7 @@ const ChatbotWidget = () => {
             axiosInstance.post("/chatbot/message", { message, history }).then(r => r.data.data),
         onSuccess: ({ reply }) => {
             setMessages(prev => [...prev, { role: "assistant", content: reply }]);
+            setTimeout(() => inputRef.current?.focus(), 0);
         },
         onError: (err) => {
             const msg = err?.response?.data?.message || "Chatbot unavailable.";
@@ -111,6 +188,18 @@ const ChatbotWidget = () => {
         setMessages([{ role: "assistant", content: WELCOME }]);
         setInput("");
     };
+
+    const showInitialPrompts = messages.length === 1;
+    const showFollowUpPrompts = !isPending && messages.length > 1 && messages[messages.length - 1]?.role === "assistant";
+    const promptLabel = showInitialPrompts ? "Try asking:" : "Ask another question:";
+    const latestUserMessage = useMemo(
+        () => [...messages].reverse().find(m => m.role === "user")?.content ?? "",
+        [messages]
+    );
+    const visiblePrompts = useMemo(
+        () => showInitialPrompts ? quickPrompts : buildFollowUpPrompts(latestUserMessage, quickPrompts),
+        [latestUserMessage, quickPrompts, showInitialPrompts]
+    );
 
     return (
         <>
@@ -168,18 +257,36 @@ const ChatbotWidget = () => {
                     </div>
 
                     {/* Quick prompts — show only when just welcome message */}
-                    {messages.length === 1 && (
-                        <div className="px-3 pb-2 flex flex-wrap gap-1.5">
-                            {quickPrompts.map((p) => (
+                    {(showInitialPrompts || showFollowUpPrompts) && (
+                        <div className="px-3 pb-2">
+                            <div className="mb-1.5 flex items-center justify-between gap-2">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-base-content/50">
+                                    {promptLabel}
+                                </p>
                                 <button
-                                    key={p}
-                                    className="btn btn-xs btn-outline rounded-full"
-                                    onClick={() => handleSend(p)}
-                                    disabled={isPending}
+                                    type="button"
+                                    className="btn btn-ghost btn-xs h-6 min-h-0 px-2 text-base-content/60"
+                                    onClick={() => setPromptsHidden(hidden => !hidden)}
+                                    title={promptsHidden ? "Show suggested questions" : "Hide suggested questions"}
                                 >
-                                    {p}
+                                    {promptsHidden ? <EyeIcon className="size-3.5" /> : <EyeOffIcon className="size-3.5" />}
+                                    {promptsHidden ? "Show" : "Hide"}
                                 </button>
-                            ))}
+                            </div>
+                            {!promptsHidden && (
+                                <div className="flex flex-wrap gap-1.5">
+                                    {visiblePrompts.map((p) => (
+                                        <button
+                                            key={p}
+                                            className="btn btn-xs btn-outline rounded-full"
+                                            onClick={() => handleSend(p)}
+                                            disabled={isPending}
+                                        >
+                                            {p}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
 
