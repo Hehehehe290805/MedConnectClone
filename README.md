@@ -2,7 +2,7 @@
 
 A Philippine telehealth platform connecting patients with licensed healthcare providers — doctors, pharmacies, clinics, and hospitals — through a unified booking, communication, payment, and file-sharing system.
 
-> Student project — actively in development.
+> Student project — MedConnect is a student project output for the course — Software Engineering 2.
 
 ---
 
@@ -171,14 +171,13 @@ There are no seed scripts. A fresh database has empty specialty and service list
 
 **a) Create the first admin account**
 
-The `ADMIN_CODE` env var is a one-time bootstrap code you set yourself. To create the first admin:
 
 1. Open the app and sign up normally (any email).
 2. On the onboarding page, choose the **Admin** role.
-3. Enter the `ADMIN_CODE` value from your `.env` when prompted.
-4. Submit — your account becomes an admin.
+3. Fill out and submit — your account becomes an admin with the `pending` status.
+4. Open MongoDBAtlas and manually alter the account status to `onBoarded` status.
 
-Only one admin code is valid at a time (it is HMAC-verified for uniqueness). Create additional admins through the same flow with different admin codes later.
+Create additional admins by approving them with the first admin account created.
 
 **b) Populate the taxonomy**
 
