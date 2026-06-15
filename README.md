@@ -280,8 +280,7 @@ MongoDB Atlas. All timestamps are stored in UTC; the application layer converts 
 | `reports` | Appointment dispute records and admin resolutions |
 | `appreports` | User-submitted bug/UX/feature reports |
 | `permitrenewals` | Staged licence/permit renewal requests pending admin review |
-| `emailregistry` | Global email → role mapping to enforce cross-model email uniqueness |
-| `phoneregistry` | Global phone number → user mapping to enforce uniqueness |
+| `accountregistries` | Unified registry for both email addresses and phone numbers — compound unique index on `{type, value}` enforces global uniqueness across all roles and admins |
 | `pharmacyproducts` | Pharmacy catalogue items (name, price, stock, OTC flag, image) |
 | `pharmacyorders` | Patient pharmacy orders including delivery method and prescription review status |
 | `pharmacymanualtransactions` | Walk-in/manual pharmacy sales |
