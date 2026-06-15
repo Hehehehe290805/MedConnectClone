@@ -383,15 +383,6 @@ On opening the chatbot panel, users see 6 quick-prompt chips tailored to their r
 - Does not answer questions about specific diagnoses, medications, or treatment plans.
 - Does not use any persistent memory between sessions.
 
----
-
-## Key Notes
-
-**Stream API key** — The frontend must use the `apiKey` returned by `GET /api/chat/token` when initialising Stream clients. Hard-coding the key causes JWT signature errors.
-
-**Private files** — License images, permits, prescription uploads, and appointment files are stored in the private S3 path and served via 15-minute signed URLs. Never expose these keys directly.
-
----
 
 ## Running Tests
 
