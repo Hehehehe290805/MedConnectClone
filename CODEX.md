@@ -2,7 +2,7 @@
 
 This file is a Codex-specific branch of `CLAUDE.md`. Treat `CLAUDE.md` as the global source of truth, then use this file for the pharmacy branch work, recent cross-role changes, known behaviors, and user-specific implementation preferences.
 
-Last updated by Codex: 2026-06-12.
+Last updated by Codex: 2026-06-15.
 
 ## Non-Negotiable Rules
 
@@ -348,6 +348,28 @@ Files involved in this area:
 - Important 2026-06-12 Stream fix: the SDK `join()` promise alone was not enough proof that the user actually entered the usable call UI. Attendance is now marked from inside `CallContent`, after the Stream React state becomes `JOINED`. If a user sees `Call unavailable`, they should not be recorded as joined.
 - Existing appointments that were already falsely marked joined before this fix will keep that saved database state. Test this fix with a fresh appointment or manually reset that appointment's joined fields in MongoDB.
 - If chat/video still show `AuthErrorTokenSignatureInvalid`, the backend server is likely still running an old build or the Stream API key/secret pair in environment configuration does not match. Restart backend first. If it persists, fix the environment pair without reading `.env` in Codex.
+
+## MedConnect Assistant / Chatbot
+
+- Chatbot backend lives in `backend/src/controllers/chatbot.controller.js`.
+- Chatbot route is authenticated at `POST /api/chatbot/message`.
+- Chatbot frontend widget lives in `frontend/src/components/ChatbotWidget.jsx` and is mounted through `Layout.jsx`.
+- The chatbot is strictly scoped to MedConnect. It must not answer off-topic questions and must not provide medical diagnosis, treatment, or specific medical advice.
+- Keep the chatbot system prompt updated whenever major platform behavior changes, especially:
+  - appointment payments, no-show rules, queue behavior, and cancellation/refund policy
+  - pharmacy catalogue, cart, prescription review, delivery/pickup, and payment behavior
+  - admin analytics, reports, service claims, and account approval rules
+  - chat/video call behavior and known troubleshooting guidance
+  - Terms, FAQ, Help & Support, and Settings wording
+- The chatbot should direct users to exact pages when possible, such as `/consultation`, `/search`, `/settings`, `/appointments`, `/transactions`, `/terms-of-service`, and `/privacy-policy`.
+- After the bot answers, the user must still have an obvious way to continue:
+  - input remains available
+  - focus returns to the input after a reply
+  - quick follow-up prompt buttons appear again after assistant replies
+  - suggested follow-up questions can be hidden and shown again
+  - follow-up prompts should be context-aware when possible, based on the user's latest MedConnect topic
+- Role-based quick prompts exist for patient, doctor, pharmacy, institute, department, and admin. Keep these prompts aligned with the role's actual available features.
+- Do not wire the chatbot to read env files or secrets. It uses backend configuration only.
 
 ## Transaction History Standards
 
