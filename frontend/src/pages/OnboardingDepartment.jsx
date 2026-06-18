@@ -276,7 +276,7 @@ const OnboardingDepartment = () => {
 
                         <div className="flex gap-2">
                             <button className="btn btn-ghost btn-sm flex-1" onClick={() => navigate("/")}>
-                                â† Back
+                                Back
                             </button>
                             <button className="btn btn-primary btn-sm flex-1" onClick={() => setShowTypeSelector(true)}>
                                 Add Department
