@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import toast from "react-hot-toast";
@@ -52,7 +52,27 @@ const OnboardingDepartment = () => {
     const [useInstituteAddress, setUseInstituteAddress] = useState(false);
     const [showOtherInput, setShowOtherInput] = useState(false);
     const [customDeptName, setCustomDeptName] = useState("");
+    const [showTypeSelector, setShowTypeSelector] = useState(false);
+    const [step, setStep] = useState(1);
 
+    const [form, setForm] = useState({
+        deptEmail: "",
+        deptPassword: "",
+        confirmPassword: "",
+        profilePic: {},
+        technologistFirstName: "",
+        technologistLastName: "",
+        birthDate: "",
+        sex: "",
+        bio: "",
+        phoneNumber: "",
+        phoneType: "mobile",
+        address: { buildingNumber: "", street: "", barangay: "", city: "", province: "", postalCode: "", coordinates: null },
+        technologistLicenseNumber: "",
+        technologistLicenseExpiration: "",
+        technologistLicenseImage: {},
+        technologistLegalIDImage: {},
+    });
     // Step 4 — service claim state
     const [availableServices, setAvailableServices] = useState([]);
     const [servicesLoading, setServicesLoading] = useState(false);
@@ -68,14 +88,16 @@ const OnboardingDepartment = () => {
     const cityRef = useRef(null);
     const licenseExpirationRef = useRef(null);
 
-    const departments = authUser?.departments || [];
+    const departments = useMemo(() => authUser?.departments || [], [authUser?.departments]);
+    const deptAccounts = useMemo(() => authUser?.departmentAccounts || [], [authUser?.departmentAccounts]);
 
     // auto-select when institute has exactly one department type
     useEffect(() => {
         if (departments.length === 1 && !selectedDeptType) {
+            if (isHospital && deptAccounts.length > 0 && !showTypeSelector) return;
             setSelectedDeptType(departments[0]);
         }
-    }, [departments]);
+    }, [departments, selectedDeptType, isHospital, deptAccounts.length, showTypeSelector]);
 
     // clinic: auto-fill address from institute on mount
     useEffect(() => {
@@ -97,27 +119,6 @@ const OnboardingDepartment = () => {
             .catch(() => setAvailableServices([]))
             .finally(() => setServicesLoading(false));
     }, [step, selectedDeptType]);
-
-    const [step, setStep] = useState(1);
-
-    const [form, setForm] = useState({
-        deptEmail: "",
-        deptPassword: "",
-        confirmPassword: "",
-        profilePic: {},
-        technologistFirstName: "",
-        technologistLastName: "",
-        birthDate: "",
-        sex: "",
-        bio: "",
-        phoneNumber: "",
-        phoneType: "mobile",
-        address: { buildingNumber: "", street: "", barangay: "", city: "", province: "", postalCode: "", coordinates: null },
-        technologistLicenseNumber: "",
-        technologistLicenseExpiration: "",
-        technologistLicenseImage: {},
-        technologistLegalIDImage: {},
-    });
 
     const isAnyUploading = Object.values(uploadingFields).some(Boolean);
     const setUploading = (field, val) => setUploadingFields((prev) => ({ ...prev, [field]: val }));
@@ -245,6 +246,48 @@ const OnboardingDepartment = () => {
         return true;
     };
 
+    // --- HOSPITAL: show existing cards before choosing another type ---
+    if (isHospital && deptAccounts.length > 0 && !showSuccess && !selectedDeptType && !showTypeSelector) {
+        return (
+            <div className="min-h-screen bg-base-100 flex items-center justify-center p-4">
+                <div className="card bg-base-200 w-full max-w-md shadow-xl">
+                    <div className="card-body p-8 space-y-4">
+                        <div className="flex items-center gap-2">
+                            <BuildingIcon className="size-6 text-primary" />
+                            <h2 className="text-xl font-bold">Department Sub-Accounts</h2>
+                        </div>
+                        <p className="text-sm opacity-70">{deptAccounts.length} department(s) set up.</p>
+
+                        <div className="space-y-2">
+                            {deptAccounts.map((deptId, i) => {
+                                const deptType = departments[i];
+                                return (
+                                    <div key={deptId?.toString?.() || deptType?._id || i} className="card bg-base-100 border border-base-300 p-3 flex flex-row items-center justify-between gap-3">
+                                        <div>
+                                            <p className="font-medium text-sm">{deptType?.name || `Department ${i + 1}`}</p>
+                                        </div>
+                                        <a href={`/profile/${deptId}`} className="btn btn-xs btn-outline shrink-0">
+                                            View
+                                        </a>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <div className="flex gap-2">
+                            <button className="btn btn-ghost btn-sm flex-1" onClick={() => navigate("/")}>
+                                Back
+                            </button>
+                            <button className="btn btn-primary btn-sm flex-1" onClick={() => setShowTypeSelector(true)}>
+                                Add Department
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     // --- TYPE SELECTOR (shown before steps when institute has multiple dept types) ---
     if (!selectedDeptType) {
         if (departments.length === 0) {
@@ -324,7 +367,16 @@ const OnboardingDepartment = () => {
                                 </div>
                             )}
                         </div>
-                        <button className="btn btn-ghost btn-sm" onClick={() => navigate("/")}>
+                        <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => {
+                                if (isHospital && deptAccounts.length > 0) {
+                                    setShowTypeSelector(false);
+                                    return;
+                                }
+                                navigate("/");
+                            }}
+                        >
                             ← Back to Dashboard
                         </button>
                     </div>
@@ -334,7 +386,6 @@ const OnboardingDepartment = () => {
     }
 
     // --- CLINIC WITH EXISTING DEPARTMENTS: show cards instead of form ---
-    const deptAccounts = authUser?.departmentAccounts || [];
     if (isClinic && deptAccounts.length >= 1 && !showSuccess) {
         const deptType = departments[0]; // clinic has 1 dept type
         return (
@@ -373,7 +424,7 @@ const OnboardingDepartment = () => {
     }
 
     // --- HOSPITAL: show existing cards + add new ---
-    if (isHospital && deptAccounts.length > 0 && !showSuccess && !selectedDeptType) {
+    if (isHospital && deptAccounts.length > 0 && !showSuccess && !selectedDeptType && showTypeSelector && selectedDeptType) {
         return (
             <div className="min-h-screen bg-base-100 flex items-center justify-center p-4">
                 <div className="card bg-base-200 w-full max-w-md shadow-xl">
@@ -445,7 +496,10 @@ const OnboardingDepartment = () => {
                                 setMaxPatients({});
                                 setPrices({});
                                 setAvailableServices([]);
-                                if (departments.length > 1) setSelectedDeptType(null);
+                                if (departments.length > 1) {
+                                    setSelectedDeptType(null);
+                                    setShowTypeSelector(true);
+                                }
                             }}
                         >
                             Add Another Department
@@ -459,7 +513,14 @@ const OnboardingDepartment = () => {
     const sharedHeaderProps = {
         role: "department",
         email: authUser?.email,
-        onBack: step === 1 ? () => { if (departments.length > 1) setSelectedDeptType(null); else navigate("/"); } : () => setStep(step - 1),
+        onBack: step === 1 ? () => {
+            if (departments.length > 1) {
+                setSelectedDeptType(null);
+                if (isHospital && deptAccounts.length > 0) setShowTypeSelector(false);
+            } else {
+                navigate("/");
+            }
+        } : () => setStep(step - 1),
         isFirstStep: step === 1,
     };
 
