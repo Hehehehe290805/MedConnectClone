@@ -970,7 +970,7 @@ const SettingsPage = () => {
             <p className="text-sm opacity-70 mb-4">Are you sure you want to log out?</p>
             <div className="modal-action">
               <button onClick={() => setShowLogoutModal(false)} className="btn btn-ghost">Cancel</button>
-              <button onClick={() => { logoutMutation(); setShowLogoutModal(false); }} className="btn btn-primary" disabled={isLoggingOut}>
+              <button onClick={() => { logoutMutation(); setShowLogoutModal(false); }} className="btn btn-error" disabled={isLoggingOut}>
                 {isLoggingOut ? <><span className="loading loading-spinner loading-xs" />Logging out...</> : "Logout"}
               </button>
             </div>
