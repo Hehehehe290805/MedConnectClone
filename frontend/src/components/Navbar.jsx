@@ -99,12 +99,12 @@ const Navbar = ({ offsetSidebar = false }) => {
 
       {showLogoutModal && (
         <div className="modal modal-open">
-          <div className="modal-box">
+          <div className="modal-box text-base-content">
             <h3 className="font-bold text-lg mb-2">Confirm Logout</h3>
             <p className="text-sm opacity-70 mb-4">Are you sure you want to log out?</p>
             <div className="modal-action">
               <button onClick={() => setShowLogoutModal(false)} className="btn btn-ghost">Cancel</button>
-              <button onClick={() => { logoutMutation(); setShowLogoutModal(false); }} className="btn btn-error">
+              <button onClick={() => { logoutMutation(); setShowLogoutModal(false); }} className="btn btn-primary">
                 Logout
               </button>
             </div>
